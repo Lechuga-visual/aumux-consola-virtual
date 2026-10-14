@@ -4,10 +4,12 @@ import json
 from pathlib import Path
 import shutil
 import zipfile
+import tomllib
 
 root = Path(__file__).resolve().parents[1]
 dist = root / "dist"
-stage = dist / "MonitorMix-0.1.0-Windows-x64"
+version=tomllib.loads((root/'desktop/Cargo.toml').read_text())['package']['version']
+stage = dist / f"MonitorMix-{version}-Windows-x64"
 stage.mkdir(parents=True, exist_ok=True)
 (stage / "obs-plugin").mkdir(exist_ok=True)
 shutil.copy2(root / "desktop/target/x86_64-pc-windows-gnu/release/monitor-mix.exe", stage / "MonitorMix.exe")

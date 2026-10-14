@@ -1,6 +1,7 @@
 mod bridge;
 mod config;
 mod fx;
+mod generator;
 mod mixer;
 mod native;
 
@@ -18,11 +19,12 @@ struct App {
     config: Config,
     controls: Arc<Controls>,
     audio: native::Audio,
+    system_audio: Option<native::Audio>,
+    system_live: bool,
     bridge: Arc<bridge::Bridge>,
     demo: Option<Mixer>,
     live: bool,
     latencies: [usize; CHANNELS + BUSES],
-    phase: usize,
     input: Vec<f32>,
     output: Vec<f32>,
     next: Instant,
@@ -34,12 +36,13 @@ impl App {
         Ok(Self {
             config,
             controls,
-            audio: native::Audio::new()?,
+            audio: native::Audio::new(false)?,
+            system_audio: None,
+            system_live: false,
             bridge: bridge::Bridge::start()?,
             demo: None,
             live: false,
             latencies: [0; CHANNELS + BUSES],
-            phase: 0,
             input: vec![0.0; 256 * CHANNELS],
             output: vec![0.0; 256 * 64],
             next: Instant::now(),
@@ -47,6 +50,10 @@ impl App {
     }
     fn stop(&mut self) {
         self.audio.stop();
+        if let Some(audio) = &mut self.system_audio {
+            audio.stop();
+        }
+        self.system_live = false;
         self.demo = None;
         self.live = false;
     }
@@ -57,13 +64,46 @@ impl App {
             .iter()
             .map(|m| f32::from_bits(m.swap(0, Relaxed)))
             .collect();
-        json!({"mode":if self.live {"ASIO"} else if self.demo.is_some(){"DEMO"}else{"DETENIDO"},
-            "meters":meters,"emergency":self.controls.emergency.load(Relaxed),"failed":self.controls.failed.load(Relaxed),
+        let channel: Vec<_> = self
+            .controls
+            .channel_meters
+            .iter()
+            .map(|m| m.read())
+            .collect();
+        let bus: Vec<_> = self.controls.bus_meters.iter().map(|m| m.read()).collect();
+        let active = self.live || self.demo.is_some();
+        let channel_meters: Vec<_> = channel
+            .iter()
+            .map(|(p, _)| if active { *p } else { [0.0; 2] })
+            .collect();
+        let channel_rms: Vec<_> = channel
+            .iter()
+            .map(|(_, r)| if active { *r } else { [0.0; 2] })
+            .collect();
+        let meters_stereo: Vec<_> = bus
+            .iter()
+            .map(|(p, _)| if active { *p } else { [0.0; 2] })
+            .collect();
+        let rms_stereo: Vec<_> = bus
+            .iter()
+            .map(|(_, r)| if active { *r } else { [0.0; 2] })
+            .collect();
+        let actual_buffer = if self.system_live {
+            self.system_audio.as_ref().map_or(256, |a| a.frames)
+        } else if self.live {
+            self.audio.frames
+        } else {
+            256
+        };
+        json!({"mode":if self.system_live {"PC"}else if self.live {"ASIO"} else if self.demo.is_some(){"DEMO"}else{"DETENIDO"},
+            "meters":meters,"channel_meters":channel_meters,"channel_rms":channel_rms,
+            "meters_stereo":meters_stereo,"rms_stereo":rms_stereo,
+            "emergency":self.controls.emergency.load(Relaxed),"failed":self.controls.failed.load(Relaxed),
             "xruns":self.controls.xruns.load(Relaxed),"clipped_blocks":self.controls.clipped.load(Relaxed),
-            "bridge_drops":self.bridge.dropped.load(Relaxed),"latencies":self.latencies,"actual_buffer":if self.live {self.audio.frames}else{256}})
+            "bridge_drops":self.bridge.dropped.load(Relaxed),"latencies":self.latencies,"actual_buffer":actual_buffer})
     }
     fn start(&mut self, mode: &str) -> Result<Value, String> {
-        if mode != "demo" && mode != "asio" {
+        if mode != "demo" && mode != "asio" && mode != "system" {
             return Err("Unknown audio mode".into());
         }
         self.stop();
@@ -76,13 +116,24 @@ impl App {
         if mode == "demo" {
             self.demo = Some(mixer);
             self.next = Instant::now();
+        } else if mode == "system" {
+            if self.system_audio.is_none() {
+                self.system_audio = Some(native::Audio::new(true)?);
+            }
+            self.system_audio
+                .as_mut()
+                .ok_or("System audio backend unavailable")?
+                .start(&self.config, mixer, self.bridge.clone(), true)?;
+            self.system_live = true;
+            self.live = true;
         } else {
             if self.config.buses.iter().all(|b| b.output.is_none()) && !self.config.obs_bridge {
                 return Err(
                     "Assign at least one physical output pair or enable the OBS bridge".into(),
                 );
             }
-            self.audio.start(&self.config, mixer, self.bridge.clone())?;
+            self.audio
+                .start(&self.config, mixer, self.bridge.clone(), false)?;
             self.live = true;
         }
         Ok(self.status())
@@ -95,16 +146,9 @@ impl App {
             if self.next > Instant::now() {
                 break;
             }
-            for f in 0..256 {
-                for ch in 0..CHANNELS {
-                    let t = (self.phase + f) as f32 / self.config.sample_rate as f32;
-                    self.input[f * CHANNELS + ch] =
-                        (t * std::f32::consts::TAU * (220.0 + ch as f32 * 55.0)).sin() * 0.03;
-                }
-            }
+            self.input.fill(0.0); // Each strip's generator supplies its own signal in the mixer.
             m.process(&self.input, &mut self.output, 256, 64);
             self.bridge.push(&m.buses[0], 256, self.config.sample_rate);
-            self.phase += 256;
             self.next += Duration::from_secs_f64(256.0 / self.config.sample_rate as f64);
         }
         if self.next + Duration::from_millis(100) < Instant::now() {
@@ -114,7 +158,8 @@ impl App {
     fn api(&mut self, path: &str, body: &str) -> Result<Value, String> {
         match path {
             "/api/config" => {
-                let c: Config = serde_json::from_str(body).map_err(|e| e.to_string())?;
+                let mut c: Config = serde_json::from_str(body).map_err(|e| e.to_string())?;
+                c.normalise();
                 c.validate()?;
                 if (self.live || self.demo.is_some()) && !self.config.same_graph(&c) {
                     return Err("Stop audio before changing device, routing, sample rate, buffer or effects".into());
@@ -231,13 +276,12 @@ fn run() -> Result<(), String> {
     let page = include_str!("../web/index.html").replace("__TOKEN__", &token);
     let mut app = App::new()?;
     println!(
-        "Monitor Mix 0.1 — prototipo\n{url}\nAudio detenido. Abre la URL en tu navegador. Cierra esta ventana o pulsa Ctrl+C para salir."
+        "Monitor Mix {} — prototipo\n{url}\nAudio detenido. Cierra esta ventana o pulsa Ctrl+C para salir.",
+        env!("CARGO_PKG_VERSION")
     );
     if !args.iter().any(|a| a == "--no-browser") {
         #[cfg(windows)]
-        let _ = std::process::Command::new("cmd")
-            .args(["/C", "start", "", &url])
-            .spawn();
+        open_app_window(&url);
         #[cfg(not(windows))]
         let _ = std::process::Command::new("xdg-open").arg(&url).spawn();
     }
@@ -253,6 +297,18 @@ fn run() -> Result<(), String> {
         if *req.method() == Method::Get {
             match path.as_str() {
                 "/" => reply(req, 200, "text/html; charset=utf-8", page.clone()),
+                "/console.css" => reply(
+                    req,
+                    200,
+                    "text/css; charset=utf-8",
+                    include_str!("../web/console.css").into(),
+                ),
+                "/console.js" => reply(
+                    req,
+                    200,
+                    "text/javascript; charset=utf-8",
+                    include_str!("../web/console.js").into(),
+                ),
                 "/api/config" => reply(
                     req,
                     200,
@@ -281,10 +337,10 @@ fn run() -> Result<(), String> {
         let mut body = String::new();
         if req
             .as_reader()
-            .take(262145)
+            .take(2097153)
             .read_to_string(&mut body)
             .is_err()
-            || body.len() > 262144
+            || body.len() > 2097152
         {
             reply(req, 413, "text/plain", "Invalid or oversized body".into());
             continue;
@@ -299,6 +355,42 @@ fn run() -> Result<(), String> {
             ),
         }
     }
+}
+#[cfg(windows)]
+fn open_app_window(url: &str) {
+    // App mode provides a separate window without browser tabs/address bar.
+    // A dedicated profile never uses the user's regular browser session.
+    for (variable, relative) in [
+        ("ProgramFiles(x86)", "Microsoft/Edge/Application/msedge.exe"),
+        ("ProgramFiles", "Microsoft/Edge/Application/msedge.exe"),
+        ("LOCALAPPDATA", "Microsoft/Edge/Application/msedge.exe"),
+        ("ProgramFiles", "Google/Chrome/Application/chrome.exe"),
+        ("LOCALAPPDATA", "Google/Chrome/Application/chrome.exe"),
+    ] {
+        let Some(base) = std::env::var_os(variable) else {
+            continue;
+        };
+        let browser = std::path::PathBuf::from(base).join(relative);
+        if !browser.is_file() {
+            continue;
+        }
+        let profile = std::env::var_os("LOCALAPPDATA")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(std::env::temp_dir)
+            .join("MonitorMix/browser-profile");
+        if std::process::Command::new(browser)
+            .arg(format!("--app={url}"))
+            .arg(format!("--user-data-dir={}", profile.display()))
+            .args(["--window-size=1640,980", "--no-first-run"])
+            .spawn()
+            .is_ok()
+        {
+            return;
+        }
+    }
+    let _ = std::process::Command::new("cmd")
+        .args(["/C", "start", "", url])
+        .spawn();
 }
 fn main() {
     if let Err(e) = run() {

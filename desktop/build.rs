@@ -17,6 +17,7 @@ fn main() {
             build.cpp_link_stdlib_static(true);
         }
         build.define("__WINDOWS_ASIO__", None);
+        build.define("__WINDOWS_WASAPI__", None);
         for name in ["asio", "asiodrivers", "asiolist", "iasiothiscallresolver"] {
             build.file(format!("vendor/rtaudio/include/{name}.cpp"));
         }
@@ -25,7 +26,16 @@ fn main() {
     }
     build.compile("monitor_audio");
     if windows {
-        for lib in ["ole32", "winmm", "advapi32", "uuid"] {
+        for lib in [
+            "ole32",
+            "winmm",
+            "advapi32",
+            "uuid",
+            "ksuser",
+            "mfplat",
+            "mfuuid",
+            "wmcodecdspuuid",
+        ] {
             println!("cargo:rustc-link-lib={lib}");
         }
     } else {

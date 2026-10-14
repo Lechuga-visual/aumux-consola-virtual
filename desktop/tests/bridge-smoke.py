@@ -34,7 +34,7 @@ try:
     app = subprocess.Popen([os.environ.get("MONITOR_BINARY", "desktop/target/debug/monitor-mix"), "--no-browser"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     base = line_until(app, r"http://127\.0\.0\.1:\d+").group(0)
     page = urllib.request.urlopen(base).read().decode()
-    token = re.search(r"const token='([^']+)'", page).group(1)
+    token = re.search(r'name="monitor-token" content="([^"]+)"', page).group(1)
     def post(route, body):
         request = urllib.request.Request(base+"/api/"+route, data=json.dumps(body).encode(), headers={"X-Monitor-Token": token, "Content-Type": "application/json"})
         return json.load(urllib.request.urlopen(request))
@@ -44,6 +44,7 @@ try:
         channel["mute"] = True
     config["channels"][0]["mute"] = False
     config["channels"][0]["gain_db"] = 0
+    config["channels"][0]["generator"] = {"signal": "sine", "level_db": -20, "frequency": 1000}
     config["buses"][0]["gain_db"] = 0
     post("config", config)
     post("start", {"mode": "demo"})

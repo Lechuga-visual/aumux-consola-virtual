@@ -9,9 +9,11 @@
 using Callback = int (*)(float*, const float*, unsigned, unsigned, void*);
 struct Handle {
 #ifdef _WIN32
-    RtAudio audio{RtAudio::WINDOWS_ASIO};
+    RtAudio audio;
+    explicit Handle(bool system) : audio(system ? RtAudio::WINDOWS_WASAPI : RtAudio::WINDOWS_ASIO) {}
 #else
     RtAudio audio{RtAudio::LINUX_ALSA};
+    explicit Handle(bool) {}
 #endif
     Callback callback{};
     void* user{};
@@ -31,8 +33,8 @@ static int process(void* out, void* in, unsigned frames, double,
 }
 
 extern "C" {
-void* mm_create() noexcept {
-    try { return new Handle; } catch (...) { return nullptr; }
+void* mm_create(bool system) noexcept {
+    try { return new Handle(system); } catch (...) { return nullptr; }
 }
 void mm_close(void* opaque) noexcept {
     auto* h = static_cast<Handle*>(opaque);
@@ -97,5 +99,22 @@ int mm_start(void* opaque) noexcept {
     } catch (const std::exception& e) { h->error = e.what(); }
     catch (...) { h->error = "Cannot start audio stream"; }
     return -1;
+}
+int mm_open_system(void* opaque, unsigned rate, unsigned* frames, Callback callback, void* user) noexcept {
+    auto* h = static_cast<Handle*>(opaque);
+    try {
+        if (!h->audio.getDeviceCount()) { h->error = "No system audio output is available"; return -1; }
+        const auto id = h->audio.getDefaultOutputDevice();
+        const auto info = h->audio.getDeviceInfo(id);
+        if (info.outputChannels < 2) { h->error = "The default output must support stereo"; return -1; }
+        RtAudio::StreamParameters out;
+        out.deviceId = id; out.nChannels = 2;
+        h->callback = callback; h->user = user;
+        if (h->audio.openStream(&out, nullptr, RTAUDIO_FLOAT32, rate, frames, process, h) != RTAUDIO_NO_ERROR) {
+            h->error = h->audio.getErrorText(); return -1;
+        }
+        return 0;
+    } catch (const std::exception& e) { h->error=e.what();return -1; }
+    catch (...) { h->error="Cannot open the default Windows output";return -1; }
 }
 }

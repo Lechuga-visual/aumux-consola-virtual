@@ -1,127 +1,148 @@
-# Probar Monitor Mix 0.1 en Windows x64
+# Monitor Mix 0.2 · prueba local en Windows x64
 
-Este es un **prototipo para pruebas locales**, no una versión validada para
-usar en una sesión del estudio. No requiere REAPER, Ardour, CueMix, Rust ni
-Visual Studio para ejecutar el paquete portable.
+Miniapp de mezcla con ocho canales, cuatro monitores y master. Reutiliza DSP
+y host VST3 de SoundCraft de Artcraft, con una superficie y un ruteo propios.
+Es un prototipo para pruebas; todavía no está validado para una sesión en vivo.
 
-## Sin la MOTU
+## Probar sonido sin ASIO ni interfaz externa
 
-1. Extrae **todo** `MonitorMix-0.1.0-Windows-x64.zip` en una carpeta.
-2. Ejecuta `MonitorMix.exe`. Deja abierta su ventana de consola; la interfaz
-   se abre en el navegador local. Si el navegador no se abre, copia la
-   dirección que imprime esa ventana.
-3. Pulsa **Probar DEMO sin hardware**. Genera señales de prueba y muestra el
-   master. No abre un dispositivo ni reproduce por los altavoces del PC.
-4. Selecciona **Monitor 1 — envíos** y sube el fader de Entrada 1. Comprueba
-   que aparece señal en ese monitor. Repite con Monitor 2 y otro nivel.
-5. Pulsa **SILENCIO TOTAL**: corta todos los buses. Para volver a sonar,
-   detén el audio y vuelve a iniciar DEMO/ASIO.
+1. Extrae **todo** `MonitorMix-0.2.0-Windows-x64.zip` y ejecuta `MonitorMix.exe`.
+   Cierra la versión anterior antes de abrir esta.
+2. Pulsa **AUDIO PC**. Usa los parlantes/audífonos predeterminados de Windows
+   mediante WASAPI, sin controlador ASIO ni dispositivo MOTU.
+3. Pulsa **GEN** en Entrada 1. Se activa ruido blanco, inicialmente a −30 dBFS.
+   Ahora deberías escuchar el master y ver los medidores de ese canal y master.
+4. Selecciona el canal y cambia su generador a **Ruido rosa** o **Tono seno**
+   desde el inspector izquierdo. Ajusta nivel y frecuencia allí.
+5. Para probar otra mezcla, pulsa **MON 1** y sube el envío de Entrada 1.
+   En **Escucha PC**, selecciona Monitor 1. Repite con los demás monitores.
 
-La app sigue procesando si cierras la pestaña. **Detener** libera el audio;
-cerrar la consola finaliza la app. Solo ejecutar una instancia a la vez.
+AUDIO PC reproduce **un bus estéreo elegido** a la vez. Cambiar Escucha PC
+no modifica el master, sus envíos ni las asignaciones ASIO guardadas. No
+captura el micrófono del PC en esta versión; se prueban los generadores y VST3.
+Para elegir otros parlantes/audífonos, cambia la salida predeterminada de
+Windows con el audio detenido y vuelve a iniciar AUDIO PC.
 
-También puedes ejecutar desde PowerShell:
+El modo **DEMO** procesa las mismas rutas pero no reproduce por el PC ni abre
+hardware. También empieza en silencio: activa el generador de los canales
+que quieras probar. Puede enviar su master al receptor OBS.
+
+**SILENCIO TOTAL** corta todos los buses y la escucha. Para reanudar, detén y
+vuelve a iniciar el motor. **DETENER** libera el dispositivo. Cerrar la consola
+de Monitor Mix termina la app; cerrar solo su ventana gráfica no detiene el
+proceso ni el audio.
+
+## La consola
+
+- Tiras de canal y salida con faders de recorrido graduado, nombres editables,
+  panorama, mute y cuatro inserts VST3 visibles.
+- Inspector con generador y envíos pre/post del canal seleccionado.
+- **MAIN** controla los faders principales; **MON 1–4** convierte los faders
+  de entrada en controles de envío hacia el monitor seleccionado.
+- Medidores estéreo **post-fader** por canal y salida, más puente de medidores.
+  Muestran Peak/RMS en dBFS, con respuesta visual RMS de unos 300 ms, retención
+  de picos y señal de clipping enclavada. No son VU analógicos calibrados.
+- Clic sobre un medidor o **Restablecer picos** borra su retención visual.
+- Doble clic en un fader lo devuelve a 0 dB.
+
+El medidor del canal sigue su nivel post-fader principal incluso al editar
+un envío pre-fader. Por eso un monitor pre-fader puede seguir recibiendo señal
+con el fader principal abajo: compruébalo en el medidor del monitor.
+
+Los generadores son independientes por canal y **sustituyen** la entrada de
+ese canal antes de sus inserts, también en ASIO. **Entrada física** desactiva
+el generador. No se inyecta ruido automáticamente en canales no activados.
+
+## Ventana de aplicación
+
+En Windows se intenta abrir una ventana de Edge/Chrome en modo aplicación,
+sin pestañas ni barra de direcciones, con un perfil separado del navegador
+habitual. Si no están disponibles, se abre el navegador predeterminado.
+El motor de audio es un proceso Rust/C++ local; la superficie sigue siendo
+HTML/CSS/JS. No se ha sustituido por un toolkit gráfico nativo.
+
+La consola de texto permanece abierta para diagnóstico. El botón de pantalla
+completa amplía la superficie. El escritorio está pensado para pantallas de
+1280 píxeles o más; las entradas se desplazan horizontalmente si hace falta.
+
+## Con la MOTU 896mk3 Hybrid
+
+1. Instala el controlador oficial, conecta la interfaz y cierra otras apps
+   que estén usando su ASIO.
+2. Abre **MOTOR DE AUDIO**, pulsa **Actualizar dispositivos** y elige la MOTU.
+3. Selecciona 1–8 entradas, frecuencia y buffer; por ejemplo 48 kHz / 256
+   muestras si el controlador lo admite.
+4. Desactiva los generadores de los canales que deban recibir audio físico.
+5. Asigna pares de salida distintos a cada bus. La numeración comienza en 1
+   y corresponde al orden del controlador; confirma sus conectores reales.
+6. Cierra el panel de motor y pulsa **ASIO**. Comprueba cada mezcla por separado.
+
+Entrada y salida se abren en un único stream dúplex del mismo dispositivo.
+El ruteo CueMix existente puede duplicar el monitoreo: usa una sola ruta al
+comprobar cada señal. Para cambiar de ASIO a AUDIO PC o DEMO, pulsa DETENER.
+
+Los envíos pre-fader no siguen el fader principal; los post-fader sí. Mute
+corta todos los envíos del canal. El mute del master no silencia auxiliares.
+
+## VST3 y escenas
+
+Con el audio detenido, pulsa **＋ VST3**, escribe la ruta al archivo/carpeta
+`.vst3` y pulsa **Leer VST3**. Selecciona el efecto, ajusta sus parámetros y
+aplícalo. Se muestra su nombre real en el insert.
+
+Hay hasta **cuatro inserts en serie por canal, auxiliar y master**. Los botones
+↑/↓ del panel cambian el orden. El botón de encendido junto a cada insert
+permite bypass en vivo sin modificar el resto de la cadena. El editor sigue
+siendo genérico; aún no se abre la ventana gráfica propia del plugin.
+
+**Guardar escena** exporta un JSON; **Abrir escena** lo carga con el audio
+detenido. Se migran los archivos 0.1 y sus inserts únicos. Se guardan selección,
+bypass y parámetros numéricos, no el estado binario completo ni presets internos.
+Los VST3 deben seguir instalados en su ruta. Los índices de dispositivo pueden
+cambiar: vuelve a seleccionar la MOTU si corresponde.
+
+No hay compensación automática de latencia. El inspector informa la suma de
+latencias declaradas por los inserts, incluidos los que estén en bypass.
+Plugins con lookahead pueden desalinear señales. El host de SoundCraft tampoco
+activa sidechains; la compatibilidad con tus plugins necesita prueba local.
+
+## Master hacia OBS
+
+1. Cierra OBS y ejecuta `Instalar-receptor-OBS.cmd` del ZIP.
+2. Abre OBS x64 **32.1 o posterior** y añade **Monitor Mix — master local**.
+   Crea una sola fuente y reutilízala en las demás escenas.
+3. Activa **MASTER → OBS** y arranca AUDIO PC, DEMO o ASIO.
+4. Comprueba el medidor en OBS y realiza una grabación corta.
+
+El puente usa UDP de loopback en el puerto 17840 y audio float32 estéreo.
+No exige que OBS abra ASIO ni instalar un cable de audio virtual. Solo envía
+el master; los auxiliares no aparecen como fuentes separadas de OBS.
+Con AUDIO PC ya tienes escucha local: mantén desactivado el monitoreo de la
+fuente en OBS para evitar oír la misma señal dos veces.
+
+Para desinstalar el receptor, cierra OBS y elimina únicamente
+`%APPDATA%\obs-studio\plugins\monitor-mix-receiver`.
+
+## Validación y diagnóstico
+
+En este entorno se comprobaron nueve pruebas del motor, incluidas medición
+Peak/RMS de un seno conocido, ruido independiente y su espectro, selección de
+bus para escucha PC, migración de escenas y cadenas/bypass con un VST3 binario
+real de prueba. También se probaron la interfaz en Chromium y el puente desde
+la app hasta captura real de libobs en Linux.
+
+Se compilaron los binarios Windows con ASIO **y WASAPI**. No se reprodujo audio
+nativamente en Windows aquí: faltan tu prueba de la salida normal del PC, la
+MOTU, efectos particulares, latencia, sincronía de video y sesiones largas.
+El recorte a ±1 evita valores fuera de escala; no sustituye un limitador.
+
+Si falla AUDIO PC, indica la salida predeterminada de Windows, frecuencia,
+buffer y el error de la app/consola. Si falla ASIO, añade controlador y canales.
+`XRuns` cuenta avisos del driver; no mide latencia. El contador UDP solo cubre
+cola y errores de envío de la app, sin confirmar recepción en OBS.
+
+Prueba de lógica sin hardware desde PowerShell:
 
 ```powershell
 .\MonitorMix.exe --self-test
 ```
-
-Debe informar `PASS` sobre mezcla independiente y silencio de emergencia.
-Ese comando no abre hardware ni valida el controlador ASIO.
-
-## Con la MOTU 896mk3 Hybrid
-
-1. Instala el controlador oficial MOTU para tu sistema y conecta la interfaz.
-   Cierra otras apps que puedan tener abierto el mismo controlador ASIO.
-2. En Monitor Mix, pulsa **Actualizar dispositivos** y selecciona la MOTU.
-3. Selecciona la cantidad de entradas a abrir (1–8), frecuencia y buffer.
-   Empieza por 48 kHz / 256 muestras si el controlador lo admite.
-4. Los canales representan las primeras entradas del controlador, en su
-   orden ASIO. Confirma qué conectores corresponden a esos índices.
-5. Asigna el master y los monitores a pares físicos distintos. La numeración
-   de salida empieza en 1. `Sin asignar` no envía ese bus al hardware.
-   Un par debe existir en el dispositivo y no puede compartirse entre buses.
-6. Inicia ASIO con niveles de escucha bajos. Los envíos parten en −∞; abre
-   cada mezcla desde el selector de faders y sube solo los canales necesarios.
-7. Comprueba cada salida por separado. Cambiar el fader principal de un
-   canal no afecta a su envío **pre-fader**. El envío post-fader sí lo sigue.
-   El mute del canal corta todos sus envíos. El mute del master solo corta
-   el master; los auxiliares siguen independientes.
-
-El backend abre entrada y salida del **mismo dispositivo** en un único stream
-dúplex RtAudio/ASIO. No usa el mezclador CueMix. El monitoreo directo que ya
-exista en la MOTU puede sumarse al de la app: deja una sola ruta para la señal
-que estés comprobando, para poder medir y escuchar el resultado correctamente.
-
-## VST3
-
-1. Detén el audio. Pulsa **VST3 +** en un canal, monitor o master.
-2. Escribe la ruta completa al archivo/carpeta `.vst3` instalado en este PC.
-3. Pulsa **Leer**, selecciona el efecto y ajusta sus parámetros numéricos.
-4. Pulsa **Aplicar insert** y vuelve a iniciar DEMO/ASIO.
-
-Esta versión tiene **un insert estéreo por canal y bus**, con editor genérico.
-No abre la ventana nativa del efecto. Los canales mono se duplican a estéreo
-antes del insert y conservan su salida estéreo. El pre-fader se toma después
-del insert. Cambiar efectos o sus parámetros requiere detener/reiniciar.
-
-El archivo de ajustes guarda selección y valores numéricos de los efectos;
-todavía no guarda sus estados binarios, muestras ni presets internos. Los
-plugins deben seguir instalados en la misma ruta. Cambiar a otra versión del
-mismo plugin desde otra ruta requiere reiniciar la app.
-
-**No hay compensación automática de latencia.** Se muestran las muestras
-declaradas por cada insert (ocho canales, master y cuatro monitores). Un
-lookahead o un efecto de alta latencia puede desalinear señales. El host VST3
-de SoundCraft tiene limitaciones propias, incluidas sidechains no activas;
-no se ha comprobado compatibilidad con tus plugins particulares.
-
-## Master hacia OBS
-
-1. Cierra OBS.
-2. Ejecuta `Instalar-receptor-OBS.cmd`. Copia el receptor a la carpeta de
-   plugins del usuario actual; no requiere modificar Program Files.
-3. Abre **OBS de 64 bits 32.1 o posterior**. Añade una fuente
-   **Monitor Mix — master local**. Crea una sola y reutilízala en otras escenas.
-4. En Monitor Mix activa **Enviar master a OBS** y arranca DEMO o ASIO.
-5. Comprueba señal en el mezclador de OBS y haz una grabación corta.
-
-La comunicación usa audio estéreo float32 por UDP de loopback, puerto 17840.
-Los sockets se usan fuera del callback ASIO. No requiere un cable virtual ni
-que OBS abra el mismo controlador ASIO. El master puede llegar a OBS aunque
-su salida física esté `Sin asignar`; los monitores continúan en sus salidas.
-Los auxiliares no se envían como fuentes separadas a OBS en esta versión.
-
-Mantén desactivado el monitoreo de esta fuente en OBS mientras verificas las
-salidas de la miniapp. Evita añadir también una captura duplicada de la MOTU.
-Si no aparece la fuente, comprueba arquitectura/versión de OBS y su registro.
-Si el puerto está ocupado, el receptor lo informa en ese registro.
-
-Para desinstalar, cierra OBS y elimina únicamente
-`%APPDATA%\obs-studio\plugins\monitor-mix-receiver`.
-
-## Ajustes y diagnóstico
-
-**Descargar ajustes** exporta un JSON; **Cargar ajustes** lo restaura con el
-audio detenido. Los índices de dispositivo pueden cambiar al reconectar:
-vuelve a seleccionar la MOTU después de cargar un archivo.
-
-Si falla ASIO, copia el error visible y registra dispositivo, número de
-entradas, frecuencia, buffer solicitado y salidas asignadas. Para fallos de
-VST3 registra su nombre, versión y el paso que falla. `XRuns` cuenta avisos
-del driver; no es una medición de latencia de ida y vuelta. Los picos fuera
-de ±1 se recortan y se contabilizan; no hay limitador de calidad de producción.
-
-## Qué se validó aquí
-
-- Compilación del ejecutable Windows x64 con ASIO y del receptor OBS x64.
-- Lógica del motor en Linux: cuatro pruebas de ruteo, mute, límites y clipping.
-- Prueba adicional con un VST3 binario real de test en canal, auxiliar y master.
-- Prueba en Chromium de la interfaz, envíos, silencio, VST3 y exportación.
-- Señal desde DEMO de la app, pasando por el puente, hasta callbacks reales
-  de captura de libobs 30.2 en Linux.
-
-No se ejecutó nativamente el paquete en Windows, ni se comprobó ASIO con la
-MOTU, plugins comerciales, latencia, sincronía con video o estabilidad en
-sesiones largas. El receptor Windows se compiló contra la API OBS 32.1; su
-carga en OBS Windows es parte de tu prueba local.

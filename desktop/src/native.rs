@@ -22,7 +22,7 @@ pub struct Device {
 }
 type Callback = unsafe extern "C" fn(*mut f32, *const f32, u32, u32, *mut c_void) -> i32;
 unsafe extern "C" {
-    fn mm_create() -> *mut c_void;
+    fn mm_create(system: bool) -> *mut c_void;
     fn mm_destroy(handle: *mut c_void);
     fn mm_close(handle: *mut c_void);
     fn mm_error(handle: *mut c_void) -> *const c_char;
@@ -39,6 +39,13 @@ unsafe extern "C" {
         user: *mut c_void,
     ) -> i32;
     fn mm_start(handle: *mut c_void) -> i32;
+    fn mm_open_system(
+        handle: *mut c_void,
+        rate: u32,
+        frames: *mut u32,
+        callback: Callback,
+        user: *mut c_void,
+    ) -> i32;
 }
 struct State {
     mixer: Mixer,
@@ -47,6 +54,7 @@ struct State {
     rate: u32,
     scratch: Vec<f32>,
     bridge: Arc<Bridge>,
+    system: bool,
 }
 pub struct Audio {
     handle: NonNull<c_void>,
@@ -54,9 +62,9 @@ pub struct Audio {
     pub frames: u32,
 }
 impl Audio {
-    pub fn new() -> Result<Self, String> {
-        let handle =
-            NonNull::new(unsafe { mm_create() }).ok_or("Cannot initialise the audio backend")?;
+    pub fn new(system: bool) -> Result<Self, String> {
+        let handle = NonNull::new(unsafe { mm_create(system) })
+            .ok_or("Cannot initialise the audio backend")?;
         Ok(Self {
             handle,
             state: None,
@@ -99,29 +107,52 @@ impl Audio {
         unsafe { mm_close(self.handle.as_ptr()) };
         self.state = None;
     }
-    pub fn start(&mut self, c: &Config, mixer: Mixer, bridge: Arc<Bridge>) -> Result<(), String> {
+    pub fn start(
+        &mut self,
+        c: &Config,
+        mixer: Mixer,
+        bridge: Arc<Bridge>,
+        system: bool,
+    ) -> Result<(), String> {
         self.stop();
-        let id = c.device.ok_or("Choose an ASIO device")?;
+        let id = if system {
+            0
+        } else {
+            c.device.ok_or("Choose an ASIO device")?
+        };
         let mut state = Box::new(State {
             mixer,
-            inputs: c.inputs as usize,
-            outputs: c.output_channels(),
+            inputs: if system { 0 } else { c.inputs as usize },
+            outputs: if system { 2 } else { c.output_channels() },
             rate: c.sample_rate,
             scratch: vec![0.0; MAX_FRAMES * CHANNELS],
             bridge,
+            system,
         });
         let mut frames = c.buffer;
-        let opened = unsafe {
-            mm_open(
-                self.handle.as_ptr(),
-                id,
-                c.inputs,
-                c.output_channels() as u32,
-                c.sample_rate,
-                &mut frames,
-                callback,
-                (&mut *state as *mut State).cast(),
-            )
+        let opened = if system {
+            unsafe {
+                mm_open_system(
+                    self.handle.as_ptr(),
+                    c.sample_rate,
+                    &mut frames,
+                    callback,
+                    (&mut *state as *mut State).cast(),
+                )
+            }
+        } else {
+            unsafe {
+                mm_open(
+                    self.handle.as_ptr(),
+                    id,
+                    c.inputs,
+                    c.output_channels() as u32,
+                    c.sample_rate,
+                    &mut frames,
+                    callback,
+                    (&mut *state as *mut State).cast(),
+                )
+            }
         };
         if opened != 0 {
             unsafe { mm_close(self.handle.as_ptr()) };
@@ -182,6 +213,12 @@ unsafe extern "C" fn callback(
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         if !s.mixer.process(&s.scratch, output, frames, s.outputs) {
             return false;
+        }
+        if s.system {
+            let selected = s.mixer.controls.pc_monitor.load(Relaxed) as usize;
+            if !s.mixer.copy_monitor(output, frames, selected) {
+                return false;
+            }
         }
         s.bridge.push(&s.mixer.buses[0], frames, s.rate);
         true
