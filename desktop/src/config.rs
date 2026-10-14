@@ -1,0 +1,158 @@
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+
+pub const CHANNELS: usize = 8;
+pub const AUXES: usize = 4;
+pub const BUSES: usize = AUXES + 1;
+pub const MAX_FRAMES: usize = 8192;
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Default)]
+pub struct Fx {
+    pub path: String,
+    pub id: String,
+    #[serde(default)]
+    pub params: BTreeMap<String, f32>,
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Channel {
+    pub name: String,
+    pub gain_db: f32,
+    pub pan: f32,
+    pub mute: bool,
+    pub sends_db: [f32; AUXES],
+    pub pre: [bool; AUXES],
+    pub fx: Option<Fx>,
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Bus {
+    pub name: String,
+    pub gain_db: f32,
+    pub mute: bool,
+    /// Zero-based first physical output, None = no hardware output.
+    pub output: Option<usize>,
+    pub fx: Option<Fx>,
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Config {
+    pub version: u32,
+    pub device: Option<u32>,
+    pub inputs: u32,
+    pub obs_bridge: bool,
+    pub sample_rate: u32,
+    pub buffer: u32,
+    pub channels: [Channel; CHANNELS],
+    /// Master followed by the four auxiliaries.
+    pub buses: [Bus; BUSES],
+}
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            version: 1,
+            device: None,
+            inputs: 8,
+            obs_bridge: false,
+            sample_rate: 48000,
+            buffer: 256,
+            channels: std::array::from_fn(|i| Channel {
+                name: format!("Entrada {}", i + 1),
+                gain_db: -12.0,
+                pan: 0.0,
+                mute: false,
+                sends_db: [-90.0; AUXES],
+                pre: [true; AUXES],
+                fx: None,
+            }),
+            buses: std::array::from_fn(|i| Bus {
+                name: if i == 0 {
+                    "Master / OBS".into()
+                } else {
+                    format!("Monitor {i}")
+                },
+                gain_db: -18.0,
+                mute: false,
+                output: None,
+                fx: None,
+            }),
+        }
+    }
+}
+fn range(value: f32, min: f32, max: f32) -> bool {
+    value.is_finite() && (min..=max).contains(&value)
+}
+impl Config {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.version != 1 {
+            return Err("Unsupported scene version".into());
+        }
+        if !(1..=8).contains(&self.inputs)
+            || ![44100, 48000, 88200, 96000].contains(&self.sample_rate)
+            || !(32..=4096).contains(&self.buffer)
+        {
+            return Err("Invalid sample rate or buffer (32–4096)".into());
+        }
+        let mut assigned = [false; 64];
+        for bus in &self.buses {
+            if !range(bus.gain_db, -90.0, 6.0) || bus.name.len() > 120 {
+                return Err("Invalid bus gain/name".into());
+            }
+            if let Some(first) = bus.output {
+                if first >= 63 || assigned[first] || assigned[first + 1] {
+                    return Err("Output pairs must be in 1–64 and must not overlap".into());
+                }
+                assigned[first] = true;
+                assigned[first + 1] = true;
+            }
+        }
+        for c in &self.channels {
+            if !range(c.gain_db, -90.0, 6.0)
+                || !range(c.pan, -1.0, 1.0)
+                || c.sends_db.iter().any(|v| !range(*v, -90.0, 6.0))
+                || c.name.len() > 120
+            {
+                return Err("Invalid channel controls".into());
+            }
+        }
+        for fx in self
+            .channels
+            .iter()
+            .map(|c| &c.fx)
+            .chain(self.buses.iter().map(|b| &b.fx))
+            .flatten()
+        {
+            if fx.path.len() > 4096
+                || fx.id.len() > 128
+                || fx.params.len() > 2048
+                || fx
+                    .params
+                    .iter()
+                    .any(|(k, v)| k.len() > 128 || !v.is_finite())
+            {
+                return Err("Invalid effect configuration".into());
+            }
+        }
+        Ok(())
+    }
+    pub fn same_graph(&self, other: &Self) -> bool {
+        self.device == other.device
+            && self.inputs == other.inputs
+            && self.sample_rate == other.sample_rate
+            && self.buffer == other.buffer
+            && self
+                .channels
+                .iter()
+                .zip(&other.channels)
+                .all(|(a, b)| a.fx == b.fx)
+            && self
+                .buses
+                .iter()
+                .zip(&other.buses)
+                .all(|(a, b)| a.fx == b.fx && a.output == b.output)
+    }
+    pub fn output_channels(&self) -> usize {
+        self.buses
+            .iter()
+            .filter_map(|b| b.output.map(|p| p + 2))
+            .max()
+            .unwrap_or(2)
+    }
+}

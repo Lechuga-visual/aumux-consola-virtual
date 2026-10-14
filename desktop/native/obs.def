@@ -1,0 +1,6 @@
+LIBRARY obs.dll
+EXPORTS
+obs_register_source_s
+obs_source_output_audio
+os_gettime_ns
+blog

@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Monitor Mix</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,sans-serif;background:#10151d;color:#e8edf4}body{margin:0}header{padding:20px 26px;background:#17212f;display:flex;align-items:center;gap:20px;flex-wrap:wrap}h1{font-size:24px;margin:0}small{color:#aebccc}button,select,input{font:inherit;background:#233246;color:inherit;border:1px solid #41546d;border-radius:6px;padding:7px}button{cursor:pointer}button:hover{background:#344f70}button.primary{background:#1b6356}button.danger{background:#953341}button:disabled{opacity:.4;cursor:default}main{padding:20px 26px}.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:16px}.notice{border-left:3px solid #48bba7;padding:10px 14px;background:#182a2e;margin:12px 0}.error{color:#ffb3b3;white-space:pre-wrap}#mixer{display:flex;gap:12px;overflow:auto;padding-bottom:14px}.strip{min-width:174px;max-width:174px;background:#1b2533;border:1px solid #34445a;border-radius:10px;padding:12px}.strip.selected{border-color:#57d2b5}.strip input.name{width:152px;font-weight:bold;background:transparent}.fader{height:185px;display:flex;justify-content:center;padding:12px}.fader input{writing-mode:vertical-lr;direction:rtl;width:30px;accent-color:#54d3b2}.level{text-align:center;font-variant-numeric:tabular-nums}.strip label{font-size:12px;display:block;margin:9px 0}.strip label input[type=range]{width:150px}.bus{border-top:3px solid #d2a250}#buses{display:flex;gap:12px;flex-wrap:wrap;margin:15px 0}.meter{height:9px;background:#0d1219;border-radius:5px;overflow:hidden;margin:7px 0}.meter i{height:100%;display:block;background:#43c59f;width:0;transition:width .1s}dialog{max-width:700px;width:85%;background:#17212f;color:#e8edf4;border:1px solid #56708f;border-radius:12px}dialog input[type=text]{width:85%}dialog label{display:flex;justify-content:space-between;gap:10px;margin:10px}#params{max-height:340px;overflow:auto}#params input{width:120px}a{color:#77d6c6}.hint{font-size:12px;color:#acb8c9}hr{border:0;border-top:1px solid #34445a}#status{font-weight:bold;color:#79dbc3}
+</style>
+<header><div><h1>Monitor Mix <small>0.1 · prototipo</small></h1><small>ASIO · mezclas independientes · SoundCraft DSP / VST3</small></div><span id="status">DETENIDO</span><button class="danger" id="panic">SILENCIO TOTAL</button></header>
+<main>
+<div class="toolbar"><button id="scan">Actualizar dispositivos</button><select id="device"><option value="">Seleccionar ASIO…</option></select><label>Entradas <input id="inputs" type="number" min="1" max="8" style="width:48px"></label><select id="rate"><option>44100</option><option>48000</option><option>88200</option><option>96000</option></select><label>Buffer <select id="buffer"><option>64</option><option>128</option><option>256</option><option>512</option><option>1024</option></select></label></div>
+<div class="toolbar"><button id="demo">Probar DEMO sin hardware</button><button id="start" class="primary">Iniciar ASIO</button><button id="stop">Detener</button><button id="save">Descargar ajustes</button><button id="load">Cargar ajustes…</button><input type="file" id="scene" accept=".json" hidden><label><input type="checkbox" id="bridge"> Enviar master a OBS (receptor incluido)</label></div>
+<div class="notice">Primero prueba DEMO. No abre la interfaz ni reproduce en sus salidas. Para ASIO, asigna los pares físicos abajo. Los envíos empiezan en −∞. El mute de canal corta todos sus envíos.</div>
+<div id="error" class="error" role="alert"></div><p id="stats" class="hint"></p>
+<h2>Mezclas y salidas</h2><div id="buses"></div>
+<div class="toolbar"><b>Faders de canales:</b><select id="view"><option value="-1">Mezcla principal</option><option value="0">Monitor 1 — envíos</option><option value="1">Monitor 2 — envíos</option><option value="2">Monitor 3 — envíos</option><option value="3">Monitor 4 — envíos</option></select><span class="hint">Selecciona un monitor para mezclar sus envíos con los faders.</span></div>
+<div id="mixer"></div>
+<p class="hint">Un insert VST3 estéreo por canal, auxiliar y master. Cambia efectos, parámetros y ruteo con el audio detenido. Se guardan parámetros numéricos; no el estado binario completo ni presets internos. No hay compensación automática de latencia. El recorte de picos a ±1 no sustituye un limitador.</p>
+<p class="hint">La app sigue sonando si cierras esta pestaña. Pulsa Detener o cierra la ventana de Monitor Mix para finalizar.</p>
+</main>
+<dialog id="fx"><h2>Insert VST3</h2><p class="hint">Ruta completa al archivo o carpeta .vst3 instalado en este PC.</p><input id="path" type="text" placeholder="C:\Program Files\Common Files\VST3\Efecto.vst3"><button id="inspect">Leer</button><p><select id="classes"></select></p><div id="params"></div><div class="toolbar"><button id="applyfx">Aplicar insert</button><button id="removefx">Quitar insert</button><button id="closefx">Cerrar</button></div><div id="fxerror" class="error"></div></dialog>
+<script>
+const token='__TOKEN__', $=id=>document.getElementById(id);let cfg,view=-1,running=false,selectedFx=null,descriptors=[],pendingFx=null,queue=Promise.resolve();
+function error(e){$('error').textContent=e.message||e}
+async function api(path,body){const r=await fetch('/api/'+path,{method:'POST',headers:{'Content-Type':'application/json','X-Monitor-Token':token},body:JSON.stringify(body||{})});const v=await r.json();if(!r.ok)throw Error(v.error||r.statusText);return v}
+function publish(){const data=structuredClone(cfg);const task=queue.then(()=>api('config',data));queue=task.catch(()=>{});task.catch(error);return task}
+function db(v){return v<=-90?'−∞ dB':Number(v).toFixed(1)+' dB'}
+function el(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e}
+function slider(value,min,max,step,change){const e=el('input');e.type='range';e.min=min;e.max=max;e.step=step;e.value=value;e.oninput=()=>change(Number(e.value));return e}
+function fxButton(target){const b=el('button','',target.fx?'VST3 ✓':'VST3 +');b.disabled=running;b.onclick=()=>openFx(target);return b}
+function render(){
+ $('inputs').value=cfg.inputs;$('rate').value=cfg.sample_rate;$('buffer').value=cfg.buffer;$('bridge').checked=cfg.obs_bridge;
+ if(cfg.device!==null)$('device').value=cfg.device;
+ $('buses').replaceChildren();cfg.buses.forEach((b,i)=>{
+ const card=el('section','strip bus'),name=el('input','name');name.value=b.name;name.onchange=()=>{b.name=name.value;publish()};card.append(name);
+ const level=el('div','level',db(b.gain_db));card.append(level,slider(b.gain_db,-90,6,.5,v=>{b.gain_db=v;level.textContent=db(v);publish()}));
+ const meter=el('div','meter'),bar=el('i');bar.id='meter'+i;meter.append(bar);card.append(meter);
+ const mute=el('button','',b.mute?'Mute ✓':'Mute');mute.onclick=()=>{b.mute=!b.mute;mute.textContent=b.mute?'Mute ✓':'Mute';publish()};card.append(mute,fxButton(b));
+ const label=el('label','', 'Par de salida física: '),route=el('select');route.disabled=running;
+ route.append(new Option('Sin asignar',''));for(let p=0;p<64;p+=2)route.append(new Option(`${p+1}–${p+2}`,p));route.value=b.output===null?'':b.output;
+ route.onchange=()=>{const old=b.output;b.output=route.value===''?null:Number(route.value);if(b.output!==null&&cfg.buses.some(o=>o!==b&&o.output===b.output)){b.output=old;route.value=old===null?'':old;error('Cada mezcla debe tener un par de salida distinto.');return}publish()};label.append(route);card.append(label);$('buses').append(card);
+ });
+ $('mixer').replaceChildren();cfg.channels.forEach((c,i)=>{
+ const card=el('section','strip'+(view>=0?' selected':'')),name=el('input','name');name.value=c.name;name.onchange=()=>{c.name=name.value;publish()};card.append(name,el('small','',`Entrada física ${i+1}`));
+ const current=view<0?c.gain_db:c.sends_db[view],level=el('div','level',db(current));card.append(level);
+ const fader=el('div','fader');fader.append(slider(current,-90,6,.5,v=>{if(view<0)c.gain_db=v;else c.sends_db[view]=v;level.textContent=db(v);publish()}));card.append(fader);
+ const mute=el('button','',c.mute?'Mute ✓':'Mute');mute.onclick=()=>{c.mute=!c.mute;mute.textContent=c.mute?'Mute ✓':'Mute';publish()};card.append(mute,fxButton(c));
+ const pan=el('label','', 'Panorama');pan.append(slider(c.pan,-1,1,.05,v=>{c.pan=v;publish()}));card.append(pan);
+ if(view>=0){const pre=el('label','', 'Pre-fader '),check=el('input');check.type='checkbox';check.checked=c.pre[view];check.onchange=()=>{c.pre[view]=check.checked;publish()};pre.append(check);card.append(pre)}
+ $('mixer').append(card);
+ });
+ for(const id of ['device','inputs','rate','buffer','scan','demo','start','load'])$(id).disabled=running;
+}
+async function poll(){try{const r=await fetch('/api/status');const s=await r.json();const was=running;running=s.mode!=='DETENIDO';$('status').textContent=s.mode+(s.emergency?' · SILENCIO TOTAL':'')+(s.failed?' · ERROR DE AUDIO':'');if(was!==running)render();$('stats').textContent=`Buffer real: ${s.actual_buffer} · Bloques con clipping: ${s.clipped_blocks} · XRuns: ${s.xruns} · Paquetes descartados: ${s.bridge_drops} · Latencia declarada de inserts: ${s.latencies.join(', ')} muestras`;s.meters.forEach((p,i)=>{const bar=$('meter'+i);if(bar){bar.style.width=Math.max(0,Math.min(100,(20*Math.log10(Math.max(p,1e-5))+60)/60*100))+'%';bar.style.background=p>=1?'#ef6678':'#43c59f'}})}catch(e){$('status').textContent='SIN CONEXIÓN'}finally{setTimeout(poll,150)}}
+async function scan(){try{const list=await api('devices');$('device').replaceChildren(new Option('Seleccionar ASIO…',''));list.forEach(d=>$('device').append(new Option(`${d.name} (${d.inputs} in / ${d.outputs} out)`,d.id)));if(cfg.device!==null)$('device').value=cfg.device;if(!list.length)error('No se encontraron dispositivos. En Windows instala el controlador ASIO de la MOTU; DEMO funciona sin él.')}catch(e){error(e)}}
+$('device').onchange=()=>{cfg.device=$('device').value===''?null:Number($('device').value);publish()};for(const [id,key]of [['inputs','inputs'],['rate','sample_rate'],['buffer','buffer']])$(id).onchange=()=>{cfg[key]=Number($(id).value);publish()};$('bridge').onchange=()=>{cfg.obs_bridge=$('bridge').checked;publish()};$('scan').onclick=scan;
+for(const [id,mode]of [['demo','demo'],['start','asio']])$(id).onclick=async()=>{try{$('error').textContent='';await publish();await api('start',{mode})}catch(e){error(e)}};
+$('stop').onclick=()=>api('stop').catch(error);$('panic').onclick=()=>api('panic').catch(error);
+$('view').onchange=()=>{view=Number($('view').value);render()};
+$('save').onclick=()=>{const a=el('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(cfg,null,2)],{type:'application/json'}));a.download='monitor-mix.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)};
+$('load').onclick=()=>$('scene').click();$('scene').onchange=async()=>{try{const candidate=JSON.parse(await $('scene').files[0].text());await api('config',candidate);cfg=candidate;render()}catch(e){error(e)}$('scene').value=''};
+function openFx(target){selectedFx=target;pendingFx=target.fx?structuredClone(target.fx):null;descriptors=[];$('path').value=target.fx?.path||'';$('params').replaceChildren();$('classes').replaceChildren();$('fxerror').textContent='';$('fx').showModal()}
+$('inspect').onclick=async()=>{try{$('fxerror').textContent='Leyendo VST3…';descriptors=await api('inspect',{path:$('path').value});$('classes').replaceChildren();descriptors.forEach((d,i)=>$('classes').append(new Option(d.name,i)));if(!descriptors.length)throw Error('Este bundle no contiene efectos de audio.');showParams();$('fxerror').textContent=''}catch(e){$('fxerror').textContent=e.message}};
+function showParams(){const d=descriptors[Number($('classes').value)];if(!d)return;const old=selectedFx.fx;pendingFx={path:$('path').value,id:d.id,params:old?.id===d.id?{...old.params}:{}};$('params').replaceChildren();d.params.forEach(p=>{const label=el('label','',p.name),input=el('input');input.type='number';input.min=p.min;input.max=p.max;input.step='any';input.value=pendingFx.params[p.id]??p.value;pendingFx.params[p.id]=Number(input.value);input.onchange=()=>pendingFx.params[p.id]=Number(input.value);label.append(input);$('params').append(label)})}
+$('classes').onchange=showParams;$('closefx').onclick=()=>$('fx').close();$('removefx').onclick=()=>{selectedFx.fx=null;publish();$('fx').close();render()};$('applyfx').onclick=()=>{if(!pendingFx){$('fxerror').textContent='Primero pulsa Leer y selecciona un efecto.';return}selectedFx.fx=pendingFx;publish();$('fx').close();render()};
+fetch('/api/config').then(r=>r.json()).then(c=>{cfg=c;render();poll()}).catch(error);
+</script></html>

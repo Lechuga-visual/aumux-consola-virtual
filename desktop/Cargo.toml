@@ -1,0 +1,23 @@
+[package]
+name = "monitor-mix"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+license = "MIT"
+description = "Prototype ASIO monitor mixer using SoundCraft DSP and VST3 hosting"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tiny_http = "0.12"
+getrandom = "0.3"
+crossbeam-queue = "0.3"
+soundcraft-dsp = { git = "https://github.com/storytold/soundcraft", rev = "3a28a657692c1b98b28c276d8f61df9471074f0f" }
+soundcraft-vst3-host = { git = "https://github.com/storytold/soundcraft", rev = "3a28a657692c1b98b28c276d8f61df9471074f0f" }
+
+[build-dependencies]
+cc = "1"
+
+[profile.release]
+opt-level = 2
+codegen-units = 8
