@@ -13,13 +13,19 @@
         <div class="brand">
           <span class="brand-icon"><i></i><i></i><i></i><i></i></span
           ><strong>MONITOR<span>MIX</span></strong
-          ><span class="version">0.3</span>
+          ><span class="version">0.4</span>
         </div>
         <div class="scene-title">
           CONSOLA DE MONITOREO <span>•</span>
           <span id="scene-name">Sin título</span>
         </div>
         <div class="window-actions">
+          <button id="toggle-meters" aria-pressed="true">Medidores</button>
+          <button id="toggle-inspector" aria-pressed="true">Inspector</button>
+          <select id="mixer-layout" aria-label="Vista del mezclador">
+            <option value="full">Consola completa</option>
+            <option value="small">Consola reducida</option>
+          </select>
           <button id="load" title="Cargar escena JSON">Abrir escena</button
           ><button id="save">Guardar escena</button
           ><button id="fullscreen" title="Pantalla completa">⛶</button
@@ -43,11 +49,6 @@
         ><button id="stop" title="Detener y liberar el dispositivo">
           ■ DETENER
         </button>
-        <select
-          id="pc-monitor"
-          aria-label="Mezcla que se escucha en el PC"
-          title="Mezcla que se reproduce en AUDIO PC"
-        ></select>
         <span id="status" class="status">DETENIDO</span
         ><span class="transport-spacer"></span
         ><span id="engine-summary" class="technical"
@@ -61,19 +62,40 @@
       <section class="meter-bridge">
         <div class="bridge-caption">
           <span class="eyebrow">MEDICIÓN EN VIVO</span
-          ><strong>Entradas / salidas</strong><span>Peak + RMS · dBFS</span
-          ><button id="reset-peaks">Restablecer picos</button>
+          ><strong>Entradas / salidas</strong><span>Peak + RMS · dBFS</span>
         </div>
         <div id="meterbridge" class="meterbridge-channels"></div>
         <div id="outputbridge" class="meterbridge-outputs"></div>
+        <div class="bridge-tools">
+          <strong>Peak / RMS · dBFS</strong><span>Post-fader · L / R</span
+          ><button id="reset-peaks">Restablecer picos</button>
+        </div>
       </section>
       <main class="console">
-        <aside id="inspector" class="inspector"></aside>
         <div class="desk">
+          <aside class="module-labels" aria-hidden="true">
+            <div class="label-heading">CANAL</div>
+            <div class="label-rows">
+              <span></span><span>Entrada</span><span>Efectos</span
+              ><span>Aux</span><span>Pan</span><span>Main</span
+              ><span>Nombre</span><span>Mute / Gen</span><span>dB</span
+              ><span>Nivel</span><span>Peak</span><span></span>
+            </div>
+            <div></div>
+          </aside>
           <section class="bank input-bank">
             <div class="bank-heading">
               <strong>ENTRADAS <span>01—08</span></strong>
-              <div id="layers" class="layers"></div>
+              <label class="fader-flip"
+                >Fader Flip
+                <select id="fader-flip" aria-label="Fader Flip">
+                  <option value="-1">Main Level</option>
+                  <option value="0">Aux 1</option>
+                  <option value="1">Aux 2</option>
+                  <option value="2">Aux 3</option>
+                  <option value="3">Aux 4</option>
+                </select></label
+              >
             </div>
             <div id="mixer" class="strip-bank"></div>
             <div class="bank-bottom">
@@ -91,6 +113,27 @@
             </div>
           </section>
         </div>
+        <aside class="sidebar">
+          <section class="control-room">
+            <h2>Control Room <span>ESCUCHA PC</span></h2>
+            <div class="listen-controls">
+              <label
+                >Input<select
+                  id="pc-monitor"
+                  aria-label="Mezcla que se escucha en el PC"
+                  title="Mezcla que se reproduce en AUDIO PC"
+                ></select
+              ></label>
+              <div class="monitor-destination">
+                Output<strong>Windows · estéreo</strong
+                ><span id="listen-status">Motor detenido</span>
+              </div>
+              <div id="listen-meter"></div>
+            </div>
+          </section>
+          <div class="inspector-heading">Inspector</div>
+          <aside id="inspector" class="inspector"></aside>
+        </aside>
       </main>
       <footer class="statusbar">
         <span id="error" role="alert"></span
@@ -225,11 +268,11 @@
         </li>
         <li>
           El medidor del canal y el master deben moverse. Selecciona
-          <b>MON 1</b> y sube su envío para alimentar esa mezcla.
+          <b>Fader Flip → Aux 1</b> y sube su envío para alimentar esa mezcla.
         </li>
         <li>
-          El selector <b>Escucha PC</b> elige qué bus se oye: master o uno de
-          los cuatro monitores.
+          El selector <b>Control Room → Input</b> elige qué bus se oye: master o
+          uno de los cuatro monitores.
         </li>
         <li>
           Los generadores sustituyen la entrada de ese canal antes de los

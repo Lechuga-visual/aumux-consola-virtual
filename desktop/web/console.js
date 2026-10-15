@@ -24,14 +24,14 @@ const signalNames = {
   sine: "Tono seno",
 };
 const colours = [
-  "#51b7be",
-  "#66a9d0",
-  "#8c9acb",
-  "#9d91bc",
-  "#bc9389",
-  "#baa26e",
-  "#8eb493",
-  "#6eabb4",
+  "#479469",
+  "#479469",
+  "#479469",
+  "#479469",
+  "#479469",
+  "#479469",
+  "#479469",
+  "#479469",
 ];
 
 function el(tag, cls, text) {
@@ -292,7 +292,7 @@ function bridgeCell(type, index) {
   cell.dataset.strip = key;
   cell.style.setProperty(
     "--strip-color",
-    type === "channel" ? colours[index] : index === 0 ? "#dd8d9f" : "#e4b666",
+    type === "channel" ? colours[index] : index === 0 ? "#e65539" : "#278ba5",
   );
   cell.append(
     el("span", "bridge-name", target.name),
@@ -409,10 +409,12 @@ function createFader(type, index) {
 }
 function sourceShort(c) {
   return c.generator.signal === "off"
-    ? "ENTRADA ASIO"
+    ? "ASIO IN"
     : c.generator.signal === "sine"
       ? `${c.generator.frequency} Hz`
-      : "RUIDO " + (c.generator.signal === "white" ? "BLANCO" : "ROSA");
+      : c.generator.signal === "white"
+        ? "BLANCO"
+        : "ROSA";
 }
 function refreshGenerator(index) {
   const c = cfg.channels[index];
@@ -537,6 +539,7 @@ function channelStrip(index) {
     el("span", "", view < 0 ? "MAIN" : `MON ${view + 1}`),
   );
   card.append(footer);
+  arrangeStrip(card, "channel", index);
   return card;
 }
 function busStrip(index) {
@@ -613,13 +616,69 @@ function busStrip(index) {
     el("span", "", b.output === null ? "—" : `${b.output + 1}/${b.output + 2}`),
   );
   card.append(footer);
+  arrangeStrip(card, "bus", index);
   return card;
+}
+// Shared rows keep every channel and bus module aligned, including empty cells.
+function arrangeStrip(card, type, index) {
+  const header = card.querySelector(".strip-header"),
+    name = header.querySelector(".name"),
+    nameRow = el("div", "name-row"),
+    source = card.querySelector(
+      type === "channel" ? ".source-button" : ".bus-route",
+    ),
+    rack = card.querySelector(".insert-rack"),
+    sends =
+      card.querySelector(".send-grid") || el("div", "module-empty aux-empty"),
+    pan = card.querySelector(".pan-row") || el("div", "module-empty pan-empty"),
+    main = el(
+      "div",
+      "main-route",
+      type === "channel" ? "→ MAIN" : index === 0 ? "→ OBS" : "AUX " + index,
+    ),
+    buttons = card.querySelector(".strip-buttons"),
+    level = card.querySelector(".level"),
+    fader = card.querySelector(".fader-section"),
+    peak = card.querySelector(".peak-readout"),
+    footer = card.querySelector(".strip-footer");
+  nameRow.append(name);
+  source.title ||=
+    type === "channel" ? "Entrada o generador del canal" : "Salida física ASIO";
+  card.querySelector(".output-spacer")?.remove();
+  card.querySelector(".strip-caption")?.remove();
+  buttons.querySelectorAll("button").forEach((button) => {
+    const gen = button.id.startsWith("generator-toggle-");
+    button.textContent = gen ? "G" : "M";
+    button.setAttribute(
+      "aria-label",
+      gen
+        ? `Generador canal ${index + 1}`
+        : `Mute ${type === "channel" ? "canal" : "bus"} ${index + 1}`,
+    );
+  });
+  card.replaceChildren(
+    header,
+    source,
+    rack,
+    sends,
+    pan,
+    main,
+    nameRow,
+    buttons,
+    level,
+    fader,
+    peak,
+    footer,
+  );
+}
+function renderListenMeter() {
+  $("listen-meter").replaceChildren(meter(keyOf("bus", cfg.pc_monitor)));
 }
 function updateSendLabels() {
   document.querySelectorAll("[data-send]").forEach((e) => {
     const [i, a] = e.dataset.send.split(":").map(Number);
     const value = cfg.channels[i].sends_db[a];
-    e.textContent = `M${a + 1} ${value <= -90 ? "−∞" : value.toFixed(0)}`;
+    e.textContent = `A${a + 1} ${value <= -90 ? "−∞" : value.toFixed(0)}`;
     e.classList.toggle("has-send", value > -90);
     e.classList.toggle("selected-send", view === a);
   });
@@ -638,9 +697,11 @@ function render() {
   $("buffer").value = cfg.buffer;
   $("bridge").checked = cfg.obs_bridge;
   $("pc-monitor").replaceChildren(
-    ...cfg.buses.map((b, i) => new Option("Escucha PC: " + b.name, i)),
+    ...cfg.buses.map((b, i) => new Option(b.name, i)),
   );
   $("pc-monitor").value = cfg.pc_monitor;
+  renderListenMeter();
+  $("fader-flip").value = view;
   if (cfg.device !== null) $("device").value = cfg.device;
   $("meterbridge").replaceChildren(
     ...cfg.channels.map((_, i) => bridgeCell("channel", i)),
@@ -651,25 +712,6 @@ function render() {
   );
   $("mixer").replaceChildren(...cfg.channels.map((_, i) => channelStrip(i)));
   $("buses").replaceChildren(...outputOrder.map((i) => busStrip(i)));
-  $("layers").replaceChildren();
-  for (let layer = -1; layer < 4; layer++) {
-    const b = el(
-      "button",
-      view === layer ? "active" + (layer >= 0 ? " send-active" : "") : "",
-      layer < 0 ? "MAIN" : "MON " + (layer + 1),
-    );
-    b.setAttribute(
-      "aria-label",
-      layer < 0
-        ? "Faders de mezcla principal"
-        : "Faders de Monitor " + (layer + 1),
-    );
-    b.onclick = () => {
-      view = layer;
-      render();
-    };
-    $("layers").append(b);
-  }
   $("layer-label").textContent =
     view < 0
       ? "MEZCLA PRINCIPAL"
@@ -882,6 +924,17 @@ async function poll() {
     lastStatus = s;
     const was = running;
     running = s.mode !== "DETENIDO";
+    $("listen-status").textContent = s.emergency
+      ? "Silencio total"
+      : s.failed
+        ? "Error de audio"
+        : s.mode === "PC"
+          ? "Reproduciendo"
+          : s.mode === "DEMO"
+            ? "DEMO · sin reproducción PC"
+            : s.mode === "ASIO"
+              ? "Escucha por salidas ASIO"
+              : "Motor detenido";
     $("status").textContent =
       s.mode +
       (s.emergency ? " · SILENCIO TOTAL" : "") +
@@ -909,11 +962,15 @@ async function poll() {
         : s.bridge?.receiver_active
           ? "● OBS recibe"
           : "○ OBS sin receptor";
-    bridge.classList.toggle("connected", running && !!s.bridge?.receiver_active);
+    bridge.classList.toggle(
+      "connected",
+      running && !!s.bridge?.receiver_active,
+    );
     bridge.title = `Enviados: ${s.bridge?.sent || 0} paquetes · Descartados: ${s.bridge_drops}\nLa confirmación verifica recepción en la fuente; revisa también su mute y la escena en OBS.`;
     updateLatency();
   } catch (e) {
     $("status").textContent = "SIN CONEXIÓN";
+    $("listen-status").textContent = "Sin conexión";
     $("obs-status").textContent = "OBS: sin conexión";
     $("obs-status").classList.remove("connected");
     for (const s of meterStates.values()) {
@@ -1120,10 +1177,63 @@ for (const [id, mode] of [
 $("pc-monitor").onchange = () => {
   cfg.pc_monitor = Number($("pc-monitor").value);
   publish();
+  render();
 };
 $("stop").onclick = () => api("stop").catch(error);
 $("panic").onclick = () => api("panic").catch(error);
 $("reset-peaks").onclick = resetPeaks;
+$("fader-flip").onchange = () => {
+  view = Number($("fader-flip").value);
+  render();
+};
+let deskPreferences;
+try {
+  deskPreferences = JSON.parse(
+    localStorage.getItem("monitor-mix-desk") || "{}",
+  );
+  if (
+    !deskPreferences ||
+    typeof deskPreferences !== "object" ||
+    Array.isArray(deskPreferences)
+  )
+    deskPreferences = {};
+} catch {
+  deskPreferences = {};
+}
+function applyDeskPreferences() {
+  const app = document.querySelector(".app");
+  app.classList.toggle("hide-meters", deskPreferences.meters === false);
+  app.classList.toggle("hide-inspector", deskPreferences.inspector === false);
+  app.classList.toggle("small-console", deskPreferences.layout === "small");
+  $("toggle-meters").setAttribute(
+    "aria-pressed",
+    deskPreferences.meters !== false,
+  );
+  $("toggle-inspector").setAttribute(
+    "aria-pressed",
+    deskPreferences.inspector !== false,
+  );
+  $("mixer-layout").value =
+    deskPreferences.layout === "small" ? "small" : "full";
+  try {
+    localStorage.setItem("monitor-mix-desk", JSON.stringify(deskPreferences));
+  } catch {
+    /* Storage can be unavailable in a private browser. */
+  }
+}
+$("toggle-meters").onclick = () => {
+  deskPreferences.meters = deskPreferences.meters === false;
+  applyDeskPreferences();
+};
+$("toggle-inspector").onclick = () => {
+  deskPreferences.inspector = deskPreferences.inspector === false;
+  applyDeskPreferences();
+};
+$("mixer-layout").onchange = () => {
+  deskPreferences.layout = $("mixer-layout").value;
+  applyDeskPreferences();
+};
+applyDeskPreferences();
 $("settings").onclick = () => $("audio-settings").showModal();
 $("help").onclick = () => $("help-dialog").showModal();
 for (const button of document.querySelectorAll("[data-close]"))

@@ -1,4 +1,4 @@
-# Monitor Mix 0.3 · prueba local en Windows x64
+# Monitor Mix 0.4 · prueba local en Windows x64
 
 Miniapp de mezcla con ocho canales, cuatro monitores y master. Reutiliza DSP
 y host VST3 de SoundCraft de Artcraft, con una superficie y un ruteo propios.
@@ -6,18 +6,18 @@ Es un prototipo para pruebas; todavía no está validado para una sesión en viv
 
 ## Probar sonido sin ASIO ni interfaz externa
 
-1. Extrae **todo** `MonitorMix-0.3.0-Windows-x64.zip` y ejecuta `MonitorMix.exe`.
+1. Extrae **todo** `MonitorMix-0.4.0-Windows-x64.zip` y ejecuta `MonitorMix.exe`.
    Cierra la versión anterior antes de abrir esta.
 2. Pulsa **AUDIO PC**. Usa los parlantes/audífonos predeterminados de Windows
    mediante WASAPI, sin controlador ASIO ni dispositivo MOTU.
-3. Pulsa **GEN** en Entrada 1. Se activa ruido blanco, inicialmente a −30 dBFS.
+3. Pulsa **G** en Entrada 1. Se activa ruido blanco, inicialmente a −30 dBFS.
    Ahora deberías escuchar el master y ver los medidores de ese canal y master.
 4. Selecciona el canal y cambia su generador a **Ruido rosa** o **Tono seno**
-   desde el inspector izquierdo. Ajusta nivel y frecuencia allí.
-5. Para probar otra mezcla, pulsa **MON 1** y sube el envío de Entrada 1.
-   En **Escucha PC**, selecciona Monitor 1. Repite con los demás monitores.
+   desde el inspector derecho. Ajusta nivel y frecuencia allí.
+5. Para probar otra mezcla, selecciona **Fader Flip → Aux 1** y sube el envío de Entrada 1.
+   En **Control Room → Input**, selecciona Monitor 1. Repite con los demás monitores.
 
-AUDIO PC reproduce **un bus estéreo elegido** a la vez. Cambiar Escucha PC
+AUDIO PC reproduce **un bus estéreo elegido** a la vez. Cambiar Control Room → Input
 no modifica el master, sus envíos ni las asignaciones ASIO guardadas. No
 captura el micrófono del PC en esta versión; se prueban los generadores y VST3.
 Para elegir otros parlantes/audífonos, cambia la salida predeterminada de
@@ -36,9 +36,18 @@ proceso ni el audio.
 
 - Tiras de canal y salida con faders de recorrido graduado, nombres editables,
   panorama, mute y cuatro inserts VST3 visibles.
-- Inspector con generador y envíos pre/post del canal seleccionado.
-- **MAIN** controla los faders principales; **MON 1–4** convierte los faders
-  de entrada en controles de envío hacia el monitor seleccionado.
+- Inspector a la derecha con generador y envíos pre/post del canal seleccionado.
+- **Fader Flip → Main Level** controla los faders principales; **Aux 1–4**
+  convierte los faders de entrada en controles de envío al monitor elegido.
+  Los pequeños botones A1–A4 del canal seleccionan la misma capa.
+- Módulos alineados por filas: entrada, efectos, auxiliares, pan, destino, nombre,
+  mute/generador, nivel y fader. Verde para entradas, azul para aux y rojo para master.
+- **Consola completa / Consola reducida** muestra u oculta efectos, envíos y pan
+  para dar más recorrido visible al fader; no cambia el procesamiento de audio.
+- **Medidores** oculta/muestra el puente superior; **Inspector** oculta/muestra
+  el panel derecho. Allí, **Control Room → Input** elige el bus para AUDIO PC
+  y muestra el medidor de ese bus, aunque otro modo esté procesando audio.
+  El texto indica si el PC reproduce o si se está usando DEMO/ASIO.
 - Medidores estéreo **post-fader** por canal y salida, más puente de medidores.
   Muestran Peak/RMS en dBFS, con integración de potencia RMS de 300 ms en el motor, retención
   de picos y señal de clipping enclavada. No son VU analógicos calibrados.
@@ -177,3 +186,9 @@ Prueba de lógica sin hardware desde PowerShell:
 ```powershell
 .\MonitorMix.exe --self-test
 ```
+
+## OSC y superficies Mackie
+
+Se dejó anotada la dirección futura: mezclador independiente o controlador MIDI
+Mackie Control/HUI, además de OSC. No están implementados en 0.4. El mapa para
+CueMix/MOTU necesita comprobar documentación y mensajes con el equipo.

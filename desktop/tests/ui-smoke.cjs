@@ -51,6 +51,42 @@ const path = require("node:path");
     assert.equal(await page.locator("#buses .strip").count(), 5);
     assert.equal(await page.locator("#mixer .insert-row").count(), 32);
     assert.equal(await page.locator("#buses .insert-row").count(), 20);
+    const assertConsoleAlignment = async () => {
+      assert(
+        await page.evaluate(() => {
+          const rect = (s) => document.querySelector(s).getBoundingClientRect();
+          const channel = rect("#mixer .strip"),
+            bus = rect("#buses .strip");
+          const bridge = rect(".meter-bridge"),
+            cm = rect("#meterbridge .bridge-cell"),
+            bm = rect("#outputbridge .bridge-cell");
+          return (
+            Math.abs(channel.x - cm.x) < 2 &&
+            Math.abs(bus.x - bm.x) < 2 &&
+            cm.top >= bridge.top &&
+            cm.bottom <= bridge.bottom &&
+            bm.bottom <= bridge.bottom &&
+            Math.abs(
+              rect("#mixer .fader-section").top -
+                rect("#buses .fader-section").top,
+            ) < 1
+          );
+        }),
+        "channel and bus modules must align with their overview meters",
+      );
+    };
+    await assertConsoleAlignment();
+    await page.selectOption("#mixer-layout", "small");
+    assert(!(await page.locator("#mixer .insert-rack").first().isVisible()));
+    await assertConsoleAlignment();
+    await page.selectOption("#mixer-layout", "full");
+    await page.click("#toggle-meters");
+    assert(!(await page.locator(".meter-bridge").isVisible()));
+    await page.click("#toggle-meters");
+    await page.click("#toggle-inspector");
+    assert(!(await page.locator(".sidebar").isVisible()));
+    await page.click("#toggle-inspector");
+    await assertConsoleAlignment();
     // Printed detents, physical pointer position and exact numeric entry must agree.
     for (const viewport of [
       { width: 1640, height: 980 },
@@ -146,9 +182,7 @@ const path = require("node:path");
         s.meters_stereo[0][0] > 0
       );
     });
-    await page
-      .getByRole("button", { name: "Faders de Monitor 1", exact: true })
-      .click();
+    await page.selectOption("#fader-flip", "0");
     await page
       .locator("#mixer .fader input")
       .first()
@@ -269,10 +303,12 @@ const path = require("node:path");
       data: {},
     });
     assert.equal(unauthorised.status(), 403);
+    await page.selectOption("#fader-flip", "-1");
+    await page.setViewportSize({ width: 1280, height: 800 });
     await page.screenshot({
       path:
         process.env.MONITOR_SCREENSHOT ||
-        "/workspace/scratch/monitor-mix-0.3.png",
+        "/workspace/scratch/monitor-mix-0.4.png",
       fullPage: true,
     });
     for (const viewport of [
@@ -295,6 +331,7 @@ const path = require("node:path");
         "all channel faders and their readouts must fit above the status bar",
       );
       assert(await page.locator("#panic").isVisible());
+      await assertConsoleAlignment();
     }
     await page.click("#stop");
     await page.waitForFunction(() =>
@@ -323,7 +360,7 @@ const path = require("node:path");
     });
     assert.deepEqual(errors, []);
     console.log(
-      "PASS: exact printed and numeric faders, installed VST3 discovery, compact DAW strips, 52 insert slots, independent generators, stereo meters, monitor sends, live VST3 bypass, PC audition selection, emergency silence, legacy scenes, export and responsive layout",
+      "PASS: aligned console modules and meter bridge, full/small layouts, panel toggles, exact printed and numeric faders, installed VST3 discovery, compact DAW strips, 52 insert slots, independent generators, stereo meters, monitor sends, live VST3 bypass, PC audition selection, emergency silence, legacy scenes, export and responsive layout",
     );
   } finally {
     if (browser) await browser.close();
