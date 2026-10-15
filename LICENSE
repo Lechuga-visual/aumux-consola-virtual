@@ -1,3 +1,14 @@
+Monitor Mix licensing
+
+The combined desktop application (from version 0.5) is distributed under
+GPL-3.0-only; see desktop/COPYING.GPL-3.0. This includes the FreeEQ8 and
+FreeVox8 DSP integrations. Third-party components retain their respective
+licenses; see desktop/THIRD_PARTY.md and desktop/vendor/.
+
+Original Monitor Mix code and the earlier portable C++ engine remain
+available under the following MIT license, except files with a different
+SPDX identifier or third-party license.
+
 MIT License
 
 Copyright (c) 2026 Monitor Mix contributors

@@ -1,12 +1,12 @@
-# Monitor Mix 0.4 · prueba local en Windows x64
+# Monitor Mix 0.5 · prueba local en Windows x64
 
-Miniapp de mezcla con ocho canales, cuatro monitores y master. Reutiliza DSP
+Miniapp de mezcla con canales y auxiliares configurables y master estéreo, a 48 kHz. Reutiliza DSP
 y host VST3 de SoundCraft de Artcraft, con una superficie y un ruteo propios.
 Es un prototipo para pruebas; todavía no está validado para una sesión en vivo.
 
 ## Probar sonido sin ASIO ni interfaz externa
 
-1. Extrae **todo** `MonitorMix-0.4.0-Windows-x64.zip` y ejecuta `MonitorMix.exe`.
+1. Extrae **todo** `MonitorMix-0.5.0-Windows-x64.zip` y ejecuta `MonitorMix.exe`.
    Cierra la versión anterior antes de abrir esta.
 2. Pulsa **AUDIO PC**. Usa los parlantes/audífonos predeterminados de Windows
    mediante WASAPI, sin controlador ASIO ni dispositivo MOTU.
@@ -27,19 +27,21 @@ El modo **DEMO** procesa las mismas rutas pero no reproduce por el PC ni abre
 hardware. También empieza en silencio: activa el generador de los canales
 que quieras probar. Puede enviar su master al receptor OBS.
 
-**SILENCIO TOTAL** corta todos los buses y la escucha. Para reanudar, detén y
-vuelve a iniciar el motor. **DETENER** libera el dispositivo. Cerrar la consola
+**SILENCIO TOTAL** corta todos los buses y la escucha. El mismo botón cambia
+a **REACTIVAR AUDIO**: púlsalo para recuperar el sonido sin detener el motor,
+con una entrada gradual de un bloque. **DETENER** libera el dispositivo. Cerrar la consola
 de Monitor Mix termina la app; cerrar solo su ventana gráfica no detiene el
 proceso ni el audio.
 
 ## La consola
 
 - Tiras de canal y salida con faders de recorrido graduado, nombres editables,
-  panorama, mute y cuatro inserts VST3 visibles.
+  panorama, mute, EQ nativo y cuatro inserts nativos/VST3 visibles.
 - Inspector a la derecha con generador y envíos pre/post del canal seleccionado.
-- **Fader Flip → Main Level** controla los faders principales; **Aux 1–4**
+- **Fader Flip → Main Level** controla los faders principales; **Aux 1…N**
   convierte los faders de entrada en controles de envío al monitor elegido.
-  Los pequeños botones A1–A4 del canal seleccionan la misma capa.
+  Pulsa **MAIN** para volver a la mezcla principal. Con muchos auxiliares, el
+  selector de envío sustituye los botones A1–A4.
 - Módulos alineados por filas: entrada, efectos, auxiliares, pan, destino, nombre,
   mute/generador, nivel y fader. Verde para entradas, azul para aux y rojo para master.
 - **Consola completa / Consola reducida** muestra u oculta efectos, envíos y pan
@@ -52,7 +54,7 @@ proceso ni el audio.
   Muestran Peak/RMS en dBFS, con integración de potencia RMS de 300 ms en el motor, retención
   de picos y señal de clipping enclavada. No son VU analógicos calibrados.
 - Clic sobre un medidor o **Restablecer picos** borra su retención visual.
-- Doble clic en un fader lo devuelve a 0 dB. Las marcas se alinean con el centro
+- Doble clic en pan lo centra. Doble clic en un fader lo devuelve a 0 dB. Las marcas se alinean con el centro
   de la perilla; puedes pulsar una marca o escribir el nivel bajo el fader
   (por ejemplo, −6 o −5.3) y pulsar Enter. La edición numérica conserva décimas.
 - La escala de medidores es independiente de la escala del fader: −60 a 0 dBFS.
@@ -66,6 +68,29 @@ con el fader principal abajo: compruébalo en el medidor del monitor.
 Los generadores son independientes por canal y **sustituyen** la entrada de
 ese canal antes de sus inserts, también en ASIO. **Entrada física** desactiva
 el generador. No se inyecta ruido automáticamente en canales no activados.
+
+## Estructura y EQ en vivo
+
+**Canales / Aux** permite elegir 1–64 canales y 0–32 auxiliares, incluso con
+AUDIO PC, DEMO o ASIO activo. Se conservan las primeras tiras; reducir retira
+las últimas y sus inserts/envíos. Guarda una escena antes de quitarlas si las
+necesitarás después. Las tiras nuevas empiezan sin generador ni envíos.
+
+El botón **M / ST** de cada tira cambia mono/estéreo en vivo. El inspector
+permite asignar entrada física L/mono y R; no depende del número de tiras.
+Puedes reutilizar entradas o elegir ninguna. Un canal mono usa L y una salida
+aux mono mezcla ambos lados en una única señal, reproducida al centro en PC.
+El master permanece estéreo. Al ampliar un bus a estéreo, se valida que el
+segundo conector no pise otra salida. En ASIO se abren todas las salidas
+anunciadas por el driver (hasta 64) al arrancar, para permitir estos cambios.
+Cambiar el dispositivo, buffer o entradas físicas abiertas requiere detener.
+
+Pulsa el módulo **EQ** para abrir ocho bandas FreeEQ8: campana, low/high
+shelf, pasa altos/bajos y pasa banda, ±18 dB y Q 0.1–18. En shelves, Q controla
+pendiente y satura en Q=2; ganancia se ignora en filtros de corte/pasa banda.
+Está antes de los inserts, también en aux/master. Curva, tipos, ajustes y
+bypass se guardan en la escena y funcionan en vivo. Se integra su núcleo de
+fase mínima; no el analizador, fase lineal ni todas las funciones del plugin.
 
 ## Ventana de aplicación
 
@@ -84,10 +109,10 @@ completa amplía la superficie. El escritorio está pensado para pantallas de
 1. Instala el controlador oficial, conecta la interfaz y cierra otras apps
    que estén usando su ASIO.
 2. Abre **MOTOR DE AUDIO**, pulsa **Actualizar dispositivos** y elige la MOTU.
-3. Selecciona 1–8 entradas, frecuencia y buffer; por ejemplo 48 kHz / 256
+3. Selecciona las entradas físicas que abrirá el driver (hasta 64) y buffer; por ejemplo 48 kHz / 256
    muestras si el controlador lo admite.
 4. Desactiva los generadores de los canales que deban recibir audio físico.
-5. Asigna pares de salida distintos a cada bus. La numeración comienza en 1
+5. Asigna una salida por bus mono o dos contiguas por bus estéreo, sin solaparlas. La numeración comienza en 1
    y corresponde al orden del controlador; confirma sus conectores reales.
 6. Cierra el panel de motor y pulsa **ASIO**. Comprueba cada mezcla por separado.
 
@@ -100,10 +125,18 @@ corta todos los envíos del canal. El mute del master no silencia auxiliares.
 
 ## VST3 y escenas
 
-Con el audio detenido, pulsa **＋ VST3**. Aparece una lista de bundles instalados,
+Con el audio detenido, pulsa un insert vacío **＋ FX**. Aparece una lista de bundles instalados,
 con búsqueda por nombre/ruta. Selecciona uno: se leen sus efectos y parámetros;
 selecciona la clase si contiene varias, ajusta parámetros y aplica el insert.
 Se muestra su nombre real en la tira.
+
+La primera lista del panel ofrece **FreeVox8 (filterbank)** y los **20 efectos
+MDA** integrados. No necesitas instalar sus VST3. Comparten los cuatro slots
+con VST3 externos y se procesan en serie; el EQ no consume slots. El panel
+ofrece parámetros numéricos genéricos. FreeVox8 es un vocoder creativo con
+portadora interna y cuatro modos; no es un compresor vocal. No se exponen
+su motor espectral, sidechain externo o entrada MIDI. Piano, EPiano, DX10 y
+JX10 de MDA son instrumentos MIDI y quedan pendientes.
 
 La lista busca recursivamente en `%COMMONPROGRAMFILES%\VST3` (normalmente
 `C:\Program Files\Common Files\VST3`) y `%LOCALAPPDATA%\Programs\Common\VST3`.
@@ -164,7 +197,7 @@ La copia 0.2 en `%APPDATA%` no se utiliza en Windows normal; puedes eliminar
 
 ## Validación y diagnóstico
 
-En este entorno se comprobaron once pruebas del motor, incluidas medición
+En este entorno se comprobaron diecisiete pruebas del motor, incluidas medición
 Peak/RMS de un seno conocido, ruido independiente y su espectro, selección de
 bus para escucha PC, migración de escenas y cadenas/bypass con un VST3 binario
 real de prueba. También se probaron la interfaz en Chromium y el puente desde
@@ -190,5 +223,16 @@ Prueba de lógica sin hardware desde PowerShell:
 ## OSC y superficies Mackie
 
 Se dejó anotada la dirección futura: mezclador independiente o controlador MIDI
-Mackie Control/HUI, además de OSC. No están implementados en 0.4. El mapa para
+Mackie Control/HUI, además de OSC. No están implementados en 0.5. El mapa para
 CueMix/MOTU necesita comprobar documentación y mensajes con el equipo.
+
+Las pruebas de C++ nativo comprueban los 21 inserts y el EQ con ASan/UBSan,
+valores límite y bloques de 1–8192 muestras, y verifican que el procesamiento
+no asigna ni libera memoria C++. La prueba del callback Rust comprueba crecer
+hasta 64/32 y reducir sin reiniciar ni asignar/liberar memoria Rust. Esto no
+certifica latencia ni carga admisible con plugins reales: depende del PC y del
+buffer. La conexión ASIO usa ahora una ABI abierta basada en WineASIO, sin SDK
+propietario; compilada para Windows x64, pendiente de prueba con tu driver.
+
+La aplicación 0.5 combinada es GPL-3.0-only; fuentes y licencias incluidas.
+Grabación multipista, OSC/Mackie y funciones de instrumentos MIDI pendientes.

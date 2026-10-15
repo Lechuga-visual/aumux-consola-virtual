@@ -13,7 +13,7 @@
         <div class="brand">
           <span class="brand-icon"><i></i><i></i><i></i><i></i></span
           ><strong>MONITOR<span>MIX</span></strong
-          ><span class="version">0.4</span>
+          ><span class="version">0.5</span>
         </div>
         <div class="scene-title">
           CONSOLA DE MONITOREO <span>•</span>
@@ -26,6 +26,7 @@
             <option value="full">Consola completa</option>
             <option value="small">Consola reducida</option>
           </select>
+          <button id="counts">Canales / Aux</button>
           <button id="load" title="Cargar escena JSON">Abrir escena</button
           ><button id="save">Guardar escena</button
           ><button id="fullscreen" title="Pantalla completa">⛶</button
@@ -77,7 +78,7 @@
             <div class="label-heading">CANAL</div>
             <div class="label-rows">
               <span></span><span>Entrada</span><span>Efectos</span
-              ><span>Aux</span><span>Pan</span><span>Main</span
+              ><span>EQ</span><span>Aux</span><span>Pan</span><span>Main</span
               ><span>Nombre</span><span>Mute / Gen</span><span>dB</span
               ><span>Nivel</span><span>Peak</span><span></span>
             </div>
@@ -87,7 +88,7 @@
             <div class="bank-heading">
               <strong>ENTRADAS <span>01—08</span></strong>
               <label class="fader-flip"
-                >Fader Flip
+                >Fader Flip <button id="main-layer" type="button">MAIN</button>
                 <select id="fader-flip" aria-label="Fader Flip">
                   <option value="-1">Main Level</option>
                   <option value="0">Aux 1</option>
@@ -160,13 +161,14 @@
       >
       <div class="form-row">
         <label
-          >Entradas<input id="inputs" type="number" min="1" max="8" /></label
+          >Entradas ASIO abiertas<input
+            id="inputs"
+            type="number"
+            min="0"
+            max="64" /></label
         ><label
           >Frecuencia<select id="rate">
-            <option>44100</option>
             <option>48000</option>
-            <option>88200</option>
-            <option>96000</option>
           </select></label
         ><label
           >Buffer<select id="buffer">
@@ -188,14 +190,91 @@
       </p>
       <button class="accent-button" data-close="audio-settings">Listo</button>
     </dialog>
+    <dialog id="counts-dialog">
+      <div class="dialog-heading">
+        <h2>Canales y auxiliares</h2>
+        <button data-close="counts-dialog">✕</button>
+      </div>
+      <p class="hint">
+        Puedes agregar o retirar tiras con el motor activo. Se conservan los
+        canales y buses existentes; los nuevos empiezan sin generador ni envíos
+        activos.
+      </p>
+      <div class="form-row">
+        <label
+          >Canales<input
+            id="channel-count"
+            type="number"
+            min="1"
+            max="64" /></label
+        ><label
+          >Auxiliares<input id="aux-count" type="number" min="0" max="32"
+        /></label>
+      </div>
+      <div class="form-row">
+        <label
+          >Nuevos canales<select id="new-channel-format">
+            <option value="mono">Mono</option>
+            <option value="stereo">Estéreo</option>
+          </select></label
+        ><label
+          >Nuevos auxiliares<select id="new-aux-format">
+            <option value="mono">Mono</option>
+            <option value="stereo">Estéreo</option>
+          </select></label
+        >
+      </div>
+      <p class="hint">
+        Reducir cantidades retira las últimas tiras, sus inserts y sus envíos.
+        Guarda una escena si quieres recuperarlas. La cantidad de tiras es
+        independiente de las entradas físicas abiertas en el motor.
+      </p>
+      <div class="dialog-footer">
+        <span id="counts-error" class="error"></span
+        ><button id="apply-counts" class="accent-button">
+          Aplicar estructura
+        </button>
+      </div>
+    </dialog>
+    <dialog id="eq-dialog">
+      <div class="dialog-heading">
+        <h2 id="eq-title">EQ paramétrico</h2>
+        <button data-close="eq-dialog">✕</button>
+      </div>
+      <div id="eq-graph"></div>
+      <div class="eq-axis">
+        <span>20 Hz</span><span>100 Hz</span><span>1 kHz</span
+        ><span>10 kHz</span><span>20 kHz</span>
+      </div>
+      <label class="eq-bypass-label"
+        ><input id="eq-bypass" type="checkbox" /> Bypass del EQ</label
+      >
+      <div id="eq-bands"></div>
+      <p class="hint">
+        FreeEQ8: núcleo de ocho bandas, fase mínima. Campana, shelves y filtros
+        de corte · ±18 dB · Q 0.1–18 (en shelves, pendiente máxima desde Q=2).
+        EQ antes de los inserts. Los ajustes se aplican en vivo y se guardan en
+        la escena.
+      </p>
+    </dialog>
     <dialog id="fx">
       <div class="dialog-heading">
         <div>
-          <span class="eyebrow" id="fx-location">INSERT VST3</span>
-          <h2 id="fx-title">Insert VST3</h2>
+          <span class="eyebrow" id="fx-location">INSERT FX</span>
+          <h2 id="fx-title">Insert FX</h2>
         </div>
         <button id="closefx">✕</button>
       </div>
+      <label
+        >Efectos nativos<select id="builtin-fx">
+          <option value="">Seleccionar efecto nativo…</option>
+        </select></label
+      >
+      <p class="hint">
+        20 efectos MDA y FreeVox8 (vocoder). También puedes cargar tus VST3
+        abajo. Cargar o editar inserts requiere detener el motor; el bypass
+        funciona en vivo.
+      </p>
       <div class="vst-browser">
         <div class="form-row">
           <input
@@ -235,7 +314,7 @@
           placeholder="C:\Program Files\Common Files\VST3\Efecto.vst3"
       /></label>
       <div class="form-row">
-        <button id="inspect">Leer VST3</button
+        <button id="inspect">Leer efecto</button
         ><select id="classes" aria-label="Efecto del bundle"></select>
       </div>
       <div id="params"></div>
@@ -272,7 +351,7 @@
         </li>
         <li>
           El selector <b>Control Room → Input</b> elige qué bus se oye: master o
-          uno de los cuatro monitores.
+          cualquiera de tus auxiliares.
         </li>
         <li>
           Los generadores sustituyen la entrada de ese canal antes de los
@@ -287,10 +366,10 @@
         calibrado.
       </p>
       <p>
-        Hasta cuatro VST3 por canal y salida. Las escenas 0.1 siguen siendo
-        compatibles. Se guardan parámetros numéricos, no el estado binario de
-        presets. Todavía no hay compensación de latencia ni editor gráfico
-        nativo VST3.
+        Hasta cuatro efectos nativos o VST3 por canal y salida. Las escenas 0.1
+        siguen siendo compatibles. Se guardan parámetros numéricos, no el estado
+        binario de presets. Todavía no hay compensación de latencia ni editor
+        gráfico nativo VST3.
       </p>
       <p class="hint">
         Cerrar la ventana de la consola no detiene el audio. Usa DETENER o

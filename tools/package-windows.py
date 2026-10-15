@@ -14,7 +14,7 @@ stage.mkdir(parents=True, exist_ok=True)
 (stage / "obs-plugin").mkdir(exist_ok=True)
 shutil.copy2(root / "desktop/target/x86_64-pc-windows-gnu/release/monitor-mix.exe", stage / "MonitorMix.exe")
 shutil.copy2("/workspace/scratch/obs-build/monitor-mix-receiver.dll", stage / "obs-plugin/monitor-mix-receiver.dll")
-for name in ["Instalar-receptor-OBS.cmd", "Instalar-receptor-OBS.ps1", "Diagnosticar-OBS.cmd", "Diagnosticar-OBS.ps1", "THIRD_PARTY.md"]:
+for name in ["Instalar-receptor-OBS.cmd", "Instalar-receptor-OBS.ps1", "Diagnosticar-OBS.cmd", "Diagnosticar-OBS.ps1", "THIRD_PARTY.md", "COPYING.GPL-3.0"]:
     shutil.copy2(root / "desktop" / name, stage / name)
 shutil.copy2(root / "docs/probar-en-windows.md", stage / "LEEME.md")
 shutil.copy2(root / "docs/puente-obs.md", stage / "puente-obs.md")
@@ -29,6 +29,15 @@ shutil.copy2(root / "docs/probar-en-windows.md", source / "docs/probar-en-window
 shutil.copy2(root / "docs/puente-obs.md", source / "docs/puente-obs.md")
 shutil.copy2(root / "LICENSE", source / "LICENSE")
 
+# Include all linked Rust dependency sources, not just manifests/network references.
+import os
+import subprocess
+vendor=root.parent / 'scratch/monitor-rust-vendor'
+env={**os.environ, 'CARGO_HOME':'/workspace/.cargo','RUSTUP_HOME':'/workspace/.rustup'}
+config=subprocess.check_output(['/workspace/.cargo/bin/cargo','vendor','--locked','--manifest-path',str(root/'desktop/Cargo.toml'),str(vendor)],env=env,text=True)
+shutil.copytree(vendor, source/'vendor-rust', dirs_exist_ok=True)
+(source/'.cargo').mkdir(exist_ok=True)
+(source/'.cargo/config.toml').write_text(config.replace(str(vendor),'vendor-rust'))
 metadata = json.loads(Path("/workspace/scratch/monitor-cargo-metadata.json").read_text())
 licenses = stage / "licenses"
 for package in metadata["packages"]:
@@ -47,6 +56,12 @@ for package in metadata["packages"]:
         p = Path(package["manifest_path"]).parent / package["license_file"]
         if p.is_file():
             shutil.copy2(p, target / p.name)
+for component, folder in [("FreeEQ8", "desktop/vendor/freeeq8"), ("FreeVox8", "desktop/vendor/freevox8"), ("MDA", "desktop/vendor/mda"), ("ASIO-ABI", "desktop/native/asio_abi"), ("RtAudio", "desktop/vendor/rtaudio")]:
+    target=licenses / component
+    target.mkdir(parents=True, exist_ok=True)
+    for name in ["LICENSE", "LICENSE.txt", "COPYING.LIB", "ORIGIN.md"]:
+        p=root / folder / name
+        if p.is_file(): shutil.copy2(p,target/name)
 (licenses / "OBS").mkdir(parents=True, exist_ok=True)
 shutil.copy2("/workspace/.audio-obs-deps/obs-studio/COPYING", licenses / "OBS/GPL-2.0.txt")
 runtime_license=Path('/workspace/.audio-obs-sysroot/usr/share/doc/gcc-mingw-w64-base/copyright')

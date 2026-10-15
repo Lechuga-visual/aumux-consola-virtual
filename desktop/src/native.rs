@@ -1,4 +1,4 @@
-use crate::{bridge::Bridge, config::*, mixer::Mixer};
+use crate::{bridge::Bridge, config::*, graph::Exchange, mixer::Mixer};
 use serde::Serialize;
 use std::{
     ffi::{CStr, c_char, c_void},
@@ -50,16 +50,20 @@ unsafe extern "C" {
 struct State {
     mixer: Mixer,
     inputs: usize,
+    input_stride: usize,
     outputs: usize,
     rate: u32,
     scratch: Vec<f32>,
     bridge: Arc<Bridge>,
     system: bool,
+    exchange: Arc<Exchange>,
 }
 pub struct Audio {
     handle: NonNull<c_void>,
     state: Option<Box<State>>,
     pub frames: u32,
+    pub outputs: usize,
+    exchange: Arc<Exchange>,
 }
 impl Audio {
     pub fn new(system: bool) -> Result<Self, String> {
@@ -69,6 +73,8 @@ impl Audio {
             handle,
             state: None,
             frames: 0,
+            outputs: 0,
+            exchange: Arc::new(Exchange::new()),
         })
     }
     fn error(&self) -> String {
@@ -106,6 +112,14 @@ impl Audio {
         // RtAudio stops and joins callbacks before we drop their state on this control thread.
         unsafe { mm_close(self.handle.as_ptr()) };
         self.state = None;
+        self.exchange.clear(); // All retired graphs are freed on the control thread.
+    }
+    pub fn replace_mixer(&mut self, mixer: Mixer) -> Result<(), String> {
+        if let Err(error) = self.exchange.replace(Box::new(mixer)) {
+            self.stop();
+            return Err(error);
+        }
+        Ok(())
     }
     pub fn start(
         &mut self,
@@ -120,12 +134,28 @@ impl Audio {
         } else {
             c.device.ok_or("Choose an ASIO device")?
         };
+        let outputs = if system {
+            2
+        } else {
+            let device = self
+                .devices()?
+                .into_iter()
+                .find(|d| d.id == id)
+                .ok_or("ASIO device disappeared")?;
+            (device.outputs as usize).min(MAX_IO)
+        };
+        if !system && c.output_channels() > outputs {
+            return Err("Las salidas asignadas exceden las disponibles en este dispositivo".into());
+        }
+        self.outputs = outputs;
         let mut state = Box::new(State {
             mixer,
             inputs: if system { 0 } else { c.inputs as usize },
-            outputs: if system { 2 } else { c.output_channels() },
+            outputs,
+            input_stride: c.inputs as usize,
+            exchange: self.exchange.clone(),
             rate: c.sample_rate,
-            scratch: vec![0.0; MAX_FRAMES * CHANNELS],
+            scratch: vec![0.0; MAX_FRAMES * c.inputs as usize],
             bridge,
             system,
         });
@@ -146,7 +176,7 @@ impl Audio {
                     self.handle.as_ptr(),
                     id,
                     c.inputs,
-                    c.output_channels() as u32,
+                    outputs as u32,
                     c.sample_rate,
                     &mut frames,
                     callback,
@@ -201,15 +231,12 @@ unsafe extern "C" fn callback(
     if status != 0 {
         s.mixer.controls.xruns.fetch_add(1, Relaxed);
     }
-    s.scratch[..frames * CHANNELS].fill(0.0);
-    if !input.is_null() {
+    s.scratch[..frames * s.input_stride].fill(0.0);
+    if !input.is_null() && s.inputs > 0 {
         let input = unsafe { std::slice::from_raw_parts(input, frames * s.inputs) };
-        for f in 0..frames {
-            for c in 0..s.inputs {
-                s.scratch[f * CHANNELS + c] = input[f * s.inputs + c];
-            }
-        }
+        s.scratch[..input.len()].copy_from_slice(input);
     }
+    let replacement = s.exchange.begin(&s.mixer);
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         if !s.mixer.process(&s.scratch, output, frames, s.outputs) {
             return false;
@@ -223,10 +250,92 @@ unsafe extern "C" fn callback(
         s.bridge.push(&s.mixer.buses[0], frames, s.rate);
         true
     }));
+    if let Some(next) = replacement {
+        s.exchange
+            .finish(&mut s.mixer, next, matches!(result, Ok(true)));
+    }
     if !matches!(result, Ok(true)) {
         output.fill(0.0);
         s.mixer.controls.failed.store(true, Relaxed);
         return 2;
     }
     0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::AtomicBool;
+    #[test]
+    fn actual_callback_adopts_larger_and_smaller_graphs_without_heap_work_or_stream_restart() {
+        let mut c = Config::default();
+        c.inputs = 2;
+        for ch in &mut c.channels {
+            ch.input = None;
+            ch.input_right = None;
+        }
+        c.channels[0].generator.signal = Signal::Sine;
+        let controls = crate::mixer::Controls::new(&c);
+        let mixer = Mixer::new(&c, controls).unwrap();
+        let exchange = Arc::new(Exchange::new());
+        let mut state = Box::new(State {
+            mixer,
+            inputs: 2,
+            input_stride: 2,
+            outputs: 2,
+            rate: 48000,
+            scratch: vec![0.0; 128],
+            bridge: Bridge::start().unwrap(),
+            system: true,
+            exchange: exchange.clone(),
+        });
+        let done = Arc::new(AtomicBool::new(false));
+        let stop = done.clone();
+        let audio = std::thread::spawn(move || {
+            let mut output = vec![0.0; 128];
+            let input = vec![0.0; 128];
+            let mut blocks = 0;
+            while !stop.load(Relaxed) {
+                let result = crate::test_support::no_heap(|| unsafe {
+                    callback(
+                        output.as_mut_ptr(),
+                        input.as_ptr(),
+                        64,
+                        0,
+                        (&mut *state as *mut State).cast(),
+                    )
+                });
+                assert_eq!(result, 0);
+                assert!(output.iter().all(|v| v.is_finite()));
+                blocks += 1;
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+            (state, blocks)
+        });
+        let mut latencies = vec![0; c.channels.len() + c.buses.len()];
+        for (channels, auxes) in [(16, 9), (MAX_CHANNELS, MAX_AUXES), (1, 0), (8, 4)] {
+            let mut next = c.clone();
+            next.channels.resize(channels, c.channels[0].clone());
+            next.buses.resize(auxes + 1, c.buses[0].clone());
+            for b in next.buses.iter_mut().skip(1) {
+                b.format = Format::Mono;
+                b.output = None;
+            }
+            for ch in &mut next.channels {
+                ch.sends_db.resize(auxes, -90.0);
+                ch.pre.resize(auxes, true);
+            }
+            let mixer =
+                Mixer::reconfigure(&next, crate::mixer::Controls::new(&next), &c, &latencies)
+                    .unwrap();
+            latencies = mixer.latencies.clone();
+            exchange.replace(Box::new(mixer)).unwrap();
+            c = next;
+        }
+        done.store(true, Relaxed);
+        let (state, blocks) = audio.join().unwrap();
+        assert!(blocks >= 4);
+        assert_eq!(state.mixer.controls.channel_meters.len(), 8);
+        assert_eq!(state.mixer.buses.len(), 5);
+    }
 }

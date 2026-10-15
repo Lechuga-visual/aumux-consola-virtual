@@ -1,9 +1,14 @@
 mod bridge;
 mod config;
+mod eq;
 mod fx;
 mod generator;
+mod graph;
 mod mixer;
 mod native;
+mod native_fx;
+#[cfg(test)]
+mod test_support;
 
 use config::*;
 use mixer::{Controls, Mixer};
@@ -24,7 +29,7 @@ struct App {
     bridge: Arc<bridge::Bridge>,
     demo: Option<Mixer>,
     live: bool,
-    latencies: [usize; CHANNELS + BUSES],
+    latencies: Vec<usize>,
     input: Vec<f32>,
     output: Vec<f32>,
     next: Instant,
@@ -42,8 +47,8 @@ impl App {
             bridge: bridge::Bridge::start()?,
             demo: None,
             live: false,
-            latencies: [0; CHANNELS + BUSES],
-            input: vec![0.0; 256 * CHANNELS],
+            latencies: vec![0; DEFAULT_CHANNELS + DEFAULT_AUXES + 1],
+            input: vec![0.0; 256 * DEFAULT_CHANNELS],
             output: vec![0.0; 256 * 64],
             next: Instant::now(),
         })
@@ -112,7 +117,7 @@ impl App {
         self.controls.xruns.store(0, Relaxed);
         self.controls.clipped.store(0, Relaxed);
         let mixer = Mixer::new(&self.config, self.controls.clone())?;
-        self.latencies = mixer.latencies;
+        self.latencies = mixer.latencies.clone();
         if mode == "demo" {
             self.demo = Some(mixer);
             self.next = Instant::now();
@@ -161,10 +166,55 @@ impl App {
                 let mut c: Config = serde_json::from_str(body).map_err(|e| e.to_string())?;
                 c.normalise();
                 c.validate()?;
-                if (self.live || self.demo.is_some()) && !self.config.same_graph(&c) {
-                    return Err("Stop audio before changing device, routing, sample rate, buffer or effects".into());
+                let active = self.live || self.demo.is_some();
+                if active && !self.config.same_device(&c) {
+                    return Err("Detén el motor para cambiar dispositivo, entradas ASIO abiertas, frecuencia o buffer".into());
                 }
-                self.controls.update(&c);
+                if self.live && !self.system_live && c.output_channels() > self.audio.outputs {
+                    return Err("La ruta mono/estéreo excede las salidas ASIO abiertas".into());
+                }
+                if active && !self.config.same_graph(&c) {
+                    let controls = Controls::new(&c);
+                    let mut next =
+                        Mixer::reconfigure(&c, controls.clone(), &self.config, &self.latencies)?;
+                    let latencies = next.latencies.clone();
+                    if let Some(old) = &mut self.demo {
+                        old.fade_removed(&next);
+                        self.input.fill(0.0);
+                        old.process(&self.input, &mut self.output, 256, MAX_IO);
+                        self.bridge
+                            .push(&old.buses[0], 256, self.config.sample_rate);
+                        self.next +=
+                            Duration::from_secs_f64(256.0 / self.config.sample_rate as f64);
+                        next.inherit(old);
+                        self.demo = Some(next); // retired graph destruction on this control thread
+                    } else {
+                        let audio = if self.system_live {
+                            self.system_audio
+                                .as_mut()
+                                .ok_or("System audio unavailable")?
+                        } else {
+                            &mut self.audio
+                        };
+                        if let Err(error) = audio.replace_mixer(next) {
+                            self.stop();
+                            return Err(error);
+                        }
+                    }
+                    self.controls = controls;
+                    self.latencies = latencies;
+                } else if self.config.channels.len() != c.channels.len()
+                    || self.config.buses.len() != c.buses.len()
+                {
+                    self.controls = Controls::new(&c);
+                    self.latencies = vec![0; c.channels.len() + c.buses.len()];
+                } else {
+                    // Atomic input/format/level/EQ updates are read at block boundaries.
+                    self.controls.update(&c);
+                }
+                if !active {
+                    self.input.resize(256 * c.inputs as usize, 0.0);
+                }
                 self.bridge.enabled.store(c.obs_bridge, Relaxed);
                 self.config = c;
                 Ok(json!({"ok":true}))
@@ -179,6 +229,16 @@ impl App {
             }
             "/api/panic" => {
                 self.controls.emergency.store(true, Relaxed);
+                Ok(self.status())
+            }
+            "/api/resume" => {
+                if self.controls.failed.load(Relaxed) {
+                    return Err("El motor tiene un error de audio; detén y vuelve a iniciar para recuperarlo".into());
+                }
+                self.controls.resume_fade.store(true, Relaxed);
+                self.controls
+                    .emergency
+                    .store(false, std::sync::atomic::Ordering::Release);
                 Ok(self.status())
             }
             "/api/devices" => {
@@ -203,6 +263,11 @@ impl App {
                 let path = v["path"].as_str().ok_or("Missing VST3 path")?;
                 if path.len() > 4096 {
                     return Err("Path too long".into());
+                }
+                if let Some(id) = path.strip_prefix("native:") {
+                    let p = native_fx::instantiate(id)?;
+                    let params:Vec<Value>=p.info().params.iter().map(|v|json!({"id":v.id,"name":v.name,"min":v.min,"max":v.max,"value":v.default})).collect();
+                    return Ok(json!([{"id":p.info().id,"name":p.info().name,"params":params}]));
                 }
                 let list = fx::load(std::path::Path::new(path))?;
                 let mut effects = Vec::new();
@@ -324,6 +389,8 @@ fn run() -> Result<(), String> {
                     serde_json::to_string(&app.config).map_err(|e| e.to_string())?,
                 ),
                 "/api/status" => reply(req, 200, "application/json", app.status().to_string()),
+                "/api/native" => reply(req,200,"application/json",serde_json::to_string(native_fx::registry()).map_err(|e|e.to_string())?),
+                "/api/limits" => reply(req, 200, "application/json", json!({"channels":MAX_CHANNELS,"auxes":MAX_AUXES,"inputs":MAX_IO,"outputs":MAX_IO}).to_string()),
                 _ => reply(req, 404, "text/plain", "Not found".into()),
             }
             continue;

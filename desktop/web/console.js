@@ -16,23 +16,16 @@ let vstCatalogue = [],
   catalogueLoaded = false;
 const faderTicks = [6, 0, -6, -12, -24, -36, -60];
 const meterStates = new Map(),
-  lastSignal = Array(8).fill("white");
+  lastSignal = [];
+let limits = { channels: 64, auxes: 32, inputs: 64, outputs: 64 };
+let eqTarget;
 const signalNames = {
   off: "Entrada física",
   white: "Ruido blanco",
   pink: "Ruido rosa",
   sine: "Tono seno",
 };
-const colours = [
-  "#479469",
-  "#479469",
-  "#479469",
-  "#479469",
-  "#479469",
-  "#479469",
-  "#479469",
-  "#479469",
-];
+const stripColour = "#479469";
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -40,19 +33,40 @@ function el(tag, cls, text) {
   if (text !== undefined) e.textContent = text;
   return e;
 }
+function defaultEq() {
+  return {
+    bypass: false,
+    bands: [50, 100, 250, 500, 1000, 2500, 6000, 12000].map((frequency) => ({
+      kind: 0,
+      frequency,
+      gain_db: 0,
+      q: 0.707,
+    })),
+  };
+}
 function normalise(c) {
   c.pc_monitor ??= 0;
-  c.channels.forEach((ch) => {
+  const legacy = c.version === 1;
+  c.channels.forEach((ch, i) => {
     ch.inserts ||= [];
     if (ch.fx) ch.inserts.unshift(ch.fx);
     ch.fx = null;
     ch.generator ||= { signal: "off", level_db: -30, frequency: 1000 };
+    ch.eq ||= defaultEq();
+    if (legacy) {
+      ch.format = "mono";
+      ch.input = i < c.inputs ? i : null;
+      ch.input_right = i + 1 < c.inputs ? i + 1 : null;
+    }
   });
   c.buses.forEach((b) => {
     b.inserts ||= [];
     if (b.fx) b.inserts.unshift(b.fx);
     b.fx = null;
+    b.eq ||= defaultEq();
+    if (legacy) b.format = "stereo";
   });
+  if (legacy) c.version = 2;
   return c;
 }
 function error(e) {
@@ -156,6 +170,11 @@ function meter(key) {
     "Peak / RMS estéreo · post-fader · dBFS. Clic para borrar el pico.";
   const clip = el("i", "meter-clip");
   widget.append(clip);
+  const target =
+    key[0] === "c"
+      ? cfg.channels[Number(key.slice(1))]
+      : cfg.buses[Number(key.slice(1))];
+  widget.classList.toggle("mono", target?.format === "mono");
   const axis = el("div", "meter-axis");
   for (const value of [0, -6, -12, -24, -36, -48, -60]) {
     const mark = el("span", "", String(value));
@@ -261,12 +280,12 @@ function insertRack(type, index) {
       el(
         "span",
         "insert-name",
-        fx ? fxName(fx) : slot === target.inserts.length ? "＋ VST3" : "—",
+        fx ? fxName(fx) : slot === target.inserts.length ? "＋ FX" : "—",
       ),
     );
     button.title = fx
       ? `${fxName(fx)}\n${fx.path}${running ? "\nDetén el audio para editar." : ""}`
-      : "Añadir un efecto VST3";
+      : "Añadir un efecto nativo o VST3";
     button.onclick = () => openFx(type, index, slot);
     row.append(button);
     if (fx) {
@@ -292,7 +311,7 @@ function bridgeCell(type, index) {
   cell.dataset.strip = key;
   cell.style.setProperty(
     "--strip-color",
-    type === "channel" ? colours[index] : index === 0 ? "#e65539" : "#278ba5",
+    type === "channel" ? stripColour : index === 0 ? "#e65539" : "#278ba5",
   );
   cell.append(
     el("span", "bridge-name", target.name),
@@ -436,7 +455,7 @@ function channelStrip(index) {
     key = "c" + index,
     card = el("section", "strip");
   card.dataset.strip = key;
-  card.style.setProperty("--strip-color", colours[index]);
+  card.style.setProperty("--strip-color", stripColour);
   card.addEventListener("pointerdown", () => {
     if (selected.type !== "channel" || selected.index !== index)
       selectStrip("channel", index);
@@ -482,28 +501,53 @@ function channelStrip(index) {
         ? "PAN · C"
         : `PAN · ${c.pan < 0 ? "L" : "R"} ${Math.round(Math.abs(c.pan) * 100)}`,
     );
-  pan.append(
-    slider(c.pan, -1, 1, 0.01, (value) => {
-      c.pan = value;
-      panLabel.textContent =
-        value === 0
-          ? "PAN · C"
-          : `PAN · ${value < 0 ? "L" : "R"} ${Math.round(Math.abs(value) * 100)}`;
-      publish();
-    }),
-    panLabel,
-  );
+  const panInput = slider(c.pan, -1, 1, 0.01, (value) => {
+    c.pan = value;
+    panLabel.textContent =
+      value === 0
+        ? "PAN · C"
+        : `PAN · ${value < 0 ? "L" : "R"} ${Math.round(Math.abs(value) * 100)}`;
+    publish();
+  });
+  panInput.setAttribute("aria-label", `Pan ${c.name}`);
+  panInput.ondblclick = () => {
+    panInput.value = 0;
+    panInput.dispatchEvent(new Event("input"));
+  };
+  pan.append(panInput, panLabel);
   card.append(pan);
   const sends = el("div", "send-grid");
-  for (let a = 0; a < 4; a++) {
-    const b = el("button");
-    b.dataset.send = `${index}:${a}`;
-    b.onclick = () => {
-      view = a;
-      selectStrip("channel", index);
-      render();
+  const auxes = cfg.buses.length - 1;
+  if (auxes <= 4) {
+    for (let a = 0; a < auxes; a++) {
+      const b = el("button");
+      b.dataset.send = `${index}:${a}`;
+      b.onclick = () => {
+        view = a;
+        selectStrip("channel", index);
+        render();
+      };
+      sends.append(b);
+    }
+  } else {
+    sends.classList.add("many-aux");
+    const picker = el("select");
+    picker.setAttribute("aria-label", `Auxiliares de ${c.name}`);
+    picker.append(new Option("Envíos Aux…", ""));
+    for (let a = 0; a < auxes; a++) {
+      const o = new Option("", a);
+      o.dataset.send = `${index}:${a}`;
+      picker.append(o);
+    }
+    picker.value = view >= 0 ? view : "";
+    picker.onchange = () => {
+      if (picker.value !== "") {
+        view = Number(picker.value);
+        selectStrip("channel", index);
+        render();
+      }
     };
-    sends.append(b);
+    sends.append(picker);
   }
   card.append(sends);
   const buttons = el("div", "strip-buttons"),
@@ -525,7 +569,7 @@ function channelStrip(index) {
     if (c.generator.signal !== "off") {
       lastSignal[index] = c.generator.signal;
       c.generator.signal = "off";
-    } else c.generator.signal = lastSignal[index];
+    } else c.generator.signal = lastSignal[index] || "white";
     publish();
     refreshGenerator(index);
   };
@@ -571,26 +615,23 @@ function busStrip(index) {
   card.append(el("div", "strip-caption", "INSERTS"), insertRack("bus", index));
   const route = el("select", "bus-route");
   route.setAttribute("aria-label", `Salida física ${b.name}`);
-  route.disabled = running;
-  route.append(new Option("SIN ASIGNAR", ""));
-  for (let p = 0; p < 64; p += 2)
-    route.append(new Option(`OUT ${p + 1}–${p + 2}`, p));
+  route.append(new Option("—", ""));
+  for (let p = 0; p <= limits.outputs - (b.format === "stereo" ? 2 : 1); p++)
+    route.append(
+      new Option(b.format === "mono" ? `OUT ${p + 1}` : `${p + 1}/${p + 2}`, p),
+    );
   route.value = b.output === null ? "" : b.output;
-  route.onchange = () => {
-    const old = b.output;
-    b.output = route.value === "" ? null : Number(route.value);
-    if (
-      b.output !== null &&
-      cfg.buses.some((o) => o !== b && o.output === b.output)
-    ) {
-      b.output = old;
-      route.value = old === null ? "" : old;
-      error("Cada bus necesita un par físico distinto.");
-      return;
-    }
-    publish();
-    renderInspector();
-  };
+  route.title =
+    b.output === null
+      ? "Sin salida física"
+      : `Salida ${b.output + 1}${b.format === "stereo" ? "/" + (b.output + 2) : ""}`;
+  route.onchange = () =>
+    setProperty(
+      "bus",
+      index,
+      "output",
+      route.value === "" ? null : Number(route.value),
+    );
   card.append(route);
   const label = el("div", "output-spacer");
   label.append(
@@ -642,6 +683,28 @@ function arrangeStrip(card, type, index) {
     peak = card.querySelector(".peak-readout"),
     footer = card.querySelector(".strip-footer");
   nameRow.append(name);
+  const format = el(
+    "button",
+    "format-button",
+    targetOf(type, index).format === "mono" ? "M" : "ST",
+  );
+  format.setAttribute(
+    "aria-label",
+    `Formato ${type === "channel" ? "canal" : "bus"} ${index + 1}`,
+  );
+  format.title = "Cambiar mono/estéreo en vivo";
+  format.disabled = type === "bus" && index === 0;
+  format.onclick = (e) => {
+    e.stopPropagation();
+    format.disabled = true;
+    setProperty(
+      type,
+      index,
+      "format",
+      targetOf(type, index).format === "mono" ? "stereo" : "mono",
+    );
+  };
+  header.append(format);
   source.title ||=
     type === "channel" ? "Entrada o generador del canal" : "Salida física ASIO";
   card.querySelector(".output-spacer")?.remove();
@@ -660,6 +723,7 @@ function arrangeStrip(card, type, index) {
     header,
     source,
     rack,
+    eqButton(type, index),
     sends,
     pan,
     main,
@@ -692,6 +756,17 @@ function updateSendLabels() {
 }
 function render() {
   meterWidgets = [];
+  document.querySelector(".input-bank .bank-heading strong span").textContent =
+    `01—${String(cfg.channels.length).padStart(2, "0")}`;
+  if (
+    selected.index >=
+    (selected.type === "channel" ? cfg.channels.length : cfg.buses.length)
+  )
+    selected = { type: "channel", index: 0 };
+  if (view >= cfg.buses.length - 1) view = -1;
+  document
+    .querySelector(".app")
+    .style.setProperty("--outputs", Math.min(5, cfg.buses.length) * 70 + "px");
   $("inputs").value = cfg.inputs;
   $("rate").value = cfg.sample_rate;
   $("buffer").value = cfg.buffer;
@@ -701,12 +776,19 @@ function render() {
   );
   $("pc-monitor").value = cfg.pc_monitor;
   renderListenMeter();
+  $("fader-flip").replaceChildren(
+    new Option("Main Level", -1),
+    ...cfg.buses
+      .slice(1)
+      .map((b, i) => new Option(`Aux ${i + 1} · ${b.name}`, i)),
+  );
   $("fader-flip").value = view;
+  $("main-layer").classList.toggle("active", view === -1);
   if (cfg.device !== null) $("device").value = cfg.device;
   $("meterbridge").replaceChildren(
     ...cfg.channels.map((_, i) => bridgeCell("channel", i)),
   );
-  const outputOrder = [1, 2, 3, 4, 0];
+  const outputOrder = [...cfg.buses.slice(1).map((_, i) => i + 1), 0];
   $("outputbridge").replaceChildren(
     ...outputOrder.map((i) => bridgeCell("bus", i)),
   );
@@ -759,8 +841,10 @@ function renderInspector() {
       "div",
       "source-caption",
       type === "channel"
-        ? "Entrada mono · proceso estéreo"
-        : "Bus estéreo · salida independiente",
+        ? target.format === "mono"
+          ? "Canal mono"
+          : "Canal estéreo L/R"
+        : "Bus · salida independiente",
     ),
   );
   const label = el("label", "", "NOMBRE"),
@@ -774,6 +858,41 @@ function renderInspector() {
   };
   label.append(name);
   inspector.append(label);
+  const routing = inspectorSection("FORMATO Y ENTRADAS");
+  const mode = el("select");
+  mode.setAttribute("aria-label", "Formato seleccionado");
+  mode.append(new Option("Mono", "mono"), new Option("Estéreo", "stereo"));
+  mode.value = target.format;
+  mode.disabled = type === "bus" && index === 0;
+  mode.onchange = () => setProperty(type, index, "format", mode.value);
+  routing.append(mode);
+  if (type === "channel") {
+    for (const [key, title] of [
+      ["input", "Entrada L / mono"],
+      ...(target.format === "stereo" ? [["input_right", "Entrada R"]] : []),
+    ]) {
+      const label = el("label", "", title),
+        input = el("select");
+      input.setAttribute("aria-label", title);
+      input.append(new Option("Sin entrada física", ""));
+      for (let i = 0; i < cfg.inputs; i++)
+        input.append(new Option(`ASIO ${i + 1}`, i));
+      input.value = target[key] === null ? "" : target[key];
+      input.onchange = () =>
+        setProperty(
+          type,
+          index,
+          key,
+          input.value === "" ? null : Number(input.value),
+        );
+      label.append(input);
+      routing.append(label);
+    }
+  }
+  inspector.append(routing);
+  const eq = inspectorSection("EQ PARAMÉTRICO");
+  eq.append(eqButton(type, index));
+  inspector.append(eq);
   if (type === "channel") {
     const section = inspectorSection("GENERADOR DE SEÑAL"),
       source = el("select");
@@ -864,7 +983,7 @@ function renderInspector() {
         "readout",
         target.output === null
           ? "Sin salida física"
-          : `ASIO ${target.output + 1} / ${target.output + 2}`,
+          : `ASIO ${target.output + 1}${target.format === "stereo" ? " / " + (target.output + 2) : ""}`,
       ),
       el(
         "p",
@@ -882,7 +1001,7 @@ function renderInspector() {
       el(
         "p",
         "hint",
-        "Sin efectos. Añade un VST3 desde la tira con el audio detenido.",
+        "Sin inserts. Añade un efecto nativo o VST3 desde la tira con el audio detenido.",
       ),
     );
   target.inserts.forEach((fx, slot) => {
@@ -911,7 +1030,9 @@ function renderInspector() {
 }
 function updateLatency() {
   const index =
-    selected.type === "channel" ? selected.index : 8 + selected.index;
+    selected.type === "channel"
+      ? selected.index
+      : cfg.channels.length + selected.index;
   if ($("selected-latency"))
     $("selected-latency").textContent =
       `Latencia declarada: ${lastStatus?.latencies?.[index] || 0} muestras`;
@@ -924,6 +1045,8 @@ async function poll() {
     lastStatus = s;
     const was = running;
     running = s.mode !== "DETENIDO";
+    $("panic").textContent = s.emergency ? "REACTIVAR AUDIO" : "SILENCIO TOTAL";
+    $("panic").setAttribute("aria-pressed", s.emergency);
     $("listen-status").textContent = s.emergency
       ? "Silencio total"
       : s.failed
@@ -1009,12 +1132,24 @@ function openFx(type, index, slot) {
   $("params").replaceChildren();
   $("classes").replaceChildren();
   $("fxerror").textContent = "";
-  $("fx-title").textContent = fx ? fxName(fx) : "Añadir VST3";
+  $("fx-title").textContent = fx ? fxName(fx) : "Añadir efecto";
   $("fx-location").textContent = `${target.name} · INSERT ${slot + 1}`;
   $("removefx").disabled = !fx;
   $("fxup").disabled = !fx || slot === 0;
   $("fxdown").disabled = !fx || slot === target.inserts.length - 1;
   $("fx").showModal();
+  fetch("/api/native")
+    .then((r) => {
+      if (!r.ok) throw Error("No se pudo leer la lista nativa");
+      return r.json();
+    })
+    .then((list) => {
+      $("builtin-fx").replaceChildren(
+        new Option("Seleccionar efecto nativo…", ""),
+      );
+      for (const p of list) $("builtin-fx").append(new Option(p.name, p.id));
+    })
+    .catch((e) => ($("fxerror").textContent = e.message));
   if (!catalogueLoaded)
     scanVst3().catch((e) => ($("vst-scan-status").textContent = e.message));
   else filterVst3();
@@ -1071,6 +1206,12 @@ function filterVst3() {
     `${vstCatalogue.length} bundles detectados · selecciona uno para leer sus efectos.`;
   $("vst-scan-status").title = vstRoots.join("\n");
 }
+$("builtin-fx").onchange = () => {
+  if (!$("builtin-fx").value) return;
+  $("path").value = "native:" + $("builtin-fx").value;
+  pendingFx = null;
+  $("inspect").click();
+};
 $("vst-rescan").onclick = () =>
   scanVst3().catch((e) => ($("vst-scan-status").textContent = e.message));
 $("vst-search").oninput = filterVst3;
@@ -1081,7 +1222,7 @@ $("vst-installed").onchange = () => {
 };
 $("inspect").onclick = async () => {
   try {
-    $("fxerror").textContent = "Leyendo VST3…";
+    $("fxerror").textContent = "Leyendo efecto…";
     descriptors = await api("inspect", { path: $("path").value });
     $("classes").replaceChildren();
     descriptors.forEach((d, i) => $("classes").append(new Option(d.name, i)));
@@ -1101,7 +1242,7 @@ $("closefx").onclick = () => $("fx").close();
 $("applyfx").onclick = async () => {
   if (!pendingFx) {
     $("fxerror").textContent =
-      "Primero pulsa Leer VST3 y selecciona un efecto.";
+      "Selecciona un efecto nativo o lee un VST3 primero.";
     return;
   }
   if (
@@ -1153,6 +1294,11 @@ for (const [id, key] of [
 ])
   $(id).onchange = () => {
     cfg[key] = Number($(id).value);
+    if (key === "inputs")
+      cfg.channels.forEach((c) => {
+        if (c.input >= cfg.inputs) c.input = null;
+        if (c.input_right >= cfg.inputs) c.input_right = null;
+      });
     publish();
   };
 $("bridge").onchange = () => {
@@ -1180,8 +1326,21 @@ $("pc-monitor").onchange = () => {
   render();
 };
 $("stop").onclick = () => api("stop").catch(error);
-$("panic").onclick = () => api("panic").catch(error);
+$("panic").onclick = async () => {
+  $("panic").disabled = true;
+  try {
+    lastStatus = await api(lastStatus?.emergency ? "resume" : "panic");
+  } catch (e) {
+    error(e);
+  } finally {
+    $("panic").disabled = false;
+  }
+};
 $("reset-peaks").onclick = resetPeaks;
+$("main-layer").onclick = () => {
+  view = -1;
+  render();
+};
 $("fader-flip").onchange = () => {
   view = Number($("fader-flip").value);
   render();
@@ -1267,9 +1426,312 @@ $("scene").onchange = async () => {
   }
   $("scene").value = "";
 };
-fetch("/api/config")
-  .then((r) => r.json())
-  .then((c) => {
+async function setProperty(type, index, key, value) {
+  const target = targetOf(type, index),
+    before = target[key];
+  target[key] = value;
+  try {
+    await publish();
+  } catch (e) {
+    target[key] = before;
+    error(e);
+  }
+  render();
+}
+function eqResponse(eq, frequency) {
+  if (eq.bypass) return 0;
+  const rate = cfg.sample_rate,
+    w = (2 * Math.PI * frequency) / rate;
+  return eq.bands.reduce((gain, b) => {
+    const a = 10 ** (b.gain_db / 40),
+      omega = (2 * Math.PI * Math.min(b.frequency, rate * 0.45)) / rate,
+      co = Math.cos(omega),
+      si = Math.sin(omega),
+      alpha = si / (2 * b.q);
+    let num, den;
+    switch (b.kind || 0) {
+      case 1:
+      case 2: {
+        const slope = Math.max(0.1, Math.min(1, b.q / 2)),
+          t =
+            ((2 * Math.sqrt(a) * si) / 2) *
+            Math.sqrt((a + 1 / a) * (1 / slope - 1) + 2);
+        if (b.kind === 1) {
+          num = [
+            a * (a + 1 - (a - 1) * co + t),
+            2 * a * (a - 1 - (a + 1) * co),
+            a * (a + 1 - (a - 1) * co - t),
+          ];
+          den = [
+            a + 1 + (a - 1) * co + t,
+            -2 * (a - 1 + (a + 1) * co),
+            a + 1 + (a - 1) * co - t,
+          ];
+        } else {
+          num = [
+            a * (a + 1 + (a - 1) * co + t),
+            -2 * a * (a - 1 + (a + 1) * co),
+            a * (a + 1 + (a - 1) * co - t),
+          ];
+          den = [
+            a + 1 - (a - 1) * co + t,
+            2 * (a - 1 - (a + 1) * co),
+            a + 1 - (a - 1) * co - t,
+          ];
+        }
+        break;
+      }
+      case 3:
+        num = [(1 + co) / 2, -(1 + co), (1 + co) / 2];
+        den = [1 + alpha, -2 * co, 1 - alpha];
+        break;
+      case 4:
+        num = [(1 - co) / 2, 1 - co, (1 - co) / 2];
+        den = [1 + alpha, -2 * co, 1 - alpha];
+        break;
+      case 5:
+        num = [alpha, 0, -alpha];
+        den = [1 + alpha, -2 * co, 1 - alpha];
+        break;
+      default:
+        num = [1 + alpha * a, -2 * co, 1 - alpha * a];
+        den = [1 + alpha / a, -2 * co, 1 - alpha / a];
+    }
+    const c = [...num.map((v) => v / den[0]), den[1] / den[0], den[2] / den[0]];
+    const nr = c[0] + c[1] * Math.cos(w) + c[2] * Math.cos(2 * w),
+      ni = -c[1] * Math.sin(w) - c[2] * Math.sin(2 * w),
+      dr = 1 + c[3] * Math.cos(w) + c[4] * Math.cos(2 * w),
+      di = -c[3] * Math.sin(w) - c[4] * Math.sin(2 * w);
+    return (
+      gain +
+      10 *
+        Math.log10(Math.max(1e-20, (nr * nr + ni * ni) / (dr * dr + di * di)))
+    );
+  }, 0);
+}
+function eqSvg(eq, large = false) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  const width = large ? 500 : 60,
+    height = large ? 120 : 22;
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("aria-hidden", "true");
+  const grid = document.createElementNS(svg.namespaceURI, "path");
+  grid.setAttribute("d", `M0 ${height / 2} H${width}`);
+  grid.setAttribute("class", "eq-grid");
+  svg.append(grid);
+  const curve = document.createElementNS(svg.namespaceURI, "path");
+  let path = "";
+  for (let i = 0; i <= 128; i++) {
+    const frequency = 20 * 1000 ** (i / 128),
+      value = eqResponse(eq, frequency),
+      y = Math.max(1, Math.min(height - 1, height / 2 - (value * height) / 40));
+    path += `${i ? "L" : "M"}${(width * i) / 128},${y} `;
+  }
+  curve.setAttribute("d", path);
+  curve.setAttribute("class", "eq-curve");
+  svg.append(curve);
+  return svg;
+}
+function eqButton(type, index) {
+  const eq = targetOf(type, index).eq,
+    button = el("button", "eq-module" + (eq.bypass ? " eq-off" : ""));
+  button.setAttribute(
+    "aria-label",
+    `EQ ${type === "channel" ? "canal" : "bus"} ${index + 1}`,
+  );
+  button.title = "EQ paramétrico de ocho bandas · clic para editar";
+  button.append(el("span", "", "EQ"), eqSvg(eq));
+  button.onclick = () => openEq(type, index);
+  return button;
+}
+function openEq(type, index) {
+  eqTarget = { type, index };
+  const target = targetOf(type, index);
+  $("eq-title").textContent = `FreeEQ8 · ${target.name}`;
+  $("eq-bypass").checked = target.eq.bypass;
+  const header = el("div", "eq-band-row eq-band-header");
+  for (const name of [
+    "Banda",
+    "Tipo",
+    "Frecuencia (Hz)",
+    "Ganancia (dB)",
+    "Q / pendiente",
+  ])
+    header.append(el("span", "", name));
+  $("eq-bands").replaceChildren(header);
+  target.eq.bands.forEach((band, i) => {
+    const row = el("div", "eq-band-row");
+    row.append(el("span", "", String(i + 1)));
+    const kind = el("select");
+    [
+      "Campana",
+      "Low shelf",
+      "High shelf",
+      "Pasa altos",
+      "Pasa bajos",
+      "Pasa banda",
+    ].forEach((name, k) => kind.append(new Option(name, k)));
+    kind.value = band.kind || 0;
+    kind.setAttribute("aria-label", `EQ banda ${i + 1} tipo`);
+    kind.onchange = async () => {
+      const old = band.kind;
+      band.kind = Number(kind.value);
+      try {
+        await publish();
+      } catch (e) {
+        band.kind = old;
+        kind.value = old;
+        error(e);
+      }
+      refreshEq();
+    };
+    row.append(kind);
+    for (const [key, min, max, step] of [
+      ["frequency", 20, 20000, 1],
+      ["gain_db", -18, 18, 0.1],
+      ["q", 0.1, 18, 0.01],
+    ]) {
+      const input = el("input");
+      input.type = "number";
+      input.min = min;
+      input.max = max;
+      input.step = step;
+      input.value = band[key];
+      input.setAttribute("aria-label", `EQ banda ${i + 1} ${key}`);
+      input.onchange = async () => {
+        if (!input.reportValidity()) return;
+        const previous = band[key];
+        band[key] = Number(input.value);
+        try {
+          await publish();
+        } catch (e) {
+          band[key] = previous;
+          input.value = previous;
+          error(e);
+        }
+        refreshEq();
+      };
+      row.append(input);
+    }
+    $("eq-bands").append(row);
+  });
+  refreshEq();
+  $("eq-dialog").showModal();
+}
+function refreshEq() {
+  if (!eqTarget) return;
+  const target = targetOf(eqTarget.type, eqTarget.index);
+  $("eq-graph").replaceChildren(eqSvg(target.eq, true));
+  render();
+}
+$("eq-bypass").onchange = async () => {
+  if (!eqTarget) return;
+  const target = targetOf(eqTarget.type, eqTarget.index),
+    previous = target.eq.bypass;
+  target.eq.bypass = $("eq-bypass").checked;
+  try {
+    await publish();
+  } catch (e) {
+    target.eq.bypass = previous;
+    $("eq-bypass").checked = previous;
+    error(e);
+  }
+  refreshEq();
+};
+$("counts").onclick = () => {
+  $("channel-count").value = cfg.channels.length;
+  $("aux-count").value = cfg.buses.length - 1;
+  $("counts-error").textContent = "";
+  $("counts-dialog").showModal();
+};
+$("apply-counts").onclick = async () => {
+  const button = $("apply-counts"),
+    channels = Number($("channel-count").value),
+    auxes = Number($("aux-count").value);
+  if (
+    !$("channel-count").reportValidity() ||
+    !$("aux-count").reportValidity() ||
+    !Number.isInteger(channels) ||
+    !Number.isInteger(auxes)
+  )
+    return;
+  const candidate = structuredClone(cfg);
+  candidate.channels = candidate.channels.slice(0, channels);
+  candidate.buses = candidate.buses.slice(0, auxes + 1);
+  while (candidate.channels.length < channels) {
+    const i = candidate.channels.length;
+    candidate.channels.push({
+      name: `Entrada ${i + 1}`,
+      format: $("new-channel-format").value,
+      input: i < cfg.inputs ? i : null,
+      input_right: i + 1 < cfg.inputs ? i + 1 : null,
+      gain_db: 0,
+      pan: 0,
+      mute: false,
+      sends_db: [],
+      pre: [],
+      inserts: [],
+      fx: null,
+      generator: { signal: "off", level_db: -30, frequency: 1000 },
+      eq: defaultEq(),
+    });
+  }
+  while (candidate.buses.length < auxes + 1)
+    candidate.buses.push({
+      name: `Monitor ${candidate.buses.length}`,
+      format: $("new-aux-format").value,
+      gain_db: -12,
+      mute: false,
+      output: null,
+      inserts: [],
+      fx: null,
+      eq: defaultEq(),
+    });
+  for (const ch of candidate.channels) {
+    ch.sends_db = ch.sends_db.slice(0, auxes);
+    ch.pre = ch.pre.slice(0, auxes);
+    while (ch.sends_db.length < auxes) ch.sends_db.push(-90);
+    while (ch.pre.length < auxes) ch.pre.push(true);
+  }
+  if (candidate.pc_monitor >= candidate.buses.length) candidate.pc_monitor = 0;
+  button.disabled = true;
+  button.textContent = "Aplicando…";
+  try {
+    await queue;
+    await api("config", candidate);
+    cfg = candidate;
+    meterStates.clear();
+    render();
+    $("counts-dialog").close();
+  } catch (e) {
+    $("counts-error").textContent = e.message;
+  } finally {
+    button.disabled = false;
+    button.textContent = "Aplicar estructura";
+  }
+};
+for (const [bank, bridge] of [
+  ["mixer", "meterbridge"],
+  ["buses", "outputbridge"],
+]) {
+  $(bank).addEventListener(
+    "scroll",
+    () => {
+      $(bridge).scrollLeft = $(bank).scrollLeft;
+    },
+    { passive: true },
+  );
+}
+
+Promise.all([
+  fetch("/api/config").then((r) => r.json()),
+  fetch("/api/limits").then((r) => r.json()),
+])
+  .then(([c, l]) => {
+    limits = l;
+    $("channel-count").max = l.channels;
+    $("aux-count").max = l.auxes;
+    $("inputs").max = l.inputs;
     cfg = normalise(c);
     render();
     poll();

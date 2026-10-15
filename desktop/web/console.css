@@ -78,8 +78,8 @@ select:disabled {
   --outputs: 350px;
   --labels: 58px;
   --strip: 70px;
-  --module-rows: 18px 22px 84px 42px 24px 22px 24px 24px 20px minmax(90px, 1fr)
-    14px 18px;
+  --module-rows: 18px 22px 84px 28px 42px 24px 22px 24px 24px 20px
+    minmax(90px, 1fr) 14px 18px;
   display: grid;
   height: 100dvh;
   min-height: 700px;
@@ -1179,8 +1179,9 @@ dialog select {
   display: none;
 }
 .app.small-console {
-  --module-rows: 18px 22px 0 0 0 0 24px 24px 20px minmax(90px, 1fr) 14px 18px;
+  --module-rows: 18px 22px 0 0 0 0 0 24px 24px 20px minmax(90px, 1fr) 14px 18px;
 }
+.small-console .eq-module,
 .small-console .insert-rack,
 .small-console .send-grid,
 .small-console .pan-row,
@@ -1188,7 +1189,7 @@ dialog select {
 .small-console .main-route {
   display: none;
 }
-.small-console .label-rows span:nth-child(n + 3):nth-child(-n + 6) {
+.small-console .label-rows span:nth-child(n + 3):nth-child(-n + 7) {
   display: none;
 }
 @media (max-width: 1300px) {
@@ -1366,4 +1367,143 @@ dialog {
   border: 1px solid #4d535e;
   border-radius: 50%;
   background: #9b9f9d;
+}
+
+.strip > :nth-child(13),
+.label-rows > :nth-child(13) {
+  grid-row: 13;
+}
+.strip-header {
+  display: flex;
+  align-items: center;
+}
+.strip-id {
+  flex: 1;
+}
+.format-button {
+  font-size: 7px;
+  padding: 0 2px;
+  min-width: 17px;
+  height: 13px;
+  background: #202932;
+  color: #75abb5;
+  margin-right: 2px;
+  border: 0;
+}
+.format-button:disabled {
+  opacity: 0.6;
+}
+.meter-widget.mono .meter-track:last-child {
+  display: none;
+}
+.send-grid.many-aux {
+  display: flex;
+  align-items: center;
+}
+.many-aux select {
+  width: 100%;
+  font-size: 8px;
+  padding: 1px;
+}
+.eq-module {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 23px;
+  margin: 2px 0 3px;
+  width: 100%;
+  padding: 1px;
+  background: #151a21;
+  overflow: hidden;
+}
+.eq-module span {
+  font-size: 7px;
+  color: #718b9d;
+}
+.eq-module svg {
+  width: 100%;
+  height: 20px;
+}
+.eq-curve {
+  stroke: #36a9ba;
+  fill: none;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.eq-grid {
+  stroke: #344451;
+  fill: none;
+  stroke-width: 0.5;
+  vector-effect: non-scaling-stroke;
+}
+.eq-off .eq-curve {
+  stroke: #6a7279;
+  stroke-dasharray: 3 2;
+}
+#eq-graph {
+  background: #151a21;
+  border: 1px solid #10151c;
+}
+#eq-graph svg {
+  width: 100%;
+  height: 140px;
+  display: block;
+}
+.eq-axis {
+  display: flex;
+  justify-content: space-between;
+  font-size: 8px;
+  color: #8291a1;
+  margin: 4px 0 12px;
+}
+.eq-band-row {
+  display: grid;
+  grid-template-columns: 45px 1.5fr 1fr 1fr;
+  gap: 10px;
+  align-items: center;
+  margin: 8px 0;
+}
+.eq-band-row input {
+  width: 100%;
+}
+.eq-band-header {
+  font-size: 9px;
+  color: #8797aa;
+}
+.eq-bypass-label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+#buses [data-strip="b0"],
+#outputbridge [data-strip="b0"] {
+  position: sticky;
+  right: 0;
+  z-index: 3;
+  background: #272932;
+}
+.fader-flip select {
+  max-width: 180px;
+  width: 150px;
+}
+
+#main-layer {
+  font-size: 9px;
+  padding: 2px 5px;
+}
+#main-layer.active {
+  color: #c5d7de;
+  background: #33424a;
+  border-color: #607d89;
+}
+
+.eq-band-row {
+  grid-template-columns: 30px 130px 1fr 1fr 1fr;
+}
+#eq-dialog {
+  width: min(700px, 95vw);
+}
+#builtin-fx {
+  width: 100%;
+  margin: 6px 0;
 }

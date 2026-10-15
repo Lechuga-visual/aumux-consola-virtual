@@ -75,7 +75,7 @@ int mm_open(void* opaque, unsigned device, unsigned inputs, unsigned outputs,
     auto* h = static_cast<Handle*>(opaque);
     try {
         auto info = h->audio.getDeviceInfo(device);
-        if (!inputs || !outputs || inputs > info.inputChannels || outputs > info.outputChannels) {
+        if (!outputs || inputs > info.inputChannels || outputs > info.outputChannels) {
             h->error = "Requested channel count exceeds this device's available inputs/outputs"; return -1;
         }
         if (std::find(info.sampleRates.begin(), info.sampleRates.end(), rate) == info.sampleRates.end()) {
@@ -85,7 +85,7 @@ int mm_open(void* opaque, unsigned device, unsigned inputs, unsigned outputs,
         in.deviceId = out.deviceId = device;
         in.nChannels = inputs; out.nChannels = outputs;
         h->callback = callback; h->user = user;
-        const auto result = h->audio.openStream(&out, &in, RTAUDIO_FLOAT32, rate, frames, process, h);
+        const auto result = h->audio.openStream(&out, inputs ? &in : nullptr, RTAUDIO_FLOAT32, rate, frames, process, h);
         if (result != RTAUDIO_NO_ERROR) { h->error = h->audio.getErrorText(); return -1; }
         return 0;
     } catch (const std::exception& e) { h->error = e.what(); return -1; }

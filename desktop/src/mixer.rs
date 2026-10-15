@@ -34,6 +34,12 @@ impl Meter {
             self.rms[i].store((power.sqrt() as f32).to_bits(), Relaxed);
         }
     }
+    fn inherit(&self, old: &Self) {
+        for i in 0..2 {
+            self.peak[i].store(old.peak[i].load(Relaxed), Relaxed);
+            self.rms[i].store(old.rms[i].load(Relaxed), Relaxed);
+        }
+    }
     fn silence(&self) {
         for x in &self.rms {
             x.store(0, Relaxed);
@@ -42,25 +48,29 @@ impl Meter {
 }
 
 pub struct Controls {
-    gain: [AtomicU32; CHANNELS],
-    pan: [AtomicU32; CHANNELS],
-    mute: [AtomicBool; CHANNELS],
-    sends: [[AtomicU32; AUXES]; CHANNELS],
-    pre: [[AtomicBool; AUXES]; CHANNELS],
-    bus_gain: [AtomicU32; BUSES],
-    bus_mute: [AtomicBool; BUSES],
+    eq: Vec<crate::eq::Control>,
+    input_route: Vec<AtomicU32>,
+    bus_stereo: Vec<AtomicBool>,
+    gain: Vec<AtomicU32>,
+    pan: Vec<AtomicU32>,
+    mute: Vec<AtomicBool>,
+    sends: Vec<Vec<AtomicU32>>,
+    pre: Vec<Vec<AtomicBool>>,
+    bus_gain: Vec<AtomicU32>,
+    bus_mute: Vec<AtomicBool>,
     pub emergency: AtomicBool,
+    pub resume_fade: AtomicBool,
     pub failed: AtomicBool,
     pub xruns: AtomicU64,
     pub clipped: AtomicU64,
-    pub meters: [AtomicU32; BUSES],
-    pub channel_meters: [Meter; CHANNELS],
-    pub bus_meters: [Meter; BUSES],
+    pub meters: Vec<AtomicU32>,
+    pub channel_meters: Vec<Meter>,
+    pub bus_meters: Vec<Meter>,
     pub pc_monitor: AtomicU32,
-    generator: [AtomicU32; CHANNELS],
-    generator_gain: [AtomicU32; CHANNELS],
-    frequency: [AtomicU32; CHANNELS],
-    bypass: [[AtomicBool; INSERTS]; CHANNELS + BUSES],
+    generator: Vec<AtomicU32>,
+    generator_gain: Vec<AtomicU32>,
+    frequency: Vec<AtomicU32>,
+    bypass: Vec<[AtomicBool; INSERTS]>,
 }
 pub fn gain(db: f32) -> f32 {
     if db <= -90.0 {
@@ -71,26 +81,43 @@ pub fn gain(db: f32) -> f32 {
 }
 impl Controls {
     pub fn new(c: &Config) -> Arc<Self> {
+        let channels = c.channels.len();
+        let buses = c.buses.len();
+        let auxes = buses - 1;
+        let floats = |n| (0..n).map(|_| AtomicU32::new(0)).collect::<Vec<_>>();
+        let flags = |n| (0..n).map(|_| AtomicBool::new(false)).collect::<Vec<_>>();
         let s = Arc::new(Self {
-            gain: std::array::from_fn(|_| AtomicU32::new(0)),
-            pan: std::array::from_fn(|_| AtomicU32::new(0)),
-            mute: std::array::from_fn(|_| AtomicBool::new(false)),
-            sends: std::array::from_fn(|_| std::array::from_fn(|_| AtomicU32::new(0))),
-            pre: std::array::from_fn(|_| std::array::from_fn(|_| AtomicBool::new(true))),
-            bus_gain: std::array::from_fn(|_| AtomicU32::new(0)),
-            bus_mute: std::array::from_fn(|_| AtomicBool::new(false)),
+            eq: c
+                .channels
+                .iter()
+                .map(|ch| &ch.eq)
+                .chain(c.buses.iter().map(|b| &b.eq))
+                .map(crate::eq::Control::new)
+                .collect(),
+            input_route: floats(channels),
+            bus_stereo: flags(buses),
+            gain: floats(channels),
+            pan: floats(channels),
+            mute: flags(channels),
+            sends: (0..channels).map(|_| floats(auxes)).collect(),
+            pre: (0..channels).map(|_| flags(auxes)).collect(),
+            bus_gain: floats(buses),
+            bus_mute: flags(buses),
             emergency: AtomicBool::new(false),
+            resume_fade: AtomicBool::new(false),
             failed: AtomicBool::new(false),
             xruns: AtomicU64::new(0),
             clipped: AtomicU64::new(0),
-            meters: std::array::from_fn(|_| AtomicU32::new(0)),
-            channel_meters: std::array::from_fn(|_| Meter::new()),
-            bus_meters: std::array::from_fn(|_| Meter::new()),
+            meters: floats(buses),
+            channel_meters: (0..channels).map(|_| Meter::new()).collect(),
+            bus_meters: (0..buses).map(|_| Meter::new()).collect(),
             pc_monitor: AtomicU32::new(0),
-            generator: std::array::from_fn(|_| AtomicU32::new(0)),
-            generator_gain: std::array::from_fn(|_| AtomicU32::new(0)),
-            frequency: std::array::from_fn(|_| AtomicU32::new(0)),
-            bypass: std::array::from_fn(|_| std::array::from_fn(|_| AtomicBool::new(false))),
+            generator: floats(channels),
+            generator_gain: floats(channels),
+            frequency: floats(channels),
+            bypass: (0..channels + buses)
+                .map(|_| std::array::from_fn(|_| AtomicBool::new(false)))
+                .collect(),
         });
         s.update(c);
         s
@@ -98,6 +125,14 @@ impl Controls {
     pub fn update(&self, c: &Config) {
         self.pc_monitor.store(c.pc_monitor as u32, Relaxed);
         for (i, ch) in c.channels.iter().enumerate() {
+            self.eq[i].update(&ch.eq);
+            // One atomic word prevents torn input-L/input-R/format changes.
+            self.input_route[i].store(
+                ch.input.map_or(0, |v| v as u32 + 1)
+                    | (ch.input_right.map_or(0, |v| v as u32 + 1) << 8)
+                    | (u32::from(ch.format == Format::Stereo) << 16),
+                Relaxed,
+            );
             self.gain[i].store(gain(ch.gain_db).to_bits(), Relaxed);
             self.pan[i].store(ch.pan.to_bits(), Relaxed);
             self.mute[i].store(ch.mute, Relaxed);
@@ -107,16 +142,18 @@ impl Controls {
             for (slot, fx) in ch.effects().take(INSERTS).enumerate() {
                 self.bypass[i][slot].store(fx.bypass, Relaxed);
             }
-            for a in 0..AUXES {
+            for a in 0..c.buses.len() - 1 {
                 self.sends[i][a].store(gain(ch.sends_db[a]).to_bits(), Relaxed);
                 self.pre[i][a].store(ch.pre[a], Relaxed);
             }
         }
         for (i, b) in c.buses.iter().enumerate() {
+            self.eq[c.channels.len() + i].update(&b.eq);
+            self.bus_stereo[i].store(b.format == Format::Stereo, Relaxed);
             self.bus_gain[i].store(gain(b.gain_db).to_bits(), Relaxed);
             self.bus_mute[i].store(b.mute, Relaxed);
             for (slot, fx) in b.effects().take(INSERTS).enumerate() {
-                self.bypass[CHANNELS + i][slot].store(fx.bypass, Relaxed);
+                self.bypass[c.channels.len() + i][slot].store(fx.bypass, Relaxed);
             }
         }
     }
@@ -124,22 +161,38 @@ impl Controls {
 
 pub struct Mixer {
     pub controls: Arc<Controls>,
-    channel: [Vec<Vec<f32>>; CHANNELS],
-    pub buses: [Vec<Vec<f32>>; BUSES],
-    channel_fx: [Vec<Box<dyn Plugin>>; CHANNELS],
-    bus_fx: [Vec<Box<dyn Plugin>>; BUSES],
-    routes: [Option<usize>; BUSES],
-    previous: [f32; CHANNELS],
-    previous_sends: [[f32; AUXES]; CHANNELS],
-    previous_bus: [f32; BUSES],
-    pub latencies: [usize; CHANNELS + BUSES],
-    generators: [crate::generator::Generator; CHANNELS],
-    generator_modes: [Signal; CHANNELS],
-    generator_blend: [f32; CHANNELS],
-    generator_level: [f32; CHANNELS],
+    channel: Vec<Vec<Vec<f32>>>,
+    pub buses: Vec<Vec<Vec<f32>>>,
+    channel_eq: Vec<crate::eq::Processor>,
+    bus_eq: Vec<crate::eq::Processor>,
+    channel_fx: Vec<Vec<Box<dyn Plugin>>>,
+    bus_fx: Vec<Vec<Box<dyn Plugin>>>,
+    routes: Vec<Option<usize>>,
+    previous: Vec<f32>,
+    previous_sends: Vec<Vec<f32>>,
+    previous_bus: Vec<f32>,
+    pub latencies: Vec<usize>,
+    generators: Vec<[crate::generator::Generator; 2]>,
+    generator_modes: Vec<Signal>,
+    generator_blend: Vec<f32>,
+    generator_level: Vec<f32>,
     rate: f32,
+    inputs: usize,
+    previous_mono: Vec<f32>,
+    previous_bus_mono: Vec<f32>,
+    bus_mono: Vec<f32>,
 }
 fn prepare_fx(spec: &Fx, rate: u32) -> Result<Box<dyn Plugin>, String> {
+    if spec.id.starts_with("native/") {
+        let mut p = crate::native_fx::instantiate(&spec.id)?;
+        p.prepare(rate as f32, MAX_FRAMES, 2);
+        for (id, value) in &spec.params {
+            if !p.set_param(id, *value) {
+                return Err(format!("Parámetro nativo inválido: {id}"));
+            }
+        }
+        return Ok(p);
+    }
     let descriptors = crate::fx::load(std::path::Path::new(&spec.path))?;
     if !descriptors
         .iter()
@@ -161,7 +214,7 @@ impl Mixer {
     /// independently of saved ASIO output assignments.
     pub fn copy_monitor(&self, output: &mut [f32], frames: usize, bus: usize) -> bool {
         output.fill(0.0);
-        if bus >= BUSES || frames > MAX_FRAMES || output.len() < frames * 2 {
+        if bus >= self.buses.len() || frames > MAX_FRAMES || output.len() < frames * 2 {
             return false;
         }
         for f in 0..frames {
@@ -173,41 +226,149 @@ impl Mixer {
     }
     /// Called on the control thread; all allocations and plugin creation happen here.
     pub fn new(c: &Config, controls: Arc<Controls>) -> Result<Self, String> {
+        Self::prepare(c, controls, None)
+    }
+    pub fn reconfigure(
+        c: &Config,
+        controls: Arc<Controls>,
+        old: &Config,
+        latencies: &[usize],
+    ) -> Result<Self, String> {
+        if !old.same_device(c) || !old.same_existing_fx(c) {
+            return Err("Detén el motor para cambiar dispositivo, frecuencia, buffer o cadenas VST3 existentes".into());
+        }
+        Self::prepare(c, controls, Some((old, latencies)))
+    }
+    fn prepare(
+        c: &Config,
+        controls: Arc<Controls>,
+        old: Option<(&Config, &[usize])>,
+    ) -> Result<Self, String> {
         c.validate()?;
-        let mut channel_fx: [Vec<Box<dyn Plugin>>; CHANNELS] = std::array::from_fn(|_| Vec::new());
-        let mut bus_fx: [Vec<Box<dyn Plugin>>; BUSES] = std::array::from_fn(|_| Vec::new());
-        let mut latencies = [0; CHANNELS + BUSES];
-        for i in 0..CHANNELS {
+        let channels = c.channels.len();
+        let buses = c.buses.len();
+        let mut channel_fx: Vec<Vec<Box<dyn Plugin>>> = (0..channels).map(|_| Vec::new()).collect();
+        let mut bus_fx: Vec<Vec<Box<dyn Plugin>>> = (0..buses).map(|_| Vec::new()).collect();
+        let mut latencies = vec![0; channels + buses];
+        for i in 0..channels {
+            if let Some((previous, old_latencies)) = old {
+                if i < previous.channels.len() {
+                    latencies[i] = old_latencies[i];
+                    continue;
+                }
+            }
             for fx in c.channels[i].effects() {
                 channel_fx[i].push(prepare_fx(fx, c.sample_rate)?);
             }
             latencies[i] = channel_fx[i].iter().map(|p| p.latency()).sum();
         }
-        for i in 0..BUSES {
+        for i in 0..buses {
+            if let Some((previous, old_latencies)) = old {
+                if i < previous.buses.len() {
+                    latencies[channels + i] = old_latencies[previous.channels.len() + i];
+                    continue;
+                }
+            }
             for fx in c.buses[i].effects() {
                 bus_fx[i].push(prepare_fx(fx, c.sample_rate)?);
             }
-            latencies[CHANNELS + i] = bus_fx[i].iter().map(|p| p.latency()).sum();
+            latencies[channels + i] = bus_fx[i].iter().map(|p| p.latency()).sum();
         }
         Ok(Self {
             controls,
-            channel: std::array::from_fn(|_| vec![vec![0.0; MAX_FRAMES]; 2]),
-            buses: std::array::from_fn(|_| vec![vec![0.0; MAX_FRAMES]; 2]),
+            channel: (0..channels)
+                .map(|_| vec![vec![0.0; MAX_FRAMES]; 2])
+                .collect(),
+            buses: (0..buses).map(|_| vec![vec![0.0; MAX_FRAMES]; 2]).collect(),
+            channel_eq: c
+                .channels
+                .iter()
+                .map(|ch| crate::eq::Processor::new(ch.eq, c.sample_rate as f32))
+                .collect(),
+            bus_eq: c
+                .buses
+                .iter()
+                .map(|b| crate::eq::Processor::new(b.eq, c.sample_rate as f32))
+                .collect(),
             channel_fx,
             bus_fx,
-            routes: std::array::from_fn(|i| c.buses[i].output),
-            previous: [0.0; CHANNELS],
-            previous_sends: [[0.0; AUXES]; CHANNELS],
-            previous_bus: [0.0; BUSES],
+            routes: c.buses.iter().map(|b| b.output).collect(),
+            previous: vec![0.0; channels],
+            previous_sends: vec![vec![0.0; buses - 1]; channels],
+            previous_bus: vec![0.0; buses],
             latencies,
-            generators: std::array::from_fn(crate::generator::Generator::new),
-            generator_modes: [Signal::White; CHANNELS],
-            generator_blend: [0.0; CHANNELS],
-            generator_level: [0.0; CHANNELS],
+            generators: (0..channels)
+                .map(|i| {
+                    std::array::from_fn(|side| {
+                        crate::generator::Generator::new(i + side * MAX_CHANNELS)
+                    })
+                })
+                .collect(),
+            generator_modes: vec![Signal::White; channels],
+            generator_blend: vec![0.0; channels],
+            generator_level: vec![0.0; channels],
             rate: c.sample_rate as f32,
+            inputs: c.inputs as usize,
+            previous_mono: c
+                .channels
+                .iter()
+                .map(|ch| f32::from(ch.format == Format::Mono))
+                .collect(),
+            previous_bus_mono: c
+                .buses
+                .iter()
+                .map(|b| f32::from(b.format == Format::Mono))
+                .collect(),
+            bus_mono: vec![0.0; buses],
         })
     }
-    /// Interleaved eight-channel input; interleaved physical output.
+    /// Request a one-block fade only for nodes that are being removed.
+    pub fn fade_removed(&self, next: &Self) {
+        for i in next.channel.len()..self.channel.len() {
+            self.controls.mute[i].store(true, Relaxed);
+        }
+        for b in next.buses.len()..self.buses.len() {
+            self.controls.bus_mute[b].store(true, Relaxed);
+        }
+    }
+    /// Audio-thread handover: swaps ownership, never allocates, destroys or prepares plugins.
+    pub fn inherit(&mut self, old: &mut Self) {
+        self.controls
+            .emergency
+            .store(old.controls.emergency.load(Relaxed), Relaxed);
+        self.controls
+            .resume_fade
+            .store(old.controls.resume_fade.load(Relaxed), Relaxed);
+        self.controls
+            .xruns
+            .store(old.controls.xruns.load(Relaxed), Relaxed);
+        self.controls
+            .clipped
+            .store(old.controls.clipped.load(Relaxed), Relaxed);
+        for i in 0..self.channel.len().min(old.channel.len()) {
+            self.controls.channel_meters[i].inherit(&old.controls.channel_meters[i]);
+            std::mem::swap(&mut self.channel_eq[i], &mut old.channel_eq[i]);
+            std::mem::swap(&mut self.channel_fx[i], &mut old.channel_fx[i]);
+            std::mem::swap(&mut self.generators[i], &mut old.generators[i]);
+            self.previous[i] = old.previous[i];
+            self.previous_mono[i] = old.previous_mono[i];
+            self.generator_modes[i] = old.generator_modes[i];
+            self.generator_blend[i] = old.generator_blend[i];
+            self.generator_level[i] = old.generator_level[i];
+            for a in 0..self.buses.len().min(old.buses.len()) - 1 {
+                self.previous_sends[i][a] = old.previous_sends[i][a];
+            }
+        }
+        for b in 0..self.buses.len().min(old.buses.len()) {
+            self.controls.bus_meters[b].inherit(&old.controls.bus_meters[b]);
+            self.controls.meters[b].store(old.controls.meters[b].load(Relaxed), Relaxed);
+            std::mem::swap(&mut self.bus_eq[b], &mut old.bus_eq[b]);
+            std::mem::swap(&mut self.bus_fx[b], &mut old.bus_fx[b]);
+            self.previous_bus[b] = old.previous_bus[b];
+            self.previous_bus_mono[b] = old.previous_bus_mono[b];
+        }
+    }
+    /// Interleaved physical inputs (independent of strip count); interleaved physical outputs.
     /// No allocation or locks in our routing code. Effects are third-party code.
     pub fn process(
         &mut self,
@@ -217,7 +378,9 @@ impl Mixer {
         outputs: usize,
     ) -> bool {
         output.fill(0.0);
-        if frames > MAX_FRAMES || input.len() < frames * CHANNELS || output.len() < frames * outputs
+        if frames > MAX_FRAMES
+            || input.len() < frames * self.inputs
+            || output.len() < frames * outputs
         {
             return false;
         }
@@ -226,7 +389,12 @@ impl Mixer {
                 c[..frames].fill(0.0);
             }
         }
-        if self.controls.emergency.load(Relaxed) || self.controls.failed.load(Relaxed) {
+        if self
+            .controls
+            .emergency
+            .load(std::sync::atomic::Ordering::Acquire)
+            || self.controls.failed.load(Relaxed)
+        {
             for m in self
                 .controls
                 .channel_meters
@@ -237,8 +405,26 @@ impl Mixer {
             }
             return true;
         }
-        for i in 0..CHANNELS {
+        if self.controls.resume_fade.swap(false, Relaxed) {
+            self.previous.fill(0.0);
+            self.previous_bus.fill(0.0);
+            for sends in &mut self.previous_sends {
+                sends.fill(0.0);
+            }
+        }
+        for b in 0..self.buses.len() {
+            self.bus_mono[b] = if self.controls.bus_stereo[b].load(Relaxed) {
+                0.0
+            } else {
+                1.0
+            };
+        }
+        for i in 0..self.channel.len() {
             let ch = &mut self.channel[i];
+            let route = self.controls.input_route[i].load(Relaxed);
+            let left_input = (route & 255) as usize;
+            let right_input = ((route >> 8) & 255) as usize;
+            let mono = if route & (1 << 16) == 0 { 1.0 } else { 0.0 };
             let requested = match self.controls.generator[i].load(Relaxed) {
                 1 => Signal::White,
                 2 => Signal::Pink,
@@ -252,25 +438,48 @@ impl Mixer {
             let noise_gain = f32::from_bits(self.controls.generator_gain[i].load(Relaxed));
             let frequency = f32::from_bits(self.controls.frequency[i].load(Relaxed));
             for f in 0..frames {
-                let dry = input[f * CHANNELS + i];
-                let dry = if dry.is_finite() { dry } else { 0.0 };
+                let input_at = |index: usize| {
+                    let v = if index == 0 {
+                        0.0
+                    } else {
+                        input[f * self.inputs + index - 1]
+                    };
+                    if v.is_finite() { v } else { 0.0 }
+                };
                 let mix = ramp(self.generator_blend[i], blend, f, frames);
-                let generated = if mix > 0.0 {
-                    self.generators[i].next(self.generator_modes[i], frequency, self.rate)
+                let generated_left = if mix > 0.0 {
+                    self.generators[i][0].next(self.generator_modes[i], frequency, self.rate)
                 } else {
                     0.0
                 };
-                let v = dry * (1.0 - mix)
-                    + generated * ramp(self.generator_level[i], noise_gain, f, frames) * mix;
-                ch[0][f] = if v.is_finite() { v } else { 0.0 };
-                ch[1][f] = ch[0][f];
+                let generated_right = if mix > 0.0 && (mono < 1.0 || self.previous_mono[i] < 1.0) {
+                    self.generators[i][1].next(self.generator_modes[i], frequency, self.rate)
+                } else {
+                    generated_left
+                };
+                let level = ramp(self.generator_level[i], noise_gain, f, frames) * mix;
+                let left = input_at(left_input) * (1.0 - mix) + generated_left * level;
+                let right = input_at(right_input) * (1.0 - mix) + generated_right * level;
+                let mono_mix = ramp(self.previous_mono[i], mono, f, frames);
+                ch[0][f] = left;
+                ch[1][f] = right + (left - right) * mono_mix;
             }
             self.generator_blend[i] = blend;
             self.generator_level[i] = noise_gain;
+            self.channel_eq[i].process(ch, frames, &self.controls.eq[i], self.rate);
             for (slot, p) in self.channel_fx[i].iter_mut().enumerate() {
                 if !self.controls.bypass[i][slot].load(Relaxed) {
                     p.process(ch, frames);
                 }
+            }
+            // Plugins remain prepared for two lanes. Mono folds their outputs, stereo preserves L/R.
+            for f in 0..frames {
+                let left = if ch[0][f].is_finite() { ch[0][f] } else { 0.0 };
+                let right = if ch[1][f].is_finite() { ch[1][f] } else { 0.0 };
+                let folded = (left + right) * 0.5;
+                let w = ramp(self.previous_mono[i], mono, f, frames);
+                ch[0][f] = left + (folded - left) * w;
+                ch[1][f] = right + (folded - right) * w;
             }
             let target = if self.controls.mute[i].load(Relaxed) {
                 0.0
@@ -305,7 +514,7 @@ impl Mixer {
                 }
             }
             self.controls.channel_meters[i].record(channel_peak, channel_energy, frames, self.rate);
-            for a in 0..AUXES {
+            for a in 0..self.buses.len() - 1 {
                 let send = if self.controls.mute[i].load(Relaxed) {
                     0.0
                 } else {
@@ -319,17 +528,31 @@ impl Mixer {
                         } else {
                             ramp(self.previous[i], target, f, frames)
                         };
-                    self.buses[a + 1][0][f] += ch[0][f] * g * left;
-                    self.buses[a + 1][1][f] += ch[1][f] * g * right;
+                    let w = ramp(
+                        self.previous_bus_mono[a + 1],
+                        self.bus_mono[a + 1],
+                        f,
+                        frames,
+                    );
+                    let folded = (ch[0][f] + ch[1][f]) * 0.5;
+                    self.buses[a + 1][0][f] += (ch[0][f] * left * (1.0 - w) + folded * w) * g;
+                    self.buses[a + 1][1][f] += (ch[1][f] * right * (1.0 - w) + folded * w) * g;
                 }
                 self.previous_sends[i][a] = send;
             }
             self.previous[i] = target;
+            self.previous_mono[i] = mono;
         }
-        for b in 0..BUSES {
+        for b in 0..self.buses.len() {
             let bus = &mut self.buses[b];
+            self.bus_eq[b].process(
+                bus,
+                frames,
+                &self.controls.eq[self.channel.len() + b],
+                self.rate,
+            );
             for (slot, p) in self.bus_fx[b].iter_mut().enumerate() {
-                if !self.controls.bypass[CHANNELS + b][slot].load(Relaxed) {
+                if !self.controls.bypass[self.channel.len() + b][slot].load(Relaxed) {
                     p.process(bus, frames);
                 }
             }
@@ -344,6 +567,20 @@ impl Mixer {
             let mut stereo_energy = [0.0f64; 2];
             for f in 0..frames {
                 let g = ramp(self.previous_bus[b], target, f, frames);
+                let w = ramp(self.previous_bus_mono[b], self.bus_mono[b], f, frames);
+                let left = if bus[0][f].is_finite() {
+                    bus[0][f]
+                } else {
+                    0.0
+                };
+                let right = if bus[1][f].is_finite() {
+                    bus[1][f]
+                } else {
+                    0.0
+                };
+                let folded = (left + right) * 0.5;
+                bus[0][f] = left + (folded - left) * w;
+                bus[1][f] = right + (folded - right) * w;
                 for (c, channel) in bus.iter_mut().enumerate() {
                     let sample = channel[f] * g;
                     let sample = if sample.is_finite() { sample } else { 0.0 };
@@ -354,8 +591,11 @@ impl Mixer {
                     clipped |= sample.abs() > 1.0;
                     channel[f] = sample.clamp(-1.0, 1.0);
                     if let Some(pair) = self.routes[b] {
-                        if pair + c < outputs {
-                            output[f * outputs + pair + c] = channel[f];
+                        if pair + c < outputs
+                            && (c == 0 || self.bus_mono[b] < 1.0 || self.previous_bus_mono[b] < 1.0)
+                        {
+                            output[f * outputs + pair + c] =
+                                channel[f] * if c == 0 { 1.0 } else { 1.0 - w };
                         }
                     }
                 }
@@ -366,6 +606,7 @@ impl Mixer {
             self.controls.meters[b].fetch_max(peak.to_bits(), Relaxed);
             self.controls.bus_meters[b].record(stereo_peak, stereo_energy, frames, self.rate);
             self.previous_bus[b] = target;
+            self.previous_bus_mono[b] = self.bus_mono[b];
         }
         true
     }
@@ -384,14 +625,83 @@ mod tests {
         }
         c.channels[0].mute = false;
         c.channels[0].gain_db = -6.0206;
-        c.channels[0].sends_db = [0.0, -6.0206, -90.0, -90.0];
-        c.channels[0].pre = [true, false, true, true];
+        c.channels[0].sends_db = vec![0.0, -6.0206, -90.0, -90.0];
+        c.channels[0].pre = vec![true, false, true, true];
         for (i, b) in c.buses.iter_mut().enumerate() {
             b.gain_db = 0.0;
             b.output = Some(i * 2);
         }
         let controls = Controls::new(&c);
         (c, controls)
+    }
+    #[test]
+    fn real_stereo_inputs_and_mono_auxes_can_switch_format_live() {
+        let (mut c, ctl) = setup();
+        c.channels.truncate(1);
+        c.buses.truncate(3);
+        c.channels[0].sends_db = vec![0.0; 2];
+        c.channels[0].pre = vec![true; 2];
+        c.channels[0].gain_db = 0.0;
+        c.channels[0].format = Format::Stereo;
+        c.channels[0].input = Some(0);
+        c.channels[0].input_right = Some(1);
+        c.buses[1].format = Format::Mono;
+        c.buses[2].format = Format::Stereo;
+        // Sizes changed, so use a graph-sized control set.
+        drop(ctl);
+        let ctl = Controls::new(&c);
+        let mut m = Mixer::new(&c, ctl.clone()).unwrap();
+        let mut input = vec![0.0; 8 * 480];
+        let mut output = vec![0.0; 10 * 480];
+        for f in 0..480 {
+            input[f * 8] = 0.2;
+            input[f * 8 + 1] = 0.6;
+        }
+        for _ in 0..3 {
+            m.process(&input, &mut output, 480, 10);
+        }
+        assert!((output[0] - 0.2).abs() < 0.0001 && (output[1] - 0.6).abs() < 0.0001);
+        assert!(
+            (output[2] - 0.4).abs() < 0.0001 && output[3] == 0.0,
+            "mono aux folds L/R and uses only one output"
+        );
+        assert!((output[4] - 0.2).abs() < 0.0001 && (output[5] - 0.6).abs() < 0.0001);
+        c.channels[0].format = Format::Mono;
+        c.buses[1].format = Format::Stereo;
+        ctl.update(&c);
+        for _ in 0..3 {
+            m.process(&input, &mut output, 480, 10);
+        }
+        assert!((output[0] - 0.2).abs() < 0.0001 && (output[1] - 0.2).abs() < 0.0001);
+        assert!((output[2] - 0.2).abs() < 0.0001 && (output[3] - 0.2).abs() < 0.0001);
+        c.buses[1].format = Format::Mono;
+        c.buses[1].output = Some(63);
+        c.validate().unwrap();
+        c.buses[1].format = Format::Stereo;
+        assert!(c.validate().is_err());
+    }
+    #[test]
+    fn legacy_schema_preserves_stereo_auxes_and_schema_two_rejects_inconsistent_sends() {
+        let mut v = serde_json::to_value(Config::default()).unwrap();
+        v["version"] = serde_json::json!(1);
+        for ch in v["channels"].as_array_mut().unwrap() {
+            for key in ["format", "input", "input_right", "eq"] {
+                ch.as_object_mut().unwrap().remove(key);
+            }
+        }
+        for b in v["buses"].as_array_mut().unwrap() {
+            b.as_object_mut().unwrap().remove("format");
+            b.as_object_mut().unwrap().remove("eq");
+        }
+        let mut c: Config = serde_json::from_value(v).unwrap();
+        c.normalise();
+        c.validate().unwrap();
+        assert_eq!(c.version, 2);
+        assert!(c.buses.iter().all(|b| b.format == Format::Stereo));
+        assert_eq!(c.channels[7].input, Some(7));
+        assert!(c.channels[7].input_right.is_none());
+        c.channels[0].sends_db.pop();
+        assert!(c.validate().is_err());
     }
     #[test]
     fn rms_integrates_power_in_audio_time_and_is_independent_of_block_size() {
@@ -409,9 +719,9 @@ mod tests {
     #[test]
     fn marked_fader_gains_and_output_meters_match_delivered_audio() {
         let (mut c, ctl) = setup();
-        let mut input = vec![0.0; CHANNELS * 480];
+        let mut input = vec![0.0; DEFAULT_CHANNELS * 480];
         for f in 0..480 {
-            input[f * CHANNELS] = 0.1;
+            input[f * DEFAULT_CHANNELS] = 0.1;
         }
         let mut output = vec![0.0; 480 * 10];
         for db in [0.0, -6.0, -12.0, -24.0] {
@@ -550,6 +860,27 @@ mod tests {
             (out[0] - 0.125).abs() < 0.0001,
             "live bypass skips only its own slot"
         );
+        let old_ptr = &*m.channel_fx[0][0] as *const dyn Plugin as *const ();
+        let mut next = c.clone();
+        next.channels.push(c.channels[1].clone());
+        let mut replacement =
+            Mixer::reconfigure(&next, Controls::new(&next), &c, &m.latencies).unwrap();
+        assert!(
+            replacement.channel_fx[0].is_empty(),
+            "existing VST must not be instantiated again"
+        );
+        replacement.inherit(&mut m);
+        assert_eq!(
+            old_ptr,
+            &*replacement.channel_fx[0][0] as *const dyn Plugin as *const ()
+        );
+        assert_eq!(
+            replacement.latencies[next.channels.len()],
+            3,
+            "master latency uses dynamic channel offset"
+        );
+        replacement.process(&input, &mut out, 64, 10);
+        assert!((out[0] - 0.125).abs() < 0.0001);
     }
     #[test]
     fn generator_is_per_channel_and_replaces_hardware_before_sends() {
@@ -565,13 +896,13 @@ mod tests {
         c.channels[3].sends_db[0] = 0.0;
         ctl.update(&c);
         let mut m = Mixer::new(&c, ctl.clone()).unwrap();
-        let input = vec![0.9; CHANNELS * 1024];
+        let input = vec![0.9; DEFAULT_CHANNELS * 1024];
         let mut output = vec![0.0; 10 * 1024];
         m.process(&input, &mut output, 1024, 10);
         m.process(&input, &mut output, 1024, 10);
         assert!(output.iter().any(|v| v.abs() > 0.001));
         assert!(output.iter().all(|v| v.abs() <= gain(-24.0) + 0.00001));
-        for i in 0..CHANNELS {
+        for i in 0..DEFAULT_CHANNELS {
             let (p, r) = ctl.channel_meters[i].read();
             if i == 3 {
                 assert!(p[0] > 0.01 && r[0] > 0.01);
@@ -596,7 +927,7 @@ mod tests {
         };
         ctl.update(&c);
         let mut m = Mixer::new(&c, ctl.clone()).unwrap();
-        let input = vec![0.0; CHANNELS * 480];
+        let input = vec![0.0; DEFAULT_CHANNELS * 480];
         let mut output = vec![0.0; 10 * 480];
         for _ in 0..300 {
             m.process(&input, &mut output, 480, 10);
@@ -616,8 +947,46 @@ mod tests {
         m.copy_monitor(&mut pc, 480, 0);
         assert!(pc.iter().all(|v| *v == 0.0));
         assert_eq!(ctl.channel_meters[0].read().1, [0.0; 2]);
+        ctl.resume_fade.store(true, Relaxed);
+        ctl.emergency
+            .store(false, std::sync::atomic::Ordering::Release);
+        assert!(m.process(&input, &mut output, 480, 10));
+        assert!(output.iter().any(|v| v.abs() > 0.05));
+        m.copy_monitor(&mut pc, 480, 0);
+        assert!(pc.iter().any(|v| v.abs() > 0.05));
         assert!(!m.copy_monitor(&mut pc, 480, 99));
         assert!(pc.iter().all(|v| *v == 0.0));
+    }
+    #[test]
+    fn native_eq_on_channel_master_and_auxiliary_changes_delivered_levels() {
+        let (mut c, ctl) = setup();
+        c.channels[0].gain_db = 0.0;
+        c.channels[0].generator = Generator {
+            signal: Signal::Sine,
+            level_db: -30.0,
+            frequency: 1000.0,
+        };
+        c.channels[0].eq.bands[4].gain_db = 6.0;
+        c.buses[0].eq.bands[4].gain_db = 6.0;
+        c.buses[1].eq.bands[4].gain_db = -6.0;
+        ctl.update(&c);
+        let mut m = Mixer::new(&c, ctl).unwrap();
+        let input = vec![0.0; 480 * c.inputs as usize];
+        let mut output = vec![0.0; 480 * 10];
+        for _ in 0..100 {
+            assert!(m.process(&input, &mut output, 480, 10));
+        }
+        let rms = |lane: usize| {
+            (output
+                .chunks_exact(10)
+                .map(|f| f64::from(f[lane]).powi(2))
+                .sum::<f64>()
+                / 480.0)
+                .sqrt()
+        };
+        let reference = 10.0f64.powf(-30.0 / 20.0) / 2.0f64.sqrt();
+        assert!((20.0 * (rms(0) / reference).log10() - 12.0).abs() < 0.02);
+        assert!((20.0 * (rms(2) / reference).log10()).abs() < 0.02);
     }
     #[test]
     fn old_scenes_migrate_and_reject_a_fifth_insert() {

@@ -225,6 +225,92 @@ const path = require("node:path");
       const s = await (await fetch("/api/status")).json();
       return s.rms_stereo.every((p) => p[0] === 0 && p[1] === 0);
     });
+    await page.waitForFunction(
+      () => document.getElementById("panic").textContent === "REACTIVAR AUDIO",
+    );
+    await page.click("#panic");
+    await page.waitForFunction(async () => {
+      const s = await (await fetch("/api/status")).json();
+      return s.mode === "DEMO" && !s.emergency && s.meters_stereo[0][0] > 0;
+    });
+    await page.click("#main-layer");
+    assert.equal(await page.locator("#fader-flip").inputValue(), "-1");
+    const pan = page.getByRole("slider", {
+      name: "Pan Entrada 1",
+      exact: true,
+    });
+    await pan.evaluate((e) => {
+      e.value = ".75";
+      e.dispatchEvent(new Event("input"));
+    });
+    await page.waitForFunction(
+      async () =>
+        (await (await fetch("/api/config")).json()).channels[0].pan === 0.75,
+    );
+    await pan.dblclick();
+    await page.waitForFunction(
+      async () =>
+        (await (await fetch("/api/config")).json()).channels[0].pan === 0,
+    );
+    // EQ is native, all eight bands and types are editable without stopping.
+    await page
+      .locator("#mixer")
+      .getByRole("button", { name: "EQ canal 1", exact: true })
+      .click();
+    assert.equal(await page.locator("#eq-bands .eq-band-row").count(), 9);
+    await page.getByLabel("EQ banda 5 gain_db", { exact: true }).fill("6");
+    await page
+      .getByLabel("EQ banda 5 gain_db", { exact: true })
+      .dispatchEvent("change");
+    await page.waitForFunction(
+      async () =>
+        (await (await fetch("/api/config")).json()).channels[0].eq.bands[4]
+          .gain_db === 6,
+    );
+    await page.locator('[data-close="eq-dialog"]').click();
+    // Grow and shrink while DEMO and the existing channel signal continue.
+    async function resize(channels, auxes) {
+      await page.click("#counts");
+      await page.fill("#channel-count", String(channels));
+      await page.fill("#aux-count", String(auxes));
+      await page.click("#apply-counts");
+      await page.waitForFunction(
+        ({ channels, auxes }) =>
+          document.querySelectorAll("#mixer .strip").length === channels &&
+          document.querySelectorAll("#buses .strip").length === auxes + 1,
+        { channels, auxes },
+      );
+      await page.waitForFunction(async () => {
+        const s = await (await fetch("/api/status")).json();
+        return s.mode === "DEMO" && s.meters_stereo[0][0] > 0;
+      });
+    }
+    await resize(16, 9);
+    await page
+      .getByRole("button", { name: "Formato canal 1", exact: true })
+      .click();
+    await page.waitForFunction(
+      async () =>
+        (await (await fetch("/api/config")).json()).channels[0].format ===
+        "stereo",
+    );
+    await page
+      .getByRole("button", { name: "Formato bus 2", exact: true })
+      .click();
+    await page.waitForFunction(
+      async () =>
+        (await (await fetch("/api/config")).json()).buses[1].format ===
+        "stereo",
+    );
+    await page.selectOption("#fader-flip", "8");
+    await page.click("#main-layer");
+    assert.equal(await page.locator("#fader-flip").inputValue(), "-1");
+    await resize(1, 0);
+    assert.equal(await page.locator("#pc-monitor").inputValue(), "0");
+    await resize(8, 4);
+    // Restore the second-channel test generator removed by shrinking.
+    await page.locator("#mixer .strip").nth(1).locator(".strip-header").click();
+    await page.selectOption("#generator-source", "pink");
     await page.click("#stop");
     await page.waitForFunction(() =>
       document.getElementById("status").textContent.startsWith("DETENIDO"),
@@ -277,6 +363,25 @@ const path = require("node:path");
         2,
       );
     }
+    await page
+      .locator("#mixer .strip")
+      .first()
+      .locator(".insert-slot")
+      .nth(2)
+      .click();
+    await page.waitForFunction(
+      () => document.getElementById("builtin-fx").options.length === 22,
+    );
+    await page.selectOption("#builtin-fx", "native/mda/dynamics");
+    await page.waitForFunction(
+      () => document.getElementById("fx-title").textContent === "MDA Dynamics",
+    );
+    await page.click("#applyfx");
+    await page.waitForFunction(
+      async () =>
+        (await (await fetch("/api/config")).json()).channels[0].inserts
+          .length === 3,
+    );
     await page.click("#demo");
     await page.waitForFunction(
       () => document.getElementById("status").textContent === "DEMO",
@@ -297,7 +402,7 @@ const path = require("node:path");
     await page.click("#save");
     const download = await downloadPromise;
     const scene = JSON.parse(await fs.readFile(await download.path(), "utf8"));
-    assert.equal(scene.channels[0].sends_db[0], -12);
+    assert.equal(scene.channels[0].sends_db[0], -90);
     assert.equal(scene.channels[1].generator.signal, "pink");
     const unauthorised = await page.request.post(url + "/api/panic", {
       data: {},
@@ -308,7 +413,7 @@ const path = require("node:path");
     await page.screenshot({
       path:
         process.env.MONITOR_SCREENSHOT ||
-        "/workspace/scratch/monitor-mix-0.4.png",
+        "/workspace/scratch/monitor-mix-0.5.png",
       fullPage: true,
     });
     for (const viewport of [
@@ -339,15 +444,22 @@ const path = require("node:path");
     );
     // Loading a 0.1 scene must migrate its insert and default its new generator to off.
     const legacy = structuredClone(scene);
+    legacy.version = 1;
     delete legacy.pc_monitor;
     legacy.channels.forEach((c) => {
       c.fx = c.inserts[0] || null;
       delete c.inserts;
       delete c.generator;
+      delete c.format;
+      delete c.input;
+      delete c.input_right;
+      delete c.eq;
     });
     legacy.buses.forEach((b) => {
       b.fx = b.inserts[0] || null;
       delete b.inserts;
+      delete b.format;
+      delete b.eq;
     });
     await page.locator("#scene").setInputFiles({
       name: "legacy-0.1.json",
@@ -360,7 +472,7 @@ const path = require("node:path");
     });
     assert.deepEqual(errors, []);
     console.log(
-      "PASS: aligned console modules and meter bridge, full/small layouts, panel toggles, exact printed and numeric faders, installed VST3 discovery, compact DAW strips, 52 insert slots, independent generators, stereo meters, monitor sends, live VST3 bypass, PC audition selection, emergency silence, legacy scenes, export and responsive layout",
+      "PASS: aligned console modules and meter bridge, full/small layouts, panel toggles, exact printed and numeric faders, installed VST3 discovery, compact DAW strips, 52 insert slots, independent generators, stereo meters, monitor sends, live VST3 bypass, PC audition selection, emergency silence and resume, live graph growth/shrink, mono/stereo, pan reset, MAIN return, native EQ and insert selection, legacy scenes, export and responsive layout",
     );
   } finally {
     if (browser) await browser.close();

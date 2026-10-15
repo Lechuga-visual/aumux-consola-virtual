@@ -6,6 +6,8 @@ export PATH="/workspace/.cargo/bin:$PATH"
 export CXXFLAGS=-I/workspace/.audio-obs-sysroot/usr/include
 export RUSTFLAGS='-L native=/workspace/.audio-obs-sysroot/usr/lib/x86_64-linux-gnu'
 mkdir -p /workspace/scratch/obs-build
+g++ -std=c++17 -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer desktop/native/effects.cpp desktop/native/effects-test.cpp -o /workspace/scratch/native-effects-test
+/workspace/scratch/native-effects-test
 cargo +1.95.0 metadata --manifest-path desktop/Cargo.toml --locked --format-version 1 > /workspace/scratch/monitor-cargo-metadata.json
 fixture_manifest=$(python3 - <<'PY'
 import json

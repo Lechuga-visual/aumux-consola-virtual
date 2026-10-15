@@ -5,9 +5,11 @@ fn main() {
         .cpp(true)
         .std("c++17")
         .warnings(false)
+        .include("native/asio_abi")
         .include("vendor/rtaudio")
         .include("vendor/rtaudio/include")
         .file("native/audio.cpp")
+        .file("native/effects.cpp")
         .file("vendor/rtaudio/RtAudio.cpp");
     if windows {
         if std::env::var("CARGO_CFG_TARGET_ENV").unwrap() == "msvc" {
@@ -18,9 +20,7 @@ fn main() {
         }
         build.define("__WINDOWS_ASIO__", None);
         build.define("__WINDOWS_WASAPI__", None);
-        for name in ["asio", "asiodrivers", "asiolist", "iasiothiscallresolver"] {
-            build.file(format!("vendor/rtaudio/include/{name}.cpp"));
-        }
+        build.file("native/asio_abi.cpp");
     } else {
         build.define("__LINUX_ALSA__", None);
     }
@@ -43,5 +43,5 @@ fn main() {
         println!("cargo:rustc-link-lib=pthread");
     }
     println!("cargo:rerun-if-changed=native");
-    println!("cargo:rerun-if-changed=vendor/rtaudio");
+    println!("cargo:rerun-if-changed=vendor");
 }
