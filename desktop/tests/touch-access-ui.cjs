@@ -98,7 +98,7 @@ const assert = require("node:assert/strict");
       "127.0.0.1",
     );
     await operator.screenshot({
-      path: "docs/aumux-0.11.1-preferences-network.png",
+      path: "docs/aumux-0.11.2-preferences-network.png",
     });
     await operator.locator("#pref-tab-console").click();
     assert(await operator.locator("#pref-console").isVisible());
@@ -120,7 +120,7 @@ const assert = require("node:assert/strict");
       document.querySelector("#mix-generic-url").value.startsWith("http"),
     );
     await operator.screenshot({
-      path: "docs/aumux-0.11.1-preferences-aux.png",
+      path: "docs/aumux-0.11.2-preferences-aux.png",
     });
     const shared = await operator.locator("#mix-generic-url").inputValue();
     assert(shared.endsWith("/") && !shared.includes("key="));
@@ -195,6 +195,61 @@ const assert = require("node:assert/strict");
         return e && getComputedStyle(e).touchAction === "none";
       }, selector);
     }
+    // Empty-track taps/swipes must neither jump nor drag levels. Use real
+    // touchscreen input so browser hit testing and horizontal panning are tested.
+    async function trackTouch(page, selector, scrollSelector) {
+      const before = await page
+        .locator(selector)
+        .evaluateAll((nodes) => nodes.map((e) => e.value));
+      const cdp = await page.context().newCDPSession(page);
+      async function gesture(locator, dx = 0, dy = 0) {
+        const r = await locator.boundingBox();
+        const ratio = await locator.evaluate(
+          (e) =>
+            (Number(e.value) - Number(e.min)) / (Number(e.max) - Number(e.min)),
+        );
+        // Touch the opposite end from the cap, with enough room for a swipe.
+        const x = r.x + r.width / 2;
+        const y = r.y + r.height * (ratio > 0.5 ? 0.8 : 0.2);
+        await cdp.send("Input.dispatchTouchEvent", {
+          type: "touchStart",
+          touchPoints: [{ x, y }],
+        });
+        for (let i = 1; i <= 8; i++) {
+          await cdp.send("Input.dispatchTouchEvent", {
+            type: "touchMove",
+            touchPoints: [{ x: x + (dx * i) / 8, y: y + (dy * i) / 8 }],
+          });
+          await page.waitForTimeout(15);
+        }
+        await cdp.send("Input.dispatchTouchEvent", {
+          type: "touchEnd",
+          touchPoints: [],
+        });
+      }
+      await gesture(page.locator(selector).first());
+      await gesture(page.locator(selector).first(), 0, 45);
+      // Third strip is far enough from the left edge for a horizontal swipe.
+      await gesture(page.locator(selector).nth(2), -110);
+      await page.waitForFunction(
+        (s) => document.querySelector(s).scrollLeft > 30,
+        scrollSelector,
+      );
+      await page.waitForTimeout(350);
+      assert.deepEqual(
+        await page
+          .locator(selector)
+          .evaluateAll((nodes) => nodes.map((e) => e.value)),
+        before,
+        "track taps, vertical drags and horizontal swipes leave every fader unchanged",
+      );
+      assert.equal(await page.evaluate(() => scrollY), 0);
+      await cdp.detach();
+      await page.locator(scrollSelector).evaluate((e) => {
+        e.scrollLeft = 0;
+      });
+    }
+    await trackTouch(mix, ".fader", "main");
     await dragTouch(mix, ".fader", -90);
     await mix.waitForFunction(() => !busy && state.channels[0].level_db > -89);
     const afterMix = await operator.evaluate(
@@ -212,7 +267,7 @@ const assert = require("node:assert/strict");
     await mix.waitForFunction(() =>
       document.querySelector("#remote-latency").textContent.includes("RTT"),
     );
-    await mix.screenshot({ path: "docs/aumux-0.11.1-mobile-mix.png" });
+    await mix.screenshot({ path: "docs/aumux-0.11.2-mobile-mix.png" });
     await mix.locator("footer summary").click();
     // Password replaces open access; the page must request authentication, not silently keep controls.
     await operator.evaluate(async () => {
@@ -287,7 +342,7 @@ const assert = require("node:assert/strict");
       menuPlacement.panel.right <= 1100 && menuPlacement.panel.bottom <= 820,
       "touch menu fits viewport",
     );
-    await full.screenshot({ path: "docs/aumux-0.11.1-touch-tools.png" });
+    await full.screenshot({ path: "docs/aumux-0.11.2-touch-tools.png" });
     await full.locator("#tools-menu summary").click();
     let configPosts = 0;
     await full.route("**/api/config", async (route) => {
@@ -311,6 +366,7 @@ const assert = require("node:assert/strict");
       "drag changes coalesced instead of accumulating stale requests",
     );
     await full.unroute("**/api/config");
+    await trackTouch(full, ".fader input", "#mixer-stage");
     const oldGain = await full.evaluate(() => cfg.channels[0].gain_db);
     await dragTouch(full, "#mixer .fader input", -65);
     await operator.waitForFunction((v) => cfg.channels[0].gain_db > v, oldGain);
@@ -328,7 +384,7 @@ const assert = require("node:assert/strict");
       (await full.locator("#calc-result").innerText()).includes("20.67 ms"),
     );
     assert.equal(await operator.evaluate(() => cfg.buffer), 256);
-    await full.screenshot({ path: "docs/aumux-0.11.1-calculator.png" });
+    await full.screenshot({ path: "docs/aumux-0.11.2-calculator.png" });
     await full.locator("[data-close=calculator-dialog]").click();
     await full.locator("#tools-menu summary").click();
     await full.locator("#open-diagnostics").click();
@@ -343,12 +399,12 @@ const assert = require("node:assert/strict");
         "IEM baterista",
       ),
     );
-    await full.screenshot({ path: "docs/aumux-0.11.1-latency.png" });
+    await full.screenshot({ path: "docs/aumux-0.11.2-latency.png" });
     await full.locator("[data-close=latency-dialog]").click();
     await full.locator("#toggle-inspector").click();
     assert(await full.locator(".sidebar").isVisible());
     await full.locator("#toggle-inspector").click();
-    await full.screenshot({ path: "docs/aumux-0.11.1-main-touch.png" });
+    await full.screenshot({ path: "docs/aumux-0.11.2-main-touch.png" });
     // The local console's explicit Touch switch also works with a mouse-only desktop.
     await operator.locator("#tools-menu summary").click();
     await operator.locator("#touch-mode").selectOption("on");
@@ -357,6 +413,16 @@ const assert = require("node:assert/strict");
         .locator("body")
         .evaluate((e) => e.classList.contains("touch-mode")),
     );
+    await operator.locator("#tools-menu summary").click();
+    await operator.setViewportSize({ width: 1000, height: 980 });
+    await trackTouch(operator, ".fader input", "#mixer-stage");
+    const localGain = await operator.evaluate(() => cfg.channels[0].gain_db);
+    await dragTouch(operator, "#mixer .fader input", -30);
+    assert(
+      await operator.evaluate((v) => cfg.channels[0].gain_db > v, localGain),
+    );
+    await operator.setViewportSize({ width: 1600, height: 980 });
+    await operator.locator("#tools-menu summary").click();
     await operator.locator("#touch-mode").selectOption("off");
     assert(
       !(await operator
@@ -408,7 +474,7 @@ const assert = require("node:assert/strict");
     );
     await listen.waitForTimeout(200);
     await listen.screenshot({
-      path: "docs/aumux-0.11.1-mobile-listen.png",
+      path: "docs/aumux-0.11.2-mobile-listen.png",
     });
     await listen.locator("#stop").click();
     await mix.setViewportSize({ width: 844, height: 390 });
@@ -452,7 +518,7 @@ const assert = require("node:assert/strict");
     await mix.waitForFunction(() => connected);
     assert.deepEqual(errors, []);
     console.log(
-      "PASS: mobile/tablet/desktop layouts, real touch fader drags without vertical page scrolling in both orientations, network adapter selection, generic aux selection and names, password login and HttpOnly roles, full-console sync/control, touch switch/inspector, latency components/calculator and mobile listening",
+      "PASS: mobile/tablet/desktop layouts, cap-only touch faders and empty-track taps/swipes without level changes in local/remote/aux consoles, real cap drags without vertical page scrolling in both orientations, network adapter selection, generic aux selection and names, password login and HttpOnly roles, full-console sync/control, touch switch/inspector, latency components/calculator and mobile listening",
     );
   } finally {
     await browser?.close();

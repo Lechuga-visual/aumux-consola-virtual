@@ -176,7 +176,17 @@ const fs = require("node:fs/promises");
     assert.equal(await operator.evaluate(() => cfg.channels[0].mute), false);
     await a.locator(".controls button").first().click();
     await a.waitForFunction(() => state.channels[0].mute === false && !busy);
-    await a.locator(".fader").first().dblclick();
+    // Reset by double-clicking the cap: the empty track is deliberately inert.
+    const resetFader = a.locator(".fader").first();
+    const capPosition = await resetFader.evaluate((e) => ({
+      x: e.clientWidth / 2,
+      y:
+        15 +
+        (1 -
+          (Number(e.value) - Number(e.min)) / (Number(e.max) - Number(e.min))) *
+          (e.clientHeight - 30),
+    }));
+    await resetFader.dblclick({ position: capPosition });
     await a.waitForFunction(() => state.channels[0].level_db === 0 && !busy);
     await b.locator(".controls button:nth-child(2)").first().click();
     await b.waitForFunction(() => state.channels[0].pre === false && !busy);

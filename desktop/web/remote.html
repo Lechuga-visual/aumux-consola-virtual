@@ -316,14 +316,18 @@
       .fader {
         width: 44px;
         touch-action: none;
+        /* Empty track passes swipes to the channel bank; grab the cap to mix. */
+        pointer-events: none;
       }
       .fader::-webkit-slider-thumb {
         width: 24px;
         height: 30px;
+        pointer-events: auto;
       }
       .fader::-moz-range-thumb {
         width: 24px;
         height: 30px;
+        pointer-events: auto;
       }
       .scale {
         margin-block: 15px;

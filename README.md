@@ -11,10 +11,17 @@ web permite objetivos de búfer de 40/80/120/200 ms (80 ms inicialmente), más e
 su optimización y medición son prioritarias en la
 [hoja de ruta](docs/hoja-de-ruta.md).
 
-**Prueba local:** [descargar Windows x64](dist/AuMux-0.11.1-Windows-x64.zip)
+**Prueba local:** [descargar Windows x64](dist/AuMux-0.11.2-Windows-x64.zip)
 e [instrucciones para Windows](docs/probar-en-windows.md).
 La descarga incluye el ejecutable, el receptor de OBS y el código fuente.
-Su checksum está en [SHA-256](dist/AuMux-0.11.1-Windows-x64.zip.sha256).
+Su checksum está en [SHA-256](dist/AuMux-0.11.2-Windows-x64.zip.sha256).
+
+## Corrección 0.11.2
+
+En modo touch, los faders de consola local y remota solo se mueven al arrastrar
+la perilla. La mezcla de auxiliares usa el mismo gesto. Tocar el recorrido o
+usarlo para desplazarse lateralmente mantiene los niveles.
+Ver [faders touch](docs/interfaz-0.11.2.md).
 
 ## Corrección 0.11.1
 

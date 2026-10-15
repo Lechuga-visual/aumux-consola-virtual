@@ -2791,14 +2791,18 @@ body.touch-mode {
 .touch-mode .fader input {
   width: 44px;
   touch-action: none;
+  /* Let track gestures reach the horizontal mixer; only the cap is draggable. */
+  pointer-events: none;
 }
 .touch-mode .fader input::-webkit-slider-thumb {
   width: 26px;
   height: 26px;
+  pointer-events: auto;
 }
 .touch-mode .fader input::-moz-range-thumb {
   width: 26px;
   height: 26px;
+  pointer-events: auto;
 }
 .touch-mode .fader-section {
   padding-top: 13px;
@@ -2810,6 +2814,7 @@ body.touch-mode {
 }
 .touch-mode .fader-scale {
   font-size: 10px;
+  pointer-events: none;
 }
 .touch-mode .send-grid button {
   min-height: 20px;
