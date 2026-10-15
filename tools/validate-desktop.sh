@@ -51,6 +51,7 @@ if command -v chromium >/dev/null; then
   NODE_PATH=/workspace/scratch/monitor-ui/node_modules node desktop/tests/ui-smoke.cjs
   NODE_PATH=/workspace/scratch/monitor-ui/node_modules node desktop/tests/workspace-smoke.cjs
   NODE_PATH=/workspace/scratch/monitor-ui/node_modules node desktop/tests/remote-ui-smoke.cjs
+  NODE_PATH=/workspace/scratch/monitor-ui/node_modules node desktop/tests/console-network-ui.cjs
   NODE_PATH=/workspace/scratch/monitor-ui/node_modules node desktop/tests/websocket-ui.cjs
   NODE_PATH=/workspace/scratch/monitor-ui/node_modules node desktop/tests/websocket-network-ui.cjs
   NODE_PATH=/workspace/scratch/monitor-ui/node_modules node desktop/tests/touch-access-ui.cjs

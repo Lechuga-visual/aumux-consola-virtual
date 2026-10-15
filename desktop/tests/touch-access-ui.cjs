@@ -98,7 +98,7 @@ const assert = require("node:assert/strict");
       "127.0.0.1",
     );
     await operator.screenshot({
-      path: "docs/aumux-0.11-preferences-network.png",
+      path: "docs/aumux-0.11.1-preferences-network.png",
     });
     await operator.locator("#pref-tab-console").click();
     assert(await operator.locator("#pref-console").isVisible());
@@ -120,7 +120,7 @@ const assert = require("node:assert/strict");
       document.querySelector("#mix-generic-url").value.startsWith("http"),
     );
     await operator.screenshot({
-      path: "docs/aumux-0.11-preferences-aux.png",
+      path: "docs/aumux-0.11.1-preferences-aux.png",
     });
     const shared = await operator.locator("#mix-generic-url").inputValue();
     assert(shared.endsWith("/") && !shared.includes("key="));
@@ -212,7 +212,7 @@ const assert = require("node:assert/strict");
     await mix.waitForFunction(() =>
       document.querySelector("#remote-latency").textContent.includes("RTT"),
     );
-    await mix.screenshot({ path: "docs/aumux-0.11-mobile-mix.png" });
+    await mix.screenshot({ path: "docs/aumux-0.11.1-mobile-mix.png" });
     await mix.locator("footer summary").click();
     // Password replaces open access; the page must request authentication, not silently keep controls.
     await operator.evaluate(async () => {
@@ -287,7 +287,7 @@ const assert = require("node:assert/strict");
       menuPlacement.panel.right <= 1100 && menuPlacement.panel.bottom <= 820,
       "touch menu fits viewport",
     );
-    await full.screenshot({ path: "docs/aumux-0.11-touch-tools.png" });
+    await full.screenshot({ path: "docs/aumux-0.11.1-touch-tools.png" });
     await full.locator("#tools-menu summary").click();
     let configPosts = 0;
     await full.route("**/api/config", async (route) => {
@@ -328,7 +328,7 @@ const assert = require("node:assert/strict");
       (await full.locator("#calc-result").innerText()).includes("20.67 ms"),
     );
     assert.equal(await operator.evaluate(() => cfg.buffer), 256);
-    await full.screenshot({ path: "docs/aumux-0.11-calculator.png" });
+    await full.screenshot({ path: "docs/aumux-0.11.1-calculator.png" });
     await full.locator("[data-close=calculator-dialog]").click();
     await full.locator("#tools-menu summary").click();
     await full.locator("#open-diagnostics").click();
@@ -343,12 +343,12 @@ const assert = require("node:assert/strict");
         "IEM baterista",
       ),
     );
-    await full.screenshot({ path: "docs/aumux-0.11-latency.png" });
+    await full.screenshot({ path: "docs/aumux-0.11.1-latency.png" });
     await full.locator("[data-close=latency-dialog]").click();
     await full.locator("#toggle-inspector").click();
     assert(await full.locator(".sidebar").isVisible());
     await full.locator("#toggle-inspector").click();
-    await full.screenshot({ path: "docs/aumux-0.11-main-touch.png" });
+    await full.screenshot({ path: "docs/aumux-0.11.1-main-touch.png" });
     // The local console's explicit Touch switch also works with a mouse-only desktop.
     await operator.locator("#tools-menu summary").click();
     await operator.locator("#touch-mode").selectOption("on");
@@ -408,7 +408,7 @@ const assert = require("node:assert/strict");
     );
     await listen.waitForTimeout(200);
     await listen.screenshot({
-      path: "docs/aumux-0.11-mobile-listen.png",
+      path: "docs/aumux-0.11.1-mobile-listen.png",
     });
     await listen.locator("#stop").click();
     await mix.setViewportSize({ width: 844, height: 390 });

@@ -1,4 +1,4 @@
-# AuMux 0.11 · prueba local en Windows x64
+# AuMux 0.11.1 · prueba local en Windows x64
 
 Miniapp de mezcla con canales y auxiliares configurables y master estéreo, a 48 kHz. Reutiliza DSP
 y host VST3 de SoundCraft de Artcraft, con una superficie y un ruteo propios.
@@ -6,7 +6,7 @@ Es un prototipo para pruebas; todavía no está validado para una sesión en viv
 
 ## Probar sonido sin ASIO ni interfaz externa
 
-1. Extrae **todo** `AuMux-0.11.0-Windows-x64.zip` y ejecuta `AuMux.exe`.
+1. Extrae **todo** `AuMux-0.11.1-Windows-x64.zip` y ejecuta `AuMux.exe`.
    Cierra la versión anterior antes de abrir esta.
 2. Pulsa **AUDIO PC**. Usa los parlantes/audífonos predeterminados de Windows
    mediante WASAPI, sin controlador ASIO ni dispositivo MOTU.
@@ -32,6 +32,15 @@ a **REACTIVAR AUDIO**: púlsalo para recuperar el sonido sin detener el motor,
 con una entrada gradual de un bloque. **DETENER** libera el dispositivo. Cerrar la consola
 de AuMux no detiene el proceso ni el audio. Usa **Cerrar servicio** desde la bandeja
 y confirma con **Sí** para terminar el motor y los servidores.
+
+## Corrección 0.11.1
+
+La consola completa remota corrige la descarga incompleta de estilos/scripts y
+respuestas HTTP en Windows. Cierra la instancia anterior, extrae todo el ZIP y
+abre `AuMux.exe`. Vuelve a abrir o recargar el enlace `/console/`; la marca debe
+indicar **0.11.1**. No mezcles el EXE nuevo con una copia anterior.
+
+Consulta [la explicación del fallo y las pruebas](interfaz-0.11.1.md).
 
 ## Novedades 0.11
 
@@ -319,7 +328,7 @@ Grabación multipista y OSC/Mackie pendientes.
 
 Si no aparecen **+ Canal**, **+ Aux** y **Canales y auxiliares**, cierra el
 proceso anterior y abre el ejecutable del ZIP nuevo: la marca superior debe
-mostrar **AuMux 0.11**. Se prueba en Windows extrayendo todo el ZIP; no mezcles
+mostrar **AuMux 0.11.1**. Se prueba en Windows extrayendo todo el ZIP; no mezcles
 archivos de varias versiones.
 
 Las novedades de dinámica, superficie adaptativa y escucha LAN se describen en
