@@ -71,7 +71,10 @@ L/R. El audio se toma post-fader, mute y recorte de salida, a 48 kHz, estéreo
 float32 sin compresión: aproximadamente 3,1 Mbit/s por oyente, más HTTP/TCP.
 La página programa un búfer de unos 120 ms; se suma el retardo de red,
 navegador y dispositivo. El retardo extremo a extremo no está calibrado y esta
-escucha no sustituye las salidas locales de baja latencia.
+escucha no sustituye las salidas locales de baja latencia. Revisar este
+transporte para monitoreo en tiempo real es una prioridad de la
+[hoja de ruta](hoja-de-ruta.md); el búfer actual no es el objetivo de latencia
+del proyecto.
 
 El servidor LAN solo publica página, nombres y audio. La API de mezcla sigue
 en loopback con su autorización propia. Este enlace aún no permite cambiar

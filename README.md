@@ -3,6 +3,12 @@
 Miniapp Windows x64 para mezclar entradas ASIO o probar generadores por la
 salida normal del PC, crear mezclas auxiliares y enviar el master a OBS.
 
+**Prioridad del proyecto:** mezcla y monitoreo en tiempo real con la menor
+latencia estable de extremo a extremo, también hacia OBS y por red. La escucha
+web 0.7 todavía usa unos 120 ms de búfer más el retardo de red y reproducción;
+su optimización y medición son prioritarias en la
+[hoja de ruta](docs/hoja-de-ruta.md).
+
 **Prueba local:** [descargar Windows x64](dist/MonitorMix-0.7.0-Windows-x64.zip)
 e [instrucciones para Windows](docs/probar-en-windows.md).
 La descarga incluye el ejecutable, el receptor de OBS y el código fuente.
