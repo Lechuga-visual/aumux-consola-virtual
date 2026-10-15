@@ -9,9 +9,14 @@ const path = require("node:path");
   const binary =
     process.env.MONITOR_BINARY ||
     path.resolve("desktop/target/debug/monitor-mix");
+  const presetDir = await fs.mkdtemp("/workspace/scratch/monitor-ui-presets-");
   const app = spawn(binary, ["--no-browser"], {
     stdio: ["ignore", "pipe", "pipe"],
-    env: { ...process.env, VST3_PATH: process.env.MONITOR_VST3_FIXTURE || "" },
+    env: {
+      ...process.env,
+      MONITOR_MIX_DATA_DIR: presetDir,
+      VST3_PATH: process.env.MONITOR_VST3_FIXTURE || "",
+    },
   });
   let browser;
   try {
@@ -257,7 +262,68 @@ const path = require("node:path");
       .locator("#mixer")
       .getByRole("button", { name: "EQ canal 1", exact: true })
       .click();
-    assert.equal(await page.locator("#eq-bands .eq-band-row").count(), 9);
+    assert.equal(await page.locator("#eq-tabs [role=tab]").count(), 8);
+    await page.getByRole("tab", { name: "Banda EQ 5", exact: true }).click();
+    assert.equal(await page.locator("#eq-bands [role=slider]").count(), 3);
+    const frequencyDial = page.getByRole("slider", {
+      name: "Perilla EQ banda 5 frecuencia",
+      exact: true,
+    });
+    await frequencyDial.press("ArrowRight");
+    await page.waitForFunction(
+      async () =>
+        (await (await fetch("/api/config")).json()).channels[0].eq.bands[4]
+          .frequency > 1000,
+    );
+    await frequencyDial.press("Home");
+    await page.waitForFunction(
+      async () =>
+        (await (await fetch("/api/config")).json()).channels[0].eq.bands[4]
+          .frequency === 1000,
+    );
+    async function dragControl(control, dx, dy) {
+      const r = await control.boundingBox(),
+        x = r.x + r.width / 2,
+        y = r.y + r.height / 2;
+      await page.mouse.move(x, y);
+      await page.mouse.down();
+      await page.mouse.move(x + dx, y + dy, { steps: 6 });
+      await page.mouse.up();
+    }
+    const gainDial = page.getByRole("slider", {
+      name: "Perilla EQ banda 5 ganancia",
+      exact: true,
+    });
+    await dragControl(gainDial, 0, -30);
+    await page.waitForFunction(
+      async () =>
+        (await (await fetch("/api/config")).json()).channels[0].eq.bands[4]
+          .gain_db > 0,
+    );
+    await gainDial.dblclick();
+    await page.waitForFunction(
+      async () =>
+        (await (await fetch("/api/config")).json()).channels[0].eq.bands[4]
+          .gain_db === 0,
+    );
+    const point = page.locator('.eq-node[data-band="4"]');
+    await dragControl(point, 40, -15);
+    await page.waitForFunction(async () => {
+      const b = (await (await fetch("/api/config")).json()).channels[0].eq
+        .bands[4];
+      return b.frequency > 1000 && b.gain_db > 0;
+    });
+    await point.hover();
+    await page.mouse.wheel(0, -120);
+    await page.waitForFunction(
+      async () =>
+        (await (await fetch("/api/config")).json()).channels[0].eq.bands[4].q >
+        0.707,
+    );
+    await page.click("#eq-reset-band");
+    await page.selectOption("#eq-kind", "3");
+    assert.equal(await gainDial.getAttribute("aria-disabled"), "true");
+    await page.selectOption("#eq-kind", "0");
     await page.getByLabel("EQ banda 5 gain_db", { exact: true }).fill("6");
     await page
       .getByLabel("EQ banda 5 gain_db", { exact: true })
@@ -267,7 +333,82 @@ const path = require("node:path");
         (await (await fetch("/api/config")).json()).channels[0].eq.bands[4]
           .gain_db === 6,
     );
+    const eqPresets = page.locator("#eq-presets");
+    await eqPresets
+      .getByLabel("Nombre del preset", { exact: true })
+      .fill("Prueba EQ");
+    await eqPresets
+      .getByRole("button", { name: "Guardar", exact: true })
+      .click();
+    await page.waitForFunction(
+      () =>
+        document.querySelector("#eq-presets .preset-status").textContent ===
+        "Preset guardado",
+    );
+    await eqPresets
+      .getByLabel("Seleccionar preset", { exact: true })
+      .selectOption("default");
+    await page.waitForFunction(
+      async () =>
+        (await (await fetch("/api/config")).json()).channels[0].eq.bands[4]
+          .gain_db === 0,
+    );
+    await eqPresets
+      .getByLabel("Seleccionar preset", { exact: true })
+      .selectOption({ label: "Prueba EQ" });
+    await page.waitForFunction(
+      async () =>
+        (await (await fetch("/api/config")).json()).channels[0].eq.bands[4]
+          .gain_db === 6,
+    );
+    await page.screenshot({
+      path: "/workspace/scratch/monitor-mix-0.6-eq.png",
+    });
     await page.locator('[data-close="eq-dialog"]').click();
+    // The direct bank buttons must be visible and usable with the engine running.
+    for (const width of [1280, 1640]) {
+      await page.setViewportSize({ width, height: 980 });
+      assert(await page.locator("#add-channel").isVisible());
+      assert(await page.locator("#add-aux").isVisible());
+    }
+    await page.click("#add-channel");
+    await page.waitForFunction(
+      () => document.querySelectorAll("#mixer .strip").length === 9,
+    );
+    await page.click("#add-aux");
+    await page.waitForFunction(
+      () => document.querySelectorAll("#buses .strip").length === 6,
+    );
+    assert.equal(
+      await page.locator("#channel-total").textContent(),
+      "9 canales",
+    );
+    assert.equal(await page.locator("#aux-total").textContent(), "5 aux");
+    await page
+      .getByRole("button", { name: "Envíos canal 1", exact: true })
+      .click();
+    await page.selectOption("#routing-add-send", "1");
+    await page.getByLabel("Nivel envío 2 dB", { exact: true }).fill("-9");
+    await page
+      .getByLabel("Nivel envío 2 dB", { exact: true })
+      .dispatchEvent("change");
+    await page.getByLabel("Modo envío 2", { exact: true }).selectOption("post");
+    await page.waitForFunction(async () => {
+      const c = (await (await fetch("/api/config")).json()).channels[0];
+      return c.sends_db[1] === -9 && !c.pre[1];
+    });
+    await page.screenshot({
+      path: "/workspace/scratch/monitor-mix-0.6-routing.png",
+    });
+    await page
+      .getByRole("button", { name: "Quitar envío 2", exact: true })
+      .click();
+    await page.waitForFunction(
+      async () =>
+        (await (await fetch("/api/config")).json()).channels[0].sends_db[1] ===
+        -90,
+    );
+    await page.locator('[data-close="routing-dialog"]').click();
     // Grow and shrink while DEMO and the existing channel signal continue.
     async function resize(channels, auxes) {
       await page.click("#counts");
@@ -306,6 +447,12 @@ const path = require("node:path");
     await page.click("#main-layer");
     assert.equal(await page.locator("#fader-flip").inputValue(), "-1");
     await resize(1, 0);
+    assert(await page.locator("#add-aux").isVisible());
+    await page.click("#add-aux");
+    await page.waitForFunction(
+      () => document.querySelectorAll("#buses .strip").length === 2,
+    );
+    await resize(1, 0);
     assert.equal(await page.locator("#pc-monitor").inputValue(), "0");
     await resize(8, 4);
     // Restore the second-channel test generator removed by shrinking.
@@ -341,10 +488,11 @@ const path = require("node:path");
         const gain = page
           .locator("#params label")
           .filter({ hasText: "Gain" })
-          .locator("input");
+          .locator('input[type="number"]');
         await gain.fill("0.5");
         await gain.dispatchEvent("change");
         await page.click("#applyfx");
+        await page.click("#closefx");
         await page.waitForFunction(
           (n) =>
             document.querySelectorAll(
@@ -377,11 +525,159 @@ const path = require("node:path");
       () => document.getElementById("fx-title").textContent === "MDA Dynamics",
     );
     await page.click("#applyfx");
+    await page.click("#closefx");
     await page.waitForFunction(
       async () =>
         (await (await fetch("/api/config")).json()).channels[0].inserts
           .length === 3,
     );
+    await page
+      .locator("#mixer .strip")
+      .first()
+      .locator(".insert-slot")
+      .nth(2)
+      .click();
+    await page.waitForSelector(".generic-native-panel");
+    assert(
+      (await page.locator(".generic-knob-bank [role=slider]").count()) > 0,
+    );
+    assert.equal(await page.locator("#fx-chain-list [role=option]").count(), 3);
+    await page.screenshot({
+      path: "/workspace/scratch/monitor-mix-0.6-mda.png",
+    });
+    await page.locator('#fx-chain-list [data-slot="0"]').click();
+    await page.waitForSelector(".generic-parameter");
+    await page.locator('#fx-chain-list [data-slot="2"]').click();
+    await page.waitForSelector(".generic-native-panel");
+    await page.click("#fxup");
+    await page.waitForFunction(
+      async () =>
+        (await (await fetch("/api/config")).json()).channels[0].inserts[1]
+          .id === "native/mda/dynamics",
+    );
+    await page.click("#fxdown");
+    await page.waitForFunction(
+      async () =>
+        (await (await fetch("/api/config")).json()).channels[0].inserts[2]
+          .id === "native/mda/dynamics",
+    );
+    // Add a temporary native effect from the rail, then delete it using Supr.
+    await page.click("#fx-add");
+    await page.selectOption("#builtin-fx", "native/mda/overdrive");
+    await page.waitForFunction(
+      () => document.getElementById("fx-title").textContent === "MDA Overdrive",
+    );
+    await page.click("#applyfx");
+    await page.waitForFunction(
+      () =>
+        document.querySelectorAll("#fx-chain-list [role=option]").length === 4,
+    );
+    await page.locator('#fx-chain-list [data-slot="3"]').press("Delete");
+    await page.waitForFunction(
+      () =>
+        document.querySelectorAll("#fx-chain-list [role=option]").length === 3,
+    );
+    await page.click("#closefx");
+    await page
+      .locator("#mixer .strip")
+      .first()
+      .locator(".insert-slot")
+      .nth(3)
+      .click();
+    await page.selectOption("#builtin-fx", "native/freevox8");
+    await page.waitForSelector(".freevox-panel");
+    assert.equal(
+      await page.locator(".freevox-panel [role=slider]").count(),
+      13,
+    );
+    await page
+      .locator(".vox-modes")
+      .getByRole("button", { name: "Mask", exact: true })
+      .click();
+    await dragControl(
+      page.getByRole("slider", { name: "Perilla Mezcla", exact: true }),
+      0,
+      20,
+    );
+    await page.getByLabel("FreeVox8 Output gain", { exact: true }).fill("-6");
+    await page
+      .getByLabel("FreeVox8 Output gain", { exact: true })
+      .dispatchEvent("change");
+    const voxPresets = page.locator("#fx-presets");
+    await voxPresets
+      .getByLabel("Nombre del preset", { exact: true })
+      .fill("Prueba VOX");
+    await voxPresets
+      .getByRole("button", { name: "Guardar", exact: true })
+      .click();
+    await page.waitForFunction(
+      () =>
+        document.querySelector("#fx-presets .preset-status").textContent ===
+        "Preset guardado",
+    );
+    const presetDownload = page.waitForEvent("download");
+    await voxPresets
+      .getByRole("button", { name: "Exportar", exact: true })
+      .click();
+    const pd = await presetDownload;
+    const presetBytes = await fs.readFile(await pd.path());
+    assert.equal(JSON.parse(presetBytes).plugin_id, "native/freevox8");
+    await voxPresets
+      .getByRole("button", { name: "Borrar", exact: true })
+      .click();
+    await page.waitForFunction(
+      () =>
+        document.querySelector("#fx-presets .preset-status").textContent ===
+        "Preset eliminado",
+    );
+    await voxPresets
+      .getByLabel("Importar archivo de preset", { exact: true })
+      .setInputFiles({
+        name: "vox.json",
+        mimeType: "application/json",
+        buffer: presetBytes,
+      });
+    await page.waitForFunction(
+      () =>
+        document.querySelector("#fx-presets .preset-status").textContent ===
+        "Preset importado",
+    );
+    await page.screenshot({
+      path: "/workspace/scratch/monitor-mix-0.6-freevox.png",
+    });
+    await page.click("#applyfx");
+    await page.click("#closefx");
+    await page.waitForFunction(async () => {
+      const p = (await (await fetch("/api/config")).json()).channels[0]
+        .inserts[3]?.params;
+      return (
+        p &&
+        p.Mode === 1 &&
+        p.Mix < 0.95 &&
+        p.Mix > 0.8 &&
+        p["Output gain"] === -6
+      );
+    });
+    await page
+      .locator("#mixer .strip")
+      .first()
+      .locator(".insert-slot")
+      .nth(3)
+      .click();
+    await page.waitForSelector(".freevox-panel");
+    assert.equal(
+      await page
+        .getByLabel("FreeVox8 Output gain", { exact: true })
+        .inputValue(),
+      "-6",
+    );
+    assert.equal(
+      await page
+        .locator('.vox-modes [data-mode="1"]')
+        .getAttribute("aria-pressed"),
+      "true",
+    );
+    await page.click("#closefx");
     await page.click("#demo");
     await page.waitForFunction(
       () => document.getElementById("status").textContent === "DEMO",
@@ -398,6 +694,53 @@ const path = require("node:path");
         return c.channels[0].inserts[0].bypass === true;
       });
     }
+    await page
+      .locator("#mixer .strip")
+      .first()
+      .locator(".insert-slot")
+      .nth(3)
+      .click();
+    await page.waitForSelector(".freevox-panel");
+    await page.getByLabel("FreeVox8 Output gain", { exact: true }).fill("-12");
+    await page
+      .getByLabel("FreeVox8 Output gain", { exact: true })
+      .dispatchEvent("change");
+    await page.waitForFunction(async () => {
+      const c = await (await fetch("/api/config")).json(),
+        s = await (await fetch("/api/status")).json();
+      return (
+        c.channels[0].inserts[3].params["Output gain"] === -12 &&
+        s.mode === "DEMO"
+      );
+    });
+    await page
+      .locator(".vox-modes")
+      .getByRole("button", { name: "Ghost", exact: true })
+      .click();
+    await page.waitForFunction(
+      async () =>
+        (await (await fetch("/api/config")).json()).channels[0].inserts[3]
+          .params.Mode === 2,
+    );
+    await page.locator('#fx-chain-list [data-slot="0"]').click();
+    await page.waitForSelector(".generic-parameter");
+    assert(
+      await page
+        .getByRole("slider", { name: "Control Gain", exact: true })
+        .isDisabled(),
+    );
+    await page.locator('#fx-chain-list [data-slot="2"]').click();
+    await page.waitForSelector(".generic-native-panel");
+    await page
+      .locator(".generic-knob-bank [role=slider]")
+      .first()
+      .press("ArrowUp");
+    await page.click("#closefx");
+    const stored = JSON.parse(
+      await fs.readFile(path.join(presetDir, "presets.json"), "utf8"),
+    );
+    assert(stored.some((p) => p.name === "Prueba EQ"));
+    assert(stored.some((p) => p.name === "Prueba VOX"));
     const downloadPromise = page.waitForEvent("download");
     await page.click("#save");
     const download = await downloadPromise;
@@ -413,7 +756,7 @@ const path = require("node:path");
     await page.screenshot({
       path:
         process.env.MONITOR_SCREENSHOT ||
-        "/workspace/scratch/monitor-mix-0.5.png",
+        "/workspace/scratch/monitor-mix-0.6.png",
       fullPage: true,
     });
     for (const viewport of [
@@ -470,13 +813,47 @@ const path = require("node:path");
       const c = await (await fetch("/api/config")).json();
       return c.channels[0].generator.signal === "off" && c.pc_monitor === 0;
     });
+    // A second process reads the same on-disk library without browser storage.
+    const probe = spawn(binary, ["--no-browser"], {
+      stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env, MONITOR_MIX_DATA_DIR: presetDir },
+    });
+    try {
+      const probeUrl = await new Promise((resolve, reject) => {
+        let out = "";
+        const timer = setTimeout(
+          () => reject(Error("Preset restart probe timed out")),
+          5000,
+        );
+        probe.stdout.on("data", (b) => {
+          out += b;
+          const m = out.match(/http:\/\/127\.0\.0\.1:\d+/);
+          if (m) {
+            clearTimeout(timer);
+            resolve(m[0]);
+          }
+        });
+        probe.on("exit", (code) => {
+          clearTimeout(timer);
+          reject(Error(`Preset probe exited ${code}`));
+        });
+      });
+      const result = await page.request.get(probeUrl + "/api/presets");
+      assert.equal(result.status(), 200);
+      const library = await result.json();
+      assert(library.some((p) => p.name === "Prueba EQ"));
+      assert(library.some((p) => p.name === "Prueba VOX"));
+    } finally {
+      probe.kill("SIGTERM");
+    }
     assert.deepEqual(errors, []);
     console.log(
-      "PASS: aligned console modules and meter bridge, full/small layouts, panel toggles, exact printed and numeric faders, installed VST3 discovery, compact DAW strips, 52 insert slots, independent generators, stereo meters, monitor sends, live VST3 bypass, PC audition selection, emergency silence and resume, live graph growth/shrink, mono/stereo, pan reset, MAIN return, native EQ and insert selection, legacy scenes, export and responsive layout",
+      "PASS: aligned console modules and meter bridge, full/small layouts, panel toggles, exact printed and numeric faders, installed VST3 discovery, compact DAW strips, 52 insert slots, independent generators, stereo meters, monitor sends, live VST3 bypass, PC audition selection, emergency silence and resume, live graph growth/shrink, mono/stereo, pan reset, MAIN return, interactive EQ curve and rotary controls, FreeVox rotary persistence, direct channel/aux buttons, native insert selection, chain navigation/add/delete, preset save/recall/export/import, graphical sends, live native parameters, legacy scenes, export and responsive layout",
     );
   } finally {
     if (browser) await browser.close();
     app.kill("SIGTERM");
+    await fs.rm(presetDir, { recursive: true, force: true });
   }
 })().catch((e) => {
   console.error(e);

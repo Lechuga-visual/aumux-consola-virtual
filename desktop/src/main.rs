@@ -7,6 +7,7 @@ mod graph;
 mod mixer;
 mod native;
 mod native_fx;
+mod presets;
 #[cfg(test)]
 mod test_support;
 
@@ -112,6 +113,7 @@ impl App {
             return Err("Unknown audio mode".into());
         }
         self.stop();
+        self.controls = Controls::new(&self.config);
         self.controls.failed.store(false, Relaxed);
         self.controls.emergency.store(false, Relaxed);
         self.controls.xruns.store(0, Relaxed);
@@ -255,6 +257,7 @@ impl App {
                 }
                 Ok(fx::installed(extra))
             }
+            "/api/presets" => presets::command(body),
             "/api/inspect" => {
                 if self.live || self.demo.is_some() {
                     return Err("Stop audio before inspecting a VST3 bundle".into());
@@ -382,6 +385,7 @@ fn run() -> Result<(), String> {
                     "text/javascript; charset=utf-8",
                     include_str!("../web/console.js").into(),
                 ),
+                "/effects-ui.js" => reply(req,200,"text/javascript; charset=utf-8",include_str!("../web/effects-ui.js").into()),
                 "/api/config" => reply(
                     req,
                     200,
@@ -389,6 +393,7 @@ fn run() -> Result<(), String> {
                     serde_json::to_string(&app.config).map_err(|e| e.to_string())?,
                 ),
                 "/api/status" => reply(req, 200, "application/json", app.status().to_string()),
+                "/api/presets" => match presets::load() {Ok(p)=>reply(req,200,"application/json",serde_json::json!(p).to_string()),Err(e)=>reply(req,400,"application/json",serde_json::json!({"error":e}).to_string())},
                 "/api/native" => reply(req,200,"application/json",serde_json::to_string(native_fx::registry()).map_err(|e|e.to_string())?),
                 "/api/limits" => reply(req, 200, "application/json", json!({"channels":MAX_CHANNELS,"auxes":MAX_AUXES,"inputs":MAX_IO,"outputs":MAX_IO}).to_string()),
                 _ => reply(req, 404, "text/plain", "Not found".into()),

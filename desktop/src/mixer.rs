@@ -47,8 +47,39 @@ impl Meter {
     }
 }
 
+struct NativeValue {
+    id: &'static str,
+    default: f32,
+    value: AtomicU32,
+}
+fn native_values(spec: Option<&Fx>) -> Vec<NativeValue> {
+    let Some(spec) = spec.filter(|s| s.id.starts_with("native/")) else {
+        return vec![];
+    };
+    let Some(info) = crate::native_fx::registry()
+        .iter()
+        .find(|p| p.id == spec.id)
+    else {
+        return vec![];
+    };
+    info.params
+        .iter()
+        .map(|p| NativeValue {
+            id: p.id,
+            default: p.default,
+            value: AtomicU32::new(
+                spec.params
+                    .get(p.id)
+                    .copied()
+                    .unwrap_or(p.default)
+                    .to_bits(),
+            ),
+        })
+        .collect()
+}
 pub struct Controls {
     eq: Vec<crate::eq::Control>,
+    native_params: Vec<[Vec<NativeValue>; INSERTS]>,
     input_route: Vec<AtomicU32>,
     bus_stereo: Vec<AtomicBool>,
     gain: Vec<AtomicU32>,
@@ -87,6 +118,16 @@ impl Controls {
         let floats = |n| (0..n).map(|_| AtomicU32::new(0)).collect::<Vec<_>>();
         let flags = |n| (0..n).map(|_| AtomicBool::new(false)).collect::<Vec<_>>();
         let s = Arc::new(Self {
+            native_params: c
+                .channels
+                .iter()
+                .map(|ch| std::array::from_fn(|slot| native_values(ch.effects().nth(slot))))
+                .chain(
+                    c.buses
+                        .iter()
+                        .map(|b| std::array::from_fn(|slot| native_values(b.effects().nth(slot)))),
+                )
+                .collect(),
             eq: c
                 .channels
                 .iter()
@@ -122,6 +163,23 @@ impl Controls {
         s.update(c);
         s
     }
+    fn update_native(&self, node: usize, slot: usize, spec: &Fx) {
+        for p in &self.native_params[node][slot] {
+            p.value.store(
+                spec.params
+                    .get(p.id)
+                    .copied()
+                    .unwrap_or(p.default)
+                    .to_bits(),
+                Relaxed,
+            );
+        }
+    }
+    fn apply_native(&self, node: usize, slot: usize, plugin: &mut dyn Plugin) {
+        for p in &self.native_params[node][slot] {
+            plugin.set_param(p.id, f32::from_bits(p.value.load(Relaxed)));
+        }
+    }
     pub fn update(&self, c: &Config) {
         self.pc_monitor.store(c.pc_monitor as u32, Relaxed);
         for (i, ch) in c.channels.iter().enumerate() {
@@ -141,6 +199,7 @@ impl Controls {
             self.frequency[i].store(ch.generator.frequency.to_bits(), Relaxed);
             for (slot, fx) in ch.effects().take(INSERTS).enumerate() {
                 self.bypass[i][slot].store(fx.bypass, Relaxed);
+                self.update_native(i, slot, fx);
             }
             for a in 0..c.buses.len() - 1 {
                 self.sends[i][a].store(gain(ch.sends_db[a]).to_bits(), Relaxed);
@@ -154,6 +213,7 @@ impl Controls {
             self.bus_mute[i].store(b.mute, Relaxed);
             for (slot, fx) in b.effects().take(INSERTS).enumerate() {
                 self.bypass[c.channels.len() + i][slot].store(fx.bypass, Relaxed);
+                self.update_native(c.channels.len() + i, slot, fx);
             }
         }
     }
@@ -468,6 +528,7 @@ impl Mixer {
             self.generator_level[i] = noise_gain;
             self.channel_eq[i].process(ch, frames, &self.controls.eq[i], self.rate);
             for (slot, p) in self.channel_fx[i].iter_mut().enumerate() {
+                self.controls.apply_native(i, slot, &mut **p);
                 if !self.controls.bypass[i][slot].load(Relaxed) {
                     p.process(ch, frames);
                 }
@@ -552,6 +613,8 @@ impl Mixer {
                 self.rate,
             );
             for (slot, p) in self.bus_fx[b].iter_mut().enumerate() {
+                self.controls
+                    .apply_native(self.channel.len() + b, slot, &mut **p);
                 if !self.controls.bypass[self.channel.len() + b][slot].load(Relaxed) {
                     p.process(bus, frames);
                 }
@@ -987,6 +1050,67 @@ mod tests {
         let reference = 10.0f64.powf(-30.0 / 20.0) / 2.0f64.sqrt();
         assert!((20.0 * (rms(0) / reference).log10() - 12.0).abs() < 0.02);
         assert!((20.0 * (rms(2) / reference).log10()).abs() < 0.02);
+    }
+    #[test]
+    fn native_parameters_change_audio_live_without_rebuilding_or_heap_work() {
+        let (mut c, _) = setup();
+        c.channels[0].gain_db = 0.0;
+        c.channels[0].generator = Generator {
+            signal: Signal::Sine,
+            level_db: -30.0,
+            frequency: 1000.0,
+        };
+        c.channels[0].inserts = vec![Fx {
+            path: "native:native/freevox8".into(),
+            id: "native/freevox8".into(),
+            params: std::collections::BTreeMap::from([
+                ("Mix".into(), 0.0),
+                ("Output gain".into(), 0.0),
+            ]),
+            ..Fx::default()
+        }];
+        c.validate().unwrap();
+        let ctl = Controls::new(&c);
+        let mut m = Mixer::new(&c, ctl.clone()).unwrap();
+        let input = vec![0.0; 480 * c.inputs as usize];
+        let mut output = vec![0.0; 480 * 10];
+        let mut original = 0.0;
+        for db in [0.0, -6.0] {
+            let mut next = c.clone();
+            next.channels[0].inserts[0]
+                .params
+                .insert("Output gain".into(), db);
+            assert!(c.same_graph(&next));
+            next.validate().unwrap();
+            ctl.update(&next);
+            for _ in 0..100 {
+                crate::test_support::no_heap(|| m.process(&input, &mut output, 480, 10));
+            }
+            let rms = (output
+                .chunks_exact(10)
+                .map(|f| f64::from(f[0]).powi(2))
+                .sum::<f64>()
+                / 480.0)
+                .sqrt();
+            if db == 0.0 {
+                original = rms;
+                assert!(original > 0.01);
+            } else {
+                assert!((20.0 * (rms / original).log10() + 6.0).abs() < 0.02);
+            }
+        }
+        let mut invalid = c.clone();
+        invalid.channels[0].inserts[0]
+            .params
+            .insert("Output gain".into(), 99.0);
+        assert!(invalid.validate().is_err());
+        // External VST parameters retain the existing stop-before-edit contract.
+        c.channels[0].inserts[0].id = "external-vst".into();
+        let mut other = c.clone();
+        other.channels[0].inserts[0]
+            .params
+            .insert("Mix".into(), 0.5);
+        assert!(!c.same_graph(&other));
     }
     #[test]
     fn old_scenes_migrate_and_reject_a_fifth_insert() {

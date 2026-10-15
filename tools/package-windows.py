@@ -38,6 +38,14 @@ config=subprocess.check_output(['/workspace/.cargo/bin/cargo','vendor','--locked
 shutil.copytree(vendor, source/'vendor-rust', dirs_exist_ok=True)
 (source/'.cargo').mkdir(exist_ok=True)
 (source/'.cargo/config.toml').write_text(config.replace(str(vendor),'vendor-rust'))
+# Ship the visual editor guide and its images beside LEEME, and with the sources.
+minor='.'.join(version.split('.')[:2])
+visual=[root/'docs'/f'interfaz-{minor}.md', *sorted((root/'docs').glob(f'monitor-mix-{minor}*.png'))]
+for p in visual:
+    if p.is_file():
+        shutil.copy2(p,stage/p.name)
+        shutil.copy2(p,source/'docs'/p.name)
+shutil.copy2(root/'README.md',source/'README.md')
 metadata = json.loads(Path("/workspace/scratch/monitor-cargo-metadata.json").read_text())
 licenses = stage / "licenses"
 for package in metadata["packages"]:

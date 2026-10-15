@@ -1,4 +1,4 @@
-# Monitor Mix 0.5 · prueba local en Windows x64
+# Monitor Mix 0.6 · prueba local en Windows x64
 
 Miniapp de mezcla con canales y auxiliares configurables y master estéreo, a 48 kHz. Reutiliza DSP
 y host VST3 de SoundCraft de Artcraft, con una superficie y un ruteo propios.
@@ -6,7 +6,7 @@ Es un prototipo para pruebas; todavía no está validado para una sesión en viv
 
 ## Probar sonido sin ASIO ni interfaz externa
 
-1. Extrae **todo** `MonitorMix-0.5.0-Windows-x64.zip` y ejecuta `MonitorMix.exe`.
+1. Extrae **todo** `MonitorMix-0.6.0-Windows-x64.zip` y ejecuta `MonitorMix.exe`.
    Cierra la versión anterior antes de abrir esta.
 2. Pulsa **AUDIO PC**. Usa los parlantes/audífonos predeterminados de Windows
    mediante WASAPI, sin controlador ASIO ni dispositivo MOTU.
@@ -71,7 +71,9 @@ el generador. No se inyecta ruido automáticamente en canales no activados.
 
 ## Estructura y EQ en vivo
 
-**Canales / Aux** permite elegir 1–64 canales y 0–32 auxiliares, incluso con
+**+ Canal** y **+ Aux** están sobre los bancos de entradas y salidas: agregan
+una tira mono y la seleccionan sin detener el audio. El contador a su lado abre
+la configuración. **Canales y auxiliares**, en la barra superior, permite elegir 1–64 canales y 0–32 auxiliares, incluso con
 AUDIO PC, DEMO o ASIO activo. Se conservan las primeras tiras; reducir retira
 las últimas y sus inserts/envíos. Guarda una escena antes de quitarlas si las
 necesitarás después. Las tiras nuevas empiezan sin generador ni envíos.
@@ -85,9 +87,13 @@ segundo conector no pise otra salida. En ASIO se abren todas las salidas
 anunciadas por el driver (hasta 64) al arrancar, para permitir estos cambios.
 Cambiar el dispositivo, buffer o entradas físicas abiertas requiere detener.
 
-Pulsa el módulo **EQ** para abrir ocho bandas FreeEQ8: campana, low/high
+Pulsa el módulo **EQ** para abrir la curva interactiva y ocho bandas FreeEQ8: campana, low/high
 shelf, pasa altos/bajos y pasa banda, ±18 dB y Q 0.1–18. En shelves, Q controla
 pendiente y satura en Q=2; ganancia se ignora en filtros de corte/pasa banda.
+Arrastra un punto horizontalmente para frecuencia y verticalmente para
+ganancia; la rueda sobre el punto modifica Q. Selecciona una banda para usar
+sus perillas: arrastra arriba/abajo, Mayús para ajuste fino y doble clic para
+restablecer. Los valores bajo las perillas también admiten edición exacta.
 Está antes de los inserts, también en aux/master. Curva, tipos, ajustes y
 bypass se guardan en la escena y funcionan en vivo. Se integra su núcleo de
 fase mínima; no el analizador, fase lineal ni todas las funciones del plugin.
@@ -133,7 +139,8 @@ Se muestra su nombre real en la tira.
 La primera lista del panel ofrece **FreeVox8 (filterbank)** y los **20 efectos
 MDA** integrados. No necesitas instalar sus VST3. Comparten los cuatro slots
 con VST3 externos y se procesan en serie; el EQ no consume slots. El panel
-ofrece parámetros numéricos genéricos. FreeVox8 es un vocoder creativo con
+ofrece perillas para MDA y un panel propio para FreeVox8. Los parámetros
+nativos se ajustan en vivo. FreeVox8 es un vocoder creativo con
 portadora interna y cuatro modos; no es un compresor vocal. No se exponen
 su motor espectral, sidechain externo o entrada MIDI. Piano, EPiano, DX10 y
 JX10 de MDA son instrumentos MIDI y quedan pendientes.
@@ -146,10 +153,25 @@ seleccionado. El nombre inicial es el del bundle; al leerlo se muestran los
 nombres reales de sus clases. Se mantiene la entrada manual para ubicaciones
 especiales. Los VST2 no aparecen ni se alojan en esta versión.
 
-Hay hasta **cuatro inserts en serie por canal, auxiliar y master**. Los botones
-↑/↓ del panel cambian el orden. El botón de encendido junto a cada insert
-permite bypass en vivo sin modificar el resto de la cadena. El editor sigue
-siendo genérico; aún no se abre la ventana gráfica propia del plugin.
+Hay hasta **cuatro inserts en serie por canal, auxiliar y master**. La lista
+lateral selecciona el efecto mostrado. **+ FX** añade otro desde esa ventana;
+**Quitar** o Supr con la lista enfocada lo elimina. ↑/↓ cambia el orden.
+Los cambios de parámetros se guardan al aplicar, cambiar de efecto o cerrar.
+Los parámetros nativos existentes se actualizan automáticamente en vivo;
+los VST3 requieren detener el audio para editarse y usan un panel genérico de
+deslizadores y valores, sin abrir su ventana gráfica propia. Las casillas de
+la lista controlan bypass en vivo. Agregar, quitar y reordenar requiere detener.
+
+El selector **Presets** ofrece los valores iniciales y tus presets guardados.
+Escribe un nombre y pulsa Guardar; elige uno para recuperarlo. También puedes
+borrarlo, exportarlo o importar un JSON del mismo efecto. La biblioteca se
+conserva en `%LOCALAPPDATA%\MonitorMix\presets.json`; puedes respaldarla.
+Se guardan parámetros numéricos, no bancos binarios ni presets internos VST3.
+
+Pulsa **Envíos ↗** en la tira de entrada para abrir el nivel principal, paneo
+y envíos PRE/POST. **Agregar envío** elige un aux disponible; **+ Aux nuevo**
+crea otro aux y lo añade. Quitar apaga ese envío (−∞). Todo funciona en vivo.
+[Capturas y guía de los paneles 0.6](interfaz-0.6.md).
 
 **Guardar escena** exporta un JSON; **Abrir escena** lo carga con el audio
 detenido. Se migran los archivos 0.1 y sus inserts únicos. Se guardan selección,
@@ -197,7 +219,7 @@ La copia 0.2 en `%APPDATA%` no se utiliza en Windows normal; puedes eliminar
 
 ## Validación y diagnóstico
 
-En este entorno se comprobaron diecisiete pruebas del motor, incluidas medición
+En este entorno se comprobaron veinte pruebas del motor, incluidas medición
 Peak/RMS de un seno conocido, ruido independiente y su espectro, selección de
 bus para escucha PC, migración de escenas y cadenas/bypass con un VST3 binario
 real de prueba. También se probaron la interfaz en Chromium y el puente desde
@@ -223,7 +245,7 @@ Prueba de lógica sin hardware desde PowerShell:
 ## OSC y superficies Mackie
 
 Se dejó anotada la dirección futura: mezclador independiente o controlador MIDI
-Mackie Control/HUI, además de OSC. No están implementados en 0.5. El mapa para
+Mackie Control/HUI, además de OSC. No están implementados en 0.6. El mapa para
 CueMix/MOTU necesita comprobar documentación y mensajes con el equipo.
 
 Las pruebas de C++ nativo comprueban los 21 inserts y el EQ con ASan/UBSan,
@@ -234,5 +256,10 @@ certifica latencia ni carga admisible con plugins reales: depende del PC y del
 buffer. La conexión ASIO usa ahora una ABI abierta basada en WineASIO, sin SDK
 propietario; compilada para Windows x64, pendiente de prueba con tu driver.
 
-La aplicación 0.5 combinada es GPL-3.0-only; fuentes y licencias incluidas.
+La aplicación combinada desde 0.5 es GPL-3.0-only; fuentes y licencias incluidas.
 Grabación multipista, OSC/Mackie y funciones de instrumentos MIDI pendientes.
+
+Si no aparecen **+ Canal**, **+ Aux** y **Canales y auxiliares**, cierra el
+proceso anterior y abre el ejecutable del ZIP nuevo: la marca superior debe
+mostrar **0.6**. Se prueba en Windows extrayendo todo el ZIP; no mezcles
+archivos de varias versiones.

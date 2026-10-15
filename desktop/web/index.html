@@ -13,7 +13,7 @@
         <div class="brand">
           <span class="brand-icon"><i></i><i></i><i></i><i></i></span
           ><strong>MONITOR<span>MIX</span></strong
-          ><span class="version">0.5</span>
+          ><span class="version">0.6</span>
         </div>
         <div class="scene-title">
           CONSOLA DE MONITOREO <span>•</span>
@@ -26,7 +26,13 @@
             <option value="full">Consola completa</option>
             <option value="small">Consola reducida</option>
           </select>
-          <button id="counts">Canales / Aux</button>
+          <button
+            id="counts"
+            class="structure-button"
+            title="Cambiar cantidad de canales y auxiliares"
+          >
+            Canales y auxiliares
+          </button>
           <button id="load" title="Cargar escena JSON">Abrir escena</button
           ><button id="save">Guardar escena</button
           ><button id="fullscreen" title="Pantalla completa">⛶</button
@@ -86,7 +92,21 @@
           </aside>
           <section class="bank input-bank">
             <div class="bank-heading">
-              <strong>ENTRADAS <span>01—08</span></strong>
+              <div class="bank-tools">
+                <button
+                  id="add-channel"
+                  class="add-strip"
+                  title="Agregar un canal mono sin detener el motor"
+                >
+                  + Canal</button
+                ><button
+                  id="channel-total"
+                  class="bank-total"
+                  title="Configurar cantidad de canales"
+                >
+                  8 canales
+                </button>
+              </div>
               <label class="fader-flip"
                 >Fader Flip <button id="main-layer" type="button">MAIN</button>
                 <select id="fader-flip" aria-label="Fader Flip">
@@ -106,7 +126,21 @@
           </section>
           <section class="bank output-bank">
             <div class="bank-heading">
-              <strong>BUSES / SALIDAS</strong><span>4 AUX + MASTER</span>
+              <div class="bank-tools">
+                <button
+                  id="add-aux"
+                  class="add-strip aux-add"
+                  title="Agregar un auxiliar mono sin detener el motor"
+                >
+                  + Aux</button
+                ><button
+                  id="aux-total"
+                  class="bank-total"
+                  title="Configurar cantidad de auxiliares"
+                >
+                  4 aux
+                </button>
+              </div>
             </div>
             <div id="buses" class="strip-bank"></div>
             <div class="bank-bottom">
@@ -151,7 +185,8 @@
         <button data-close="audio-settings">✕</button>
       </div>
       <p class="hint">
-        La selección de dispositivo y el ruteo se cambian con el audio detenido.
+        Detén el motor para cambiar dispositivo, entradas físicas o buffer. Usa
+        + Canal y + Aux en la consola para agregar tiras en vivo.
       </p>
       <button id="scan">Actualizar dispositivos</button
       ><label
@@ -241,20 +276,42 @@
         <h2 id="eq-title">EQ paramétrico</h2>
         <button data-close="eq-dialog">✕</button>
       </div>
+      <div id="eq-presets"></div>
       <div id="eq-graph"></div>
-      <div class="eq-axis">
-        <span>20 Hz</span><span>100 Hz</span><span>1 kHz</span
-        ><span>10 kHz</span><span>20 kHz</span>
+      <div
+        id="eq-tabs"
+        class="eq-tabs"
+        role="tablist"
+        aria-label="Bandas del EQ"
+      ></div>
+      <div class="eq-editor-bottom">
+        <div class="eq-band-selector">
+          <span id="eq-band-label">BANDA 1</span
+          ><label
+            >Tipo de filtro<select
+              id="eq-kind"
+              aria-label="Tipo de filtro de la banda"
+            ></select></label
+          ><button id="eq-reset-band">Restablecer banda</button>
+        </div>
+        <div id="eq-bands" class="eq-knobs"></div>
+        <div class="eq-global">
+          <label class="eq-bypass-label"
+            ><input id="eq-bypass" type="checkbox" /> Bypass</label
+          ><button id="eq-reset-all">Restablecer EQ</button
+          ><span>48 kHz · fase mínima</span>
+        </div>
       </div>
-      <label class="eq-bypass-label"
-        ><input id="eq-bypass" type="checkbox" /> Bypass del EQ</label
-      >
-      <div id="eq-bands"></div>
-      <p class="hint">
-        FreeEQ8: núcleo de ocho bandas, fase mínima. Campana, shelves y filtros
-        de corte · ±18 dB · Q 0.1–18 (en shelves, pendiente máxima desde Q=2).
-        EQ antes de los inserts. Los ajustes se aplican en vivo y se guardan en
-        la escena.
+      <div class="eq-editor-footer">
+        <span
+          >Arrastra los puntos: frecuencia / ganancia · rueda: Q · Mayús: ajuste
+          fino · doble clic: restablecer</span
+        ><span id="eq-edit-status" role="status">Cambios en vivo</span>
+      </div>
+      <p class="hint eq-scope">
+        Núcleo FreeEQ8 · ocho bandas antes de los inserts. La gráfica muestra la
+        respuesta del EQ; no incluye analizador de espectro ni las funciones de
+        dinámica del plugin original.
       </p>
     </dialog>
     <dialog id="fx">
@@ -265,76 +322,124 @@
         </div>
         <button id="closefx">✕</button>
       </div>
-      <label
-        >Efectos nativos<select id="builtin-fx">
-          <option value="">Seleccionar efecto nativo…</option>
-        </select></label
-      >
-      <p class="hint">
-        20 efectos MDA y FreeVox8 (vocoder). También puedes cargar tus VST3
-        abajo. Cargar o editar inserts requiere detener el motor; el bypass
-        funciona en vivo.
-      </p>
-      <div class="vst-browser">
-        <div class="form-row">
-          <input
-            id="vst-search"
-            type="text"
-            placeholder="Buscar VST3 instalado…"
-            aria-label="Buscar VST3 instalado"
-          /><button id="vst-rescan">Actualizar lista</button>
-        </div>
-        <select
-          id="vst-installed"
-          size="7"
-          aria-label="VST3 instalados"
-        ></select>
-        <p id="vst-scan-status" class="hint"></p>
-        <details>
-          <summary>Carpeta adicional</summary>
-          <div class="form-row">
-            <input
-              id="vst-directory"
-              type="text"
-              placeholder="D:\Audio\VST3"
-              aria-label="Carpeta adicional VST3"
-            />
+      <div class="fx-workspace">
+        <aside class="fx-chain">
+          <h3>CADENA FX</h3>
+          <div
+            id="fx-chain-list"
+            role="listbox"
+            aria-label="Plugins de la cadena"
+          ></div>
+          <div class="fx-chain-tools">
+            <button id="fx-add">+ FX</button
+            ><button id="removefx">Quitar</button
+            ><button id="fxup" title="Mover antes">↑</button
+            ><button id="fxdown" title="Mover después">↓</button>
           </div>
+          <p id="fx-chain-count" class="hint"></p>
+        </aside>
+        <section class="fx-editor">
+          <details id="fx-browser" open>
+            <summary>Seleccionar o cambiar efecto · nativo / VST3</summary>
+            <label
+              >Efectos nativos<select id="builtin-fx">
+                <option value="">Seleccionar efecto nativo…</option>
+              </select></label
+            >
+            <p class="hint">
+              20 efectos MDA y FreeVox8 (vocoder). También puedes cargar tus
+              VST3 abajo. Cargar o editar inserts requiere detener el motor; el
+              bypass funciona en vivo.
+            </p>
+            <div class="vst-browser">
+              <div class="form-row">
+                <input
+                  id="vst-search"
+                  type="text"
+                  placeholder="Buscar VST3 instalado…"
+                  aria-label="Buscar VST3 instalado"
+                /><button id="vst-rescan">Actualizar lista</button>
+              </div>
+              <select
+                id="vst-installed"
+                size="7"
+                aria-label="VST3 instalados"
+              ></select>
+              <p id="vst-scan-status" class="hint"></p>
+              <details>
+                <summary>Carpeta adicional</summary>
+                <div class="form-row">
+                  <input
+                    id="vst-directory"
+                    type="text"
+                    placeholder="D:\Audio\VST3"
+                    aria-label="Carpeta adicional VST3"
+                  />
+                </div>
+                <p class="hint">
+                  Actualiza la lista después de cambiar la carpeta. También se
+                  admite VST3_PATH.
+                </p>
+              </details>
+            </div>
+            <label
+              >Ruta del VST3 seleccionado (o entrada manual)<input
+                id="path"
+                type="text"
+                spellcheck="false"
+                placeholder="C:\Program Files\Common Files\VST3\Efecto.vst3"
+            /></label>
+            <div class="form-row">
+              <button id="inspect">Leer efecto</button
+              ><select id="classes" aria-label="Efecto del bundle"></select>
+            </div>
+          </details>
+          <div id="fx-presets"></div>
+          <div id="params"></div>
+          <div class="dialog-footer">
+            <span id="fx-edit-status" role="status"></span
+            ><button id="applyfx" class="accent-button">Aplicar insert</button>
+          </div>
+          <div id="fxerror" class="error"></div>
           <p class="hint">
-            Actualiza la lista después de cambiar la carpeta. También se admite
-            VST3_PATH.
+            Parámetros nativos y bypass en vivo. Agregar, quitar, reordenar o
+            editar parámetros VST3 requiere detener el motor. Los presets se
+            conservan al cerrar la app.
           </p>
-        </details>
+        </section>
       </div>
-      <label
-        >Ruta del VST3 seleccionado (o entrada manual)<input
-          id="path"
-          type="text"
-          spellcheck="false"
-          placeholder="C:\Program Files\Common Files\VST3\Efecto.vst3"
-      /></label>
-      <div class="form-row">
-        <button id="inspect">Leer efecto</button
-        ><select id="classes" aria-label="Efecto del bundle"></select>
+    </dialog>
+    <dialog id="routing-dialog">
+      <div class="dialog-heading">
+        <h2 id="routing-title">Envíos del canal</h2>
+        <button data-close="routing-dialog">✕</button>
       </div>
-      <div id="params"></div>
-      <div class="dialog-footer">
-        <button id="fxup" title="Mover antes en la cadena">↑</button
-        ><button id="fxdown" title="Mover después en la cadena">↓</button
-        ><button id="removefx" class="danger-text">Quitar</button><span></span
-        ><button id="applyfx" class="accent-button">Aplicar insert</button>
+      <div id="routing-main"></div>
+      <div class="routing-toolbar">
+        <h3>ENVÍOS AUXILIARES</h3>
+        <select id="routing-add-send" aria-label="Agregar envío">
+          <option value="">Agregar envío…</option></select
+        ><button id="routing-add-aux">+ Aux nuevo</button>
       </div>
-      <div id="fxerror" class="error"></div>
+      <div id="routing-sends"></div>
       <p class="hint">
-        Editor de parámetros genérico. Detén el audio para modificar la cadena.
-        Los cambios de bypass pueden hacerse en vivo desde las tiras.
+        PRE toma la señal antes del fader principal; POST sigue ese fader y el
+        paneo del canal. El mute del canal corta todos los envíos. Un envío
+        apagado queda a −∞.
       </p>
+      <span id="routing-status" role="status">Cambios en vivo</span>
     </dialog>
     <dialog id="help-dialog">
       <div class="dialog-heading">
         <h2>Probar la consola</h2>
         <button data-close="help-dialog">✕</button>
       </div>
+      <p>
+        <b>+ Canal</b> y <b>+ Aux</b> están sobre sus bancos.
+        <b>Canales y auxiliares</b> permite fijar cantidades o retirar tiras. Si
+        no ves estos botones, comprueba que la versión junto a MONITOR MIX sea
+        0.6.
+      </p>
       <ol>
         <li>
           Pulsa <b>AUDIO PC</b> para escuchar por los parlantes/audífonos
@@ -378,5 +483,6 @@
       </p>
     </dialog>
     <script src="/console.js"></script>
+    <script src="/effects-ui.js"></script>
   </body>
 </html>

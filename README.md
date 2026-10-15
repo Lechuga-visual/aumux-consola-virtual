@@ -3,20 +3,24 @@
 Miniapp Windows x64 para mezclar entradas ASIO o probar generadores por la
 salida normal del PC, crear mezclas auxiliares y enviar el master a OBS.
 
-**Prueba local:** [descargar Windows x64](dist/MonitorMix-0.5.0-Windows-x64.zip)
+**Prueba local:** [descargar Windows x64](dist/MonitorMix-0.6.0-Windows-x64.zip)
 e [instrucciones para Windows](docs/probar-en-windows.md).
 La descarga incluye el ejecutable, el receptor de OBS y el código fuente.
-Su checksum está en [SHA-256](dist/MonitorMix-0.5.0-Windows-x64.zip.sha256).
+Su checksum está en [SHA-256](dist/MonitorMix-0.6.0-Windows-x64.zip.sha256).
 
 ## Funciones actuales
 
-- De 1 a 64 canales y de 0 a 32 auxiliares: agregar o retirar con el motor activo.
+- De 1 a 64 canales y de 0 a 32 auxiliares: botones **+ Canal / + Aux** sobre sus bancos y panel **Canales y auxiliares**, también con audio activo.
 - Canales y auxiliares mono/estéreo conmutables en vivo; los nuevos aux son mono.
 - Entradas físicas L/R independientes del número de tiras. Trabajo a 48 kHz.
 - Faders compactos con marcas alineadas y entrada numérica exacta; envíos pre/post, panorama y mute.
 - Salidas físicas mono o pares estéreo independientes y stream dúplex RtAudio/ASIO.
 - EQ paramétrico nativo por canal, auxiliar y master: ocho bandas FreeEQ8, seis tipos, fase mínima.
-- Cuatro inserts nativos o VST3 visibles por tira, con bypass en vivo.
+- EQ con curva interactiva, ocho puntos de color y perillas de frecuencia, ganancia y Q.
+- Cadena FX con lista lateral, selección, agregar, quitar con Supr y reordenar; cuatro inserts por tira.
+- FreeVox8 y MDA con perillas; VST3 con editor genérico de deslizadores y valores.
+- Parámetros nativos y bypass editables en vivo; presets de usuario persistentes, importación/exportación JSON.
+- Ventana **Envíos ↗** por canal: master, pan y envíos PRE/POST con controles gráficos.
 - FreeVox8 (vocoder filterbank) y los 20 efectos de audio MDA integrados.
 - Lista de VST3 instalados en carpetas estándar de Windows, con búsqueda y carpeta adicional.
 - Consola compacta basada en las referencias Fairlight: módulos alineados, faders largos y colores por tipo.
@@ -32,7 +36,7 @@ La miniapp reutiliza **los crates DSP y VST3 de SoundCraft de Artcraft**,
 fijados a una revisión concreta. La interfaz y el ruteo son propios; no es
 un fork de todo el DAW. No requiere controlar CueMix ni instalar REAPER.
 
-![Consola Monitor Mix 0.5](docs/monitor-mix-0.5.png)
+![Consola Monitor Mix 0.6](docs/monitor-mix-0.6.png)
 
 Para probar sin hardware: **AUDIO PC → G en un canal → Control Room → Input**.
 DEMO procesa sin reproducir. Las escenas 0.1 siguen siendo compatibles.
@@ -62,8 +66,10 @@ El cambio de estructura se prepara fuera del callback de audio y se adopta al
 terminar un bloque. Conserva los inserts existentes y devuelve la memoria al
 hilo de control; no reabre el dispositivo. Las salidas ASIO disponibles se
 abren al inicio. Cambiar dispositivo, entradas físicas abiertas o buffer exige
-detener el motor. Cargar, reordenar o editar inserts también exige detenerlo;
-EQ, bypass, niveles, envíos, formatos y cantidad de tiras funcionan en vivo.
+detener el motor. Agregar, quitar, reordenar o editar parámetros VST3 exige
+detenerlo; parámetros nativos, EQ, bypass, niveles, envíos, formatos y cantidad
+de tiras funcionan en vivo. Los presets de usuario se guardan en
+`%LOCALAPPDATA%\MonitorMix\presets.json` en Windows.
 
 Es un prototipo: no hay compensación de latencia, editor nativo VST3 ni
 estado binario de presets; se admiten cuatro inserts por tira. Faltan las pruebas
@@ -79,7 +85,7 @@ administrador con OBS cerrado. OBS 32.2.2 x64 es compatible. Consulta
 [Dirección OSC, Mackie Control y Mackie HUI](docs/control-remoto.md): se prevé
 un modo controlador sin abrir audio, además del mezclador independiente.
 Estos protocolos y el mapa específico MOTU quedan para la siguiente etapa;
-no se implementan en 0.5.
+no se implementan en 0.6.
 
 ## Componentes anteriores
 
@@ -94,5 +100,7 @@ La integración nativa usa el núcleo de fase mínima de FreeEQ8 y el motor
 filterbank de FreeVox8; no incorpora todas las funciones de esos plugins.
 MDA incluye sus 20 efectos de audio; sus cuatro instrumentos MIDI quedan
 pendientes. La grabación multipista y OSC/Mackie también quedan pendientes.
-La aplicación combinada 0.5 se distribuye bajo GPL-3.0-only, con fuentes,
+La aplicación combinada desde 0.5 se distribuye bajo GPL-3.0-only, con fuentes,
 licencias y procedencia en el ZIP.
+
+[Guía visual de los editores, presets y envíos 0.6](docs/interfaz-0.6.md).

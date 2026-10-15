@@ -18,7 +18,12 @@ const faderTicks = [6, 0, -6, -12, -24, -36, -60];
 const meterStates = new Map(),
   lastSignal = [];
 let limits = { channels: 64, auxes: 32, inputs: 64, outputs: 64 };
-let eqTarget;
+let eqTarget,
+  eqBandIndex = 0,
+  eqKnobs = [],
+  eqWriteTimer,
+  eqWriteVersion = 0;
+let structureBusy = false;
 const signalNames = {
   off: "Entrada física",
   white: "Ruido blanco",
@@ -274,7 +279,7 @@ function insertRack(type, index) {
     const fx = target.inserts[slot],
       row = el("div", "insert-row" + (fx?.bypass ? " bypassed" : ""));
     const button = el("button", "insert-slot" + (!fx ? " empty" : ""));
-    button.disabled = running || (!fx && slot > target.inserts.length);
+    button.disabled = (!fx && running) || (!fx && slot > target.inserts.length);
     button.append(
       el("span", "slot-number", String(slot + 1).padStart(2, "0")),
       el(
@@ -673,15 +678,20 @@ function arrangeStrip(card, type, index) {
       card.querySelector(".send-grid") || el("div", "module-empty aux-empty"),
     pan = card.querySelector(".pan-row") || el("div", "module-empty pan-empty"),
     main = el(
-      "div",
+      type === "channel" ? "button" : "div",
       "main-route",
-      type === "channel" ? "→ MAIN" : index === 0 ? "→ OBS" : "AUX " + index,
+      type === "channel" ? "Envíos ↗" : index === 0 ? "→ OBS" : "AUX " + index,
     ),
     buttons = card.querySelector(".strip-buttons"),
     level = card.querySelector(".level"),
     fader = card.querySelector(".fader-section"),
     peak = card.querySelector(".peak-readout"),
     footer = card.querySelector(".strip-footer");
+  if (type === "channel") {
+    main.setAttribute("aria-label", `Envíos canal ${index + 1}`);
+    main.title = "Abrir envíos y nivel principal";
+    main.onclick = () => openRouting(index);
+  }
   nameRow.append(name);
   const format = el(
     "button",
@@ -756,8 +766,12 @@ function updateSendLabels() {
 }
 function render() {
   meterWidgets = [];
-  document.querySelector(".input-bank .bank-heading strong span").textContent =
-    `01—${String(cfg.channels.length).padStart(2, "0")}`;
+  $("channel-total").textContent = `${cfg.channels.length} canales`;
+  $("aux-total").textContent = `${cfg.buses.length - 1} aux`;
+  $("add-channel").disabled =
+    structureBusy || cfg.channels.length >= limits.channels;
+  $("add-aux").disabled = structureBusy || cfg.buses.length - 1 >= limits.auxes;
+  $("counts").disabled = structureBusy;
   if (
     selected.index >=
     (selected.type === "channel" ? cfg.channels.length : cfg.buses.length)
@@ -766,7 +780,10 @@ function render() {
   if (view >= cfg.buses.length - 1) view = -1;
   document
     .querySelector(".app")
-    .style.setProperty("--outputs", Math.min(5, cfg.buses.length) * 70 + "px");
+    .style.setProperty(
+      "--outputs",
+      Math.min(5, Math.max(3, cfg.buses.length)) * 70 + "px",
+    );
   $("inputs").value = cfg.inputs;
   $("rate").value = cfg.sample_rate;
   $("buffer").value = cfg.buffer;
@@ -1122,67 +1139,6 @@ async function scan() {
     error(e);
   }
 }
-function openFx(type, index, slot) {
-  selectedFx = { type, index, slot };
-  const target = targetOf(type, index),
-    fx = target.inserts[slot];
-  pendingFx = fx ? structuredClone(fx) : null;
-  descriptors = [];
-  $("path").value = fx?.path || "";
-  $("params").replaceChildren();
-  $("classes").replaceChildren();
-  $("fxerror").textContent = "";
-  $("fx-title").textContent = fx ? fxName(fx) : "Añadir efecto";
-  $("fx-location").textContent = `${target.name} · INSERT ${slot + 1}`;
-  $("removefx").disabled = !fx;
-  $("fxup").disabled = !fx || slot === 0;
-  $("fxdown").disabled = !fx || slot === target.inserts.length - 1;
-  $("fx").showModal();
-  fetch("/api/native")
-    .then((r) => {
-      if (!r.ok) throw Error("No se pudo leer la lista nativa");
-      return r.json();
-    })
-    .then((list) => {
-      $("builtin-fx").replaceChildren(
-        new Option("Seleccionar efecto nativo…", ""),
-      );
-      for (const p of list) $("builtin-fx").append(new Option(p.name, p.id));
-    })
-    .catch((e) => ($("fxerror").textContent = e.message));
-  if (!catalogueLoaded)
-    scanVst3().catch((e) => ($("vst-scan-status").textContent = e.message));
-  else filterVst3();
-}
-function showParams() {
-  const d = descriptors[Number($("classes").value)];
-  if (!d) return;
-  const old = targetOf(selectedFx.type, selectedFx.index).inserts[
-    selectedFx.slot
-  ];
-  pendingFx = {
-    path: $("path").value,
-    id: d.id,
-    name: d.name,
-    bypass: old?.bypass || false,
-    params: old?.id === d.id ? { ...old.params } : {},
-  };
-  $("fx-title").textContent = d.name;
-  $("params").replaceChildren();
-  d.params.forEach((p) => {
-    const label = el("label", "", p.name),
-      input = el("input");
-    input.type = "number";
-    input.min = p.min;
-    input.max = p.max;
-    input.step = "any";
-    input.value = pendingFx.params[p.id] ?? p.value;
-    pendingFx.params[p.id] = Number(input.value);
-    input.onchange = () => (pendingFx.params[p.id] = Number(input.value));
-    label.append(input);
-    $("params").append(label);
-  });
-}
 async function scanVst3() {
   $("vst-scan-status").textContent = "Buscando bundles VST3…";
   const result = await api("vst3", { directory: $("vst-directory").value });
@@ -1206,83 +1162,6 @@ function filterVst3() {
     `${vstCatalogue.length} bundles detectados · selecciona uno para leer sus efectos.`;
   $("vst-scan-status").title = vstRoots.join("\n");
 }
-$("builtin-fx").onchange = () => {
-  if (!$("builtin-fx").value) return;
-  $("path").value = "native:" + $("builtin-fx").value;
-  pendingFx = null;
-  $("inspect").click();
-};
-$("vst-rescan").onclick = () =>
-  scanVst3().catch((e) => ($("vst-scan-status").textContent = e.message));
-$("vst-search").oninput = filterVst3;
-$("vst-installed").onchange = () => {
-  $("path").value = $("vst-installed").value;
-  pendingFx = null;
-  $("inspect").click();
-};
-$("inspect").onclick = async () => {
-  try {
-    $("fxerror").textContent = "Leyendo efecto…";
-    descriptors = await api("inspect", { path: $("path").value });
-    $("classes").replaceChildren();
-    descriptors.forEach((d, i) => $("classes").append(new Option(d.name, i)));
-    if (!descriptors.length)
-      throw Error("Este bundle no contiene efectos de audio.");
-    showParams();
-    $("fxerror").textContent = "";
-  } catch (e) {
-    $("fxerror").textContent = e.message;
-  }
-};
-$("path").oninput = () => {
-  pendingFx = null;
-};
-$("classes").onchange = showParams;
-$("closefx").onclick = () => $("fx").close();
-$("applyfx").onclick = async () => {
-  if (!pendingFx) {
-    $("fxerror").textContent =
-      "Selecciona un efecto nativo o lee un VST3 primero.";
-    return;
-  }
-  if (
-    [...$("params").querySelectorAll("input")].some((e) => !e.reportValidity())
-  )
-    return;
-  const target = targetOf(selectedFx.type, selectedFx.index),
-    before = structuredClone(target.inserts);
-  target.inserts[selectedFx.slot] = pendingFx;
-  try {
-    await publish();
-    $("fx").close();
-    render();
-  } catch (e) {
-    target.inserts = before;
-    $("fxerror").textContent = e.message;
-  }
-};
-$("removefx").onclick = async () => {
-  const t = targetOf(selectedFx.type, selectedFx.index);
-  t.inserts.splice(selectedFx.slot, 1);
-  await publish();
-  $("fx").close();
-  render();
-};
-for (const [id, delta] of [
-  ["fxup", -1],
-  ["fxdown", 1],
-])
-  $(id).onclick = async () => {
-    const t = targetOf(selectedFx.type, selectedFx.index),
-      slot = selectedFx.slot;
-    [t.inserts[slot], t.inserts[slot + delta]] = [
-      t.inserts[slot + delta],
-      t.inserts[slot],
-    ];
-    await publish();
-    $("fx").close();
-    render();
-  };
 $("device").onchange = () => {
   cfg.device = $("device").value === "" ? null : Number($("device").value);
   publish();
@@ -1438,6 +1317,292 @@ async function setProperty(type, index, key, value) {
   }
   render();
 }
+// Shared rotary control: pointer capture keeps a drag stable across UI updates.
+function rotary({
+  label,
+  value,
+  min,
+  max,
+  defaultValue = value,
+  step = 0.01,
+  log = false,
+  unit = "",
+  scale = 1,
+  colour = "#53afd0",
+  onChange,
+  onCommit,
+  inputLabel = label,
+}) {
+  const root = el("div", "rotary-control"),
+    caption = el("span", "rotary-label", label),
+    dial = el("div", "rotary-dial"),
+    number = el("input", "rotary-value"),
+    suffix = el("span", "rotary-unit", unit);
+  root.style.setProperty("--knob-colour", colour);
+  dial.tabIndex = 0;
+  dial.setAttribute("role", "slider");
+  dial.setAttribute("aria-label", `Perilla ${label}`);
+  dial.setAttribute("aria-valuemin", min);
+  dial.setAttribute("aria-valuemax", max);
+  dial.title =
+    "Arrastra arriba/abajo · Mayús: fino · doble clic: restablecer · flechas: ajustar";
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 64 64");
+  svg.setAttribute("aria-hidden", "true");
+  svg.innerHTML =
+    '<path class="knob-track" d="M15.03 48.97 A24 24 0 1 1 48.97 48.97"/><path class="knob-arc"/><circle class="knob-face" cx="32" cy="32" r="18"/><path class="knob-pointer"/>';
+  dial.append(svg);
+  number.type = "number";
+  number.min = Number((min * scale).toPrecision(7));
+  number.max = Number((max * scale).toPrecision(7));
+  number.step = "any";
+  number.required = true;
+  number.setAttribute("aria-label", inputLabel);
+  const readout = el("div", "rotary-readout");
+  readout.append(number, suffix);
+  root.append(caption, dial, readout);
+  let current = value,
+    disabled = false,
+    drag;
+  const normalise = (v) =>
+    log ? Math.log(v / min) / Math.log(max / min) : (v - min) / (max - min);
+  const denormalise = (n) =>
+    log ? min * (max / min) ** n : min + n * (max - min);
+  const clamp = (v) => Math.max(min, Math.min(max, v));
+  function set(v) {
+    current = clamp(v);
+    const n = Math.max(0, Math.min(1, normalise(current))),
+      angle = ((135 + 270 * n) * Math.PI) / 180;
+    const x = (r) => 32 + r * Math.cos(angle),
+      y = (r) => 32 + r * Math.sin(angle);
+    svg
+      .querySelector(".knob-arc")
+      .setAttribute(
+        "d",
+        `M15.03 48.97 A24 24 0 ${n > 2 / 3 ? 1 : 0} 1 ${x(24)} ${y(24)}`,
+      );
+    svg.querySelector(".knob-arc").style.opacity = n > 0.00001 ? 1 : 0;
+    svg
+      .querySelector(".knob-pointer")
+      .setAttribute("d", `M${x(10)} ${y(10)} L${x(17)} ${y(17)}`);
+    number.value = Number((current * scale).toPrecision(7));
+    dial.setAttribute("aria-valuenow", current);
+    dial.setAttribute("aria-valuetext", `${number.value} ${unit}`);
+  }
+  function change(v) {
+    if (disabled || !Number.isFinite(v)) return;
+    const rounded = clamp(Number((Math.round(v / step) * step).toFixed(6)));
+    if (rounded === current) return;
+    set(rounded);
+    onChange(rounded);
+  }
+  dial.onpointerdown = (e) => {
+    if (disabled || e.button !== 0) return;
+    e.preventDefault();
+    dial.focus();
+    dial.setPointerCapture(e.pointerId);
+    drag = { y: e.clientY, n: normalise(current) };
+    root.classList.add("dragging");
+  };
+  dial.onpointermove = (e) => {
+    if (!drag) return;
+    const delta = (drag.y - e.clientY) / (e.shiftKey ? 1800 : 180),
+      nextN = Math.max(0, Math.min(1, drag.n + delta));
+    change(denormalise(nextN));
+    drag = { y: e.clientY, n: nextN };
+  };
+  function release(e) {
+    if (!drag) return;
+    drag = null;
+    root.classList.remove("dragging");
+    if (dial.hasPointerCapture(e.pointerId))
+      dial.releasePointerCapture(e.pointerId);
+    onCommit?.();
+  }
+  dial.onpointerup = release;
+  dial.onpointercancel = release;
+  dial.onlostpointercapture = () => {
+    drag = null;
+    root.classList.remove("dragging");
+  };
+  dial.ondblclick = () => {
+    change(defaultValue);
+    onCommit?.();
+  };
+  dial.onkeydown = (e) => {
+    let delta = 0;
+    if (["ArrowUp", "ArrowRight"].includes(e.key)) delta = 1;
+    if (["ArrowDown", "ArrowLeft"].includes(e.key)) delta = -1;
+    if (delta) {
+      e.preventDefault();
+      change(
+        log
+          ? current * (max / min) ** (delta * (e.shiftKey ? 0.001 : 0.01))
+          : current + delta * step * (e.shiftKey ? 1 : 10),
+      );
+      onCommit?.();
+    }
+    if (e.key === "Home") {
+      e.preventDefault();
+      change(defaultValue);
+      onCommit?.();
+    }
+  };
+  dial.addEventListener(
+    "wheel",
+    (e) => {
+      if (document.activeElement !== dial || disabled) return;
+      e.preventDefault();
+      change(
+        denormalise(
+          Math.max(
+            0,
+            Math.min(
+              1,
+              normalise(current) +
+                (e.deltaY < 0 ? 1 : -1) * (e.shiftKey ? 0.001 : 0.01),
+            ),
+          ),
+        ),
+      );
+      onCommit?.();
+    },
+    { passive: false },
+  );
+  number.onchange = () => {
+    if (!number.reportValidity()) return;
+    change(Number(number.value) / scale);
+    set(current);
+    onCommit?.();
+  };
+  number.onkeydown = (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      number.dispatchEvent(new Event("change"));
+    }
+  };
+  set(value);
+  return {
+    root,
+    set,
+    setDisabled(v) {
+      disabled = v;
+      number.disabled = v;
+      dial.setAttribute("aria-disabled", v);
+      dial.tabIndex = v ? -1 : 0;
+      root.classList.toggle("disabled", v);
+    },
+  };
+}
+function renderFreevox(descriptor) {
+  for (const p of descriptor.params) pendingFx.params[p.id] ??= p.value;
+  const panel = el("section", "freevox-panel");
+  panel.setAttribute("aria-label", "Editor FreeVox8");
+  const heading = el("div", "plugin-panel-heading");
+  heading.append(
+    el("strong", "", "FreeVox8"),
+    el("span", "", "VOCODER · FILTERBANK · 48 kHz"),
+  );
+  panel.append(heading);
+  const modes = el("div", "vox-modes");
+  modes.setAttribute("aria-label", "Modo FreeVox8");
+  ["Vocoder", "Mask", "Ghost", "Morph"].forEach((name, i) => {
+    const button = el("button", "", name);
+    button.type = "button";
+    button.dataset.mode = i;
+    button.setAttribute(
+      "aria-pressed",
+      Math.round(pendingFx.params.Mode) === i,
+    );
+    button.onclick = () => {
+      pendingFx.params.Mode = i;
+      modes
+        .querySelectorAll("button")
+        .forEach((b, k) => b.setAttribute("aria-pressed", k === i));
+      fxParameterChanged();
+    };
+    modes.append(button);
+  });
+  panel.append(modes);
+  const names = {
+    "Carrier blend": "Portadora",
+    "Carrier note": "Nota portadora",
+    "Formant shift": "Formante",
+    "Mask depth": "Máscara",
+    Clarity: "Claridad",
+    Ghost: "Ghost",
+    Air: "Aire",
+    Freeze: "Freeze",
+    "Transient protect": "Transitorios",
+    Mix: "Mezcla",
+    "Stereo width": "Anchura",
+    Quality: "Calidad",
+    "Output gain": "Salida",
+  };
+  const colours = ["#b79aeb", "#49bec8", "#daaa67"];
+  for (const [g, [title, ids]] of [
+    ["PORTADORA", ["Carrier blend", "Carrier note", "Formant shift"]],
+    [
+      "TEXTURA",
+      ["Mask depth", "Clarity", "Ghost", "Air", "Freeze", "Transient protect"],
+    ],
+    ["SALIDA", ["Mix", "Stereo width", "Quality", "Output gain"]],
+  ].entries()) {
+    const group = el("div", "vox-group");
+    group.append(el("h3", "", title));
+    const knobs = el("div", "vox-knob-bank");
+    ids.forEach((id) => {
+      const p = descriptor.params.find((p) => p.id === id);
+      if (!p) return;
+      const percent = [
+        "Carrier blend",
+        "Mask depth",
+        "Clarity",
+        "Ghost",
+        "Air",
+        "Freeze",
+        "Transient protect",
+        "Mix",
+        "Stereo width",
+        "Quality",
+      ].includes(id);
+      const control = rotary({
+        label: names[id],
+        inputLabel: `FreeVox8 ${id}`,
+        value: pendingFx.params[id],
+        defaultValue: p.value,
+        min: p.min,
+        max: p.max,
+        step: id === "Carrier note" ? 1 : percent ? 0.001 : 0.1,
+        unit: percent
+          ? "%"
+          : id === "Formant shift"
+            ? "st"
+            : id === "Output gain"
+              ? "dB"
+              : "MIDI",
+        scale: percent ? 100 : 1,
+        colour: colours[g],
+        onChange: (v) => {
+          pendingFx.params[id] = v;
+          fxParameterChanged();
+        },
+      });
+      knobs.append(control.root);
+    });
+    group.append(knobs);
+    panel.append(group);
+  }
+  panel.append(
+    el(
+      "p",
+      "hint",
+      "Arrastra las perillas · Mayús: fino · doble clic: valor inicial. Los efectos existentes se ajustan en vivo. Para añadir uno nuevo pulsa Aplicar insert. Los parámetros se guardan en la escena.",
+    ),
+  );
+  $("params").append(panel);
+}
+
 function eqResponse(eq, frequency) {
   if (eq.bypass) return 0;
   const rate = cfg.sample_rate,
@@ -1540,168 +1705,544 @@ function eqButton(type, index) {
     `EQ ${type === "channel" ? "canal" : "bus"} ${index + 1}`,
   );
   button.title = "EQ paramétrico de ocho bandas · clic para editar";
+  button.dataset.eq = keyOf(type, index);
   button.append(el("span", "", "EQ"), eqSvg(eq));
   button.onclick = () => openEq(type, index);
   return button;
 }
+const eqColours = [
+  "#e45e74",
+  "#d99c68",
+  "#d5c45b",
+  "#8fbf73",
+  "#55bbca",
+  "#75a8e4",
+  "#bb85d7",
+  "#d981b1",
+];
+const eqChart = {
+  width: 900,
+  height: 310,
+  left: 42,
+  right: 876,
+  top: 18,
+  bottom: 280,
+};
+function eqX(f) {
+  return (
+    eqChart.left +
+    (Math.log(f / 20) / Math.log(1000)) * (eqChart.right - eqChart.left)
+  );
+}
+function eqY(db) {
+  return eqChart.top + ((24 - db) / 48) * (eqChart.bottom - eqChart.top);
+}
+function svgEl(tag, attrs = {}) {
+  const e = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  return e;
+}
+function currentEq() {
+  return targetOf(eqTarget.type, eqTarget.index).eq;
+}
 function openEq(type, index) {
+  flushEq();
   eqTarget = { type, index };
-  const target = targetOf(type, index);
-  $("eq-title").textContent = `FreeEQ8 · ${target.name}`;
-  $("eq-bypass").checked = target.eq.bypass;
-  const header = el("div", "eq-band-row eq-band-header");
-  for (const name of [
-    "Banda",
-    "Tipo",
-    "Frecuencia (Hz)",
-    "Ganancia (dB)",
-    "Q / pendiente",
-  ])
-    header.append(el("span", "", name));
-  $("eq-bands").replaceChildren(header);
-  target.eq.bands.forEach((band, i) => {
-    const row = el("div", "eq-band-row");
-    row.append(el("span", "", String(i + 1)));
-    const kind = el("select");
-    [
-      "Campana",
+  eqBandIndex = 0;
+  $("eq-title").textContent = `FreeEQ8 · ${targetOf(type, index).name}`;
+  $("eq-edit-status").textContent = "Cambios en vivo";
+  const svg = svgEl("svg", {
+    viewBox: "0 0 900 310",
+    role: "group",
+    "aria-label": "Curva paramétrica de ocho bandas",
+  });
+  for (const gain of [-24, -18, -12, -6, 0, 6, 12, 18, 24]) {
+    svg.append(
+      svgEl("line", {
+        x1: eqChart.left,
+        x2: eqChart.right,
+        y1: eqY(gain),
+        y2: eqY(gain),
+        class: gain === 0 ? "eq-zero" : "eq-gridline",
+      }),
+    );
+    const text = svgEl("text", {
+      x: 32,
+      y: eqY(gain) + 3,
+      "text-anchor": "end",
+      class: "eq-axis-text",
+    });
+    text.textContent = gain > 0 ? "+" + gain : String(gain);
+    svg.append(text);
+  }
+  for (const f of [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000]) {
+    svg.append(
+      svgEl("line", {
+        x1: eqX(f),
+        x2: eqX(f),
+        y1: eqChart.top,
+        y2: eqChart.bottom,
+        class: "eq-gridline",
+      }),
+    );
+    const text = svgEl("text", {
+      x: eqX(f),
+      y: 302,
+      "text-anchor": "middle",
+      class: "eq-axis-text",
+    });
+    text.textContent = f >= 1000 ? f / 1000 + "k" : String(f);
+    svg.append(text);
+  }
+  svg.append(
+    svgEl("path", { id: "eq-selected-fill", class: "eq-selected-fill" }),
+    svgEl("path", { id: "eq-response", class: "eq-response" }),
+  );
+  currentEq().bands.forEach((band, i) => {
+    const node = svgEl("g", {
+      class: "eq-node",
+      tabindex: 0,
+      role: "slider",
+      "data-band": i,
+      "aria-label": `Punto EQ banda ${i + 1}`,
+      "aria-valuemin": 20,
+      "aria-valuemax": 20000,
+    });
+    node.style.setProperty("--band-colour", eqColours[i]);
+    node.append(
+      svgEl("circle", { r: 17, class: "eq-node-hit" }),
+      svgEl("circle", { r: 9, class: "eq-node-dot" }),
+    );
+    const label = svgEl("text", { "text-anchor": "middle", y: 3 });
+    label.textContent = i + 1;
+    node.append(label);
+    let drag;
+    node.onpointerdown = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      selectEqBand(i);
+      node.focus();
+      node.setPointerCapture(e.pointerId);
+      drag = {
+        x: e.clientX,
+        y: e.clientY,
+        frequency: currentEq().bands[i].frequency,
+        gain: currentEq().bands[i].gain_db,
+      };
+    };
+    node.onpointermove = (e) => {
+      if (!drag) return;
+      const rect = svg.getBoundingClientRect(),
+        b = currentEq().bands[i],
+        fine = e.shiftKey ? 0.1 : 1;
+      b.frequency = Math.max(
+        20,
+        Math.min(
+          20000,
+          drag.frequency *
+            1000 **
+              (((((e.clientX - drag.x) / rect.width) * 900) /
+                (eqChart.right - eqChart.left)) *
+                fine),
+        ),
+      );
+      const preciseFrequency = b.frequency;
+      b.frequency = Math.round(b.frequency);
+      if (b.kind < 3)
+        b.gain_db = Math.max(
+          -18,
+          Math.min(
+            18,
+            Math.round(
+              (drag.gain -
+                ((((e.clientY - drag.y) / rect.height) * 310) /
+                  (eqChart.bottom - eqChart.top)) *
+                  48 *
+                  fine) *
+                10,
+            ) / 10,
+          ),
+        );
+      drag = {
+        x: e.clientX,
+        y: e.clientY,
+        frequency: preciseFrequency,
+        gain: Math.max(
+          -18,
+          Math.min(
+            18,
+            drag.gain -
+              ((((e.clientY - drag.y) / rect.height) * 310) /
+                (eqChart.bottom - eqChart.top)) *
+                48 *
+                fine,
+          ),
+        ),
+      };
+      editEq();
+    };
+    const release = (e) => {
+      if (!drag) return;
+      drag = null;
+      if (node.hasPointerCapture(e.pointerId))
+        node.releasePointerCapture(e.pointerId);
+      flushEq();
+    };
+    node.onpointerup = release;
+    node.onpointercancel = release;
+    node.onlostpointercapture = () => (drag = null);
+    node.ondblclick = () => {
+      currentEq().bands[i].gain_db = 0;
+      editEq();
+      flushEq();
+    };
+    node.addEventListener(
+      "wheel",
+      (e) => {
+        e.preventDefault();
+        selectEqBand(i);
+        const b = currentEq().bands[i];
+        b.q = Math.max(
+          0.1,
+          Math.min(
+            18,
+            Number((b.q * (e.deltaY < 0 ? 1.1 : 1 / 1.1)).toFixed(3)),
+          ),
+        );
+        editEq();
+      },
+      { passive: false },
+    );
+    node.onkeydown = (e) => {
+      const b = currentEq().bands[i];
+      if (
+        !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home"].includes(
+          e.key,
+        )
+      )
+        return;
+      e.preventDefault();
+      selectEqBand(i);
+      if (e.key === "ArrowLeft" || e.key === "ArrowRight")
+        b.frequency = Math.max(
+          20,
+          Math.min(
+            20000,
+            Math.round(
+              b.frequency *
+                2 **
+                  ((e.key === "ArrowRight" ? 1 : -1) / (e.shiftKey ? 120 : 12)),
+            ),
+          ),
+        );
+      else if (e.key === "Home") b.gain_db = 0;
+      else if (b.kind < 3)
+        b.gain_db = Math.max(
+          -18,
+          Math.min(
+            18,
+            Number(
+              (
+                b.gain_db +
+                (e.key === "ArrowUp" ? 1 : -1) * (e.shiftKey ? 0.1 : 0.5)
+              ).toFixed(1),
+            ),
+          ),
+        );
+      else
+        b.q = Math.max(
+          0.1,
+          Math.min(
+            18,
+            Number((b.q + (e.key === "ArrowUp" ? 0.1 : -0.1)).toFixed(3)),
+          ),
+        );
+      editEq();
+      flushEq();
+    };
+    svg.append(node);
+  });
+  $("eq-graph").replaceChildren(svg);
+  $("eq-tabs").replaceChildren(
+    ...currentEq().bands.map((_, i) => {
+      const button = el("button", "eq-tab", String(i + 1));
+      button.id = `eq-tab-${i}`;
+      button.type = "button";
+      button.setAttribute("role", "tab");
+      button.setAttribute("aria-controls", "eq-bands");
+      button.setAttribute("aria-label", `Banda EQ ${i + 1}`);
+      button.style.setProperty("--band-colour", eqColours[i]);
+      button.onclick = () => selectEqBand(i);
+      button.onkeydown = (e) => {
+        if (!["ArrowLeft", "ArrowRight"].includes(e.key)) return;
+        e.preventDefault();
+        const next = (i + (e.key === "ArrowRight" ? 1 : 7)) % 8;
+        selectEqBand(next);
+        $("eq-tabs").children[next].focus();
+      };
+      return button;
+    }),
+  );
+  $("eq-kind").replaceChildren(
+    ...[
+      "Bell · Campana",
       "Low shelf",
       "High shelf",
-      "Pasa altos",
-      "Pasa bajos",
-      "Pasa banda",
-    ].forEach((name, k) => kind.append(new Option(name, k)));
-    kind.value = band.kind || 0;
-    kind.setAttribute("aria-label", `EQ banda ${i + 1} tipo`);
-    kind.onchange = async () => {
-      const old = band.kind;
-      band.kind = Number(kind.value);
-      try {
-        await publish();
-      } catch (e) {
-        band.kind = old;
-        kind.value = old;
-        error(e);
-      }
-      refreshEq();
-    };
-    row.append(kind);
-    for (const [key, min, max, step] of [
-      ["frequency", 20, 20000, 1],
-      ["gain_db", -18, 18, 0.1],
-      ["q", 0.1, 18, 0.01],
-    ]) {
-      const input = el("input");
-      input.type = "number";
-      input.min = min;
-      input.max = max;
-      input.step = step;
-      input.value = band[key];
-      input.setAttribute("aria-label", `EQ banda ${i + 1} ${key}`);
-      input.onchange = async () => {
-        if (!input.reportValidity()) return;
-        const previous = band[key];
-        band[key] = Number(input.value);
-        try {
-          await publish();
-        } catch (e) {
-          band[key] = previous;
-          input.value = previous;
-          error(e);
-        }
-        refreshEq();
-      };
-      row.append(input);
-    }
-    $("eq-bands").append(row);
-  });
-  refreshEq();
+      "High pass · Pasa altos",
+      "Low pass · Pasa bajos",
+      "Band pass · Pasa banda",
+    ].map((name, i) => new Option(name, i)),
+  );
+  selectEqBand(0);
+  renderEqPresets();
   $("eq-dialog").showModal();
 }
-function refreshEq() {
-  if (!eqTarget) return;
-  const target = targetOf(eqTarget.type, eqTarget.index);
-  $("eq-graph").replaceChildren(eqSvg(target.eq, true));
-  render();
-}
-$("eq-bypass").onchange = async () => {
-  if (!eqTarget) return;
-  const target = targetOf(eqTarget.type, eqTarget.index),
-    previous = target.eq.bypass;
-  target.eq.bypass = $("eq-bypass").checked;
-  try {
-    await publish();
-  } catch (e) {
-    target.eq.bypass = previous;
-    $("eq-bypass").checked = previous;
-    error(e);
-  }
+function selectEqBand(index) {
+  eqBandIndex = index;
+  const band = currentEq().bands[index];
+  $("eq-band-label").textContent = `BANDA ${index + 1}`;
+  $("eq-band-label").style.color = eqColours[index];
+  $("eq-kind").value = band.kind;
+  eqKnobs = [
+    ["frequency", "Frecuencia", 20, 20000, 1, true, "Hz"],
+    ["gain_db", "Ganancia", -18, 18, 0.1, false, "dB"],
+    ["q", "Q / pendiente", 0.1, 18, 0.001, true, ""],
+  ].map(([key, label, min, max, step, log, unit]) =>
+    rotary({
+      label: `EQ banda ${index + 1} ${label.toLowerCase()}`,
+      inputLabel: `EQ banda ${index + 1} ${key}`,
+      value: band[key],
+      defaultValue: defaultEq().bands[index][key],
+      min,
+      max,
+      step,
+      log,
+      unit,
+      colour: eqColours[index],
+      onChange: (v) => {
+        currentEq().bands[index][key] = v;
+        editEq();
+      },
+      onCommit: flushEq,
+    }),
+  );
+  // Keep short captions while preserving descriptive accessible labels.
+  eqKnobs.forEach(
+    (k, i) =>
+      (k.root.querySelector(".rotary-label").textContent = [
+        "Frecuencia",
+        "Ganancia",
+        "Q / pendiente",
+      ][i]),
+  );
+  $("eq-bands").replaceChildren(...eqKnobs.map((k) => k.root));
+  $("eq-bands").setAttribute("role", "tabpanel");
+  $("eq-bands").setAttribute("aria-labelledby", `eq-tab-${index}`);
   refreshEq();
+}
+function refreshEq() {
+  if (!eqTarget || !$("eq-response")) return;
+  const eq = currentEq(),
+    band = eq.bands[eqBandIndex];
+  let path = "",
+    selectedPath = `M${eqX(20)} ${eqY(0)} `;
+  for (let i = 0; i <= 256; i++) {
+    const f = 20 * 1000 ** (i / 256),
+      x = eqX(f),
+      y = (v) => Math.max(eqChart.top, Math.min(eqChart.bottom, eqY(v)));
+    path += `${i ? "L" : "M"}${x} ${y(eqResponse(eq, f))} `;
+    selectedPath += `L${x} ${y(eqResponse({ bypass: eq.bypass, bands: [band] }, f))} `;
+  }
+  $("eq-response").setAttribute("d", path);
+  $("eq-response").classList.toggle("bypassed", eq.bypass);
+  $("eq-selected-fill").setAttribute(
+    "d",
+    selectedPath + `L${eqX(20000)} ${eqY(0)} Z`,
+  );
+  $("eq-selected-fill").style.fill = eqColours[eqBandIndex];
+  $("eq-graph")
+    .querySelectorAll(".eq-node")
+    .forEach((node, i) => {
+      const b = eq.bands[i];
+      node.setAttribute(
+        "transform",
+        `translate(${eqX(b.frequency)} ${eqY(b.kind < 3 ? b.gain_db : 0)})`,
+      );
+      node.setAttribute("aria-valuenow", b.frequency);
+      node.setAttribute(
+        "aria-valuetext",
+        `${Math.round(b.frequency)} Hz, ${b.kind < 3 ? b.gain_db : 0} dB, Q ${b.q}`,
+      );
+      node.classList.toggle("selected", i === eqBandIndex);
+    });
+  $("eq-tabs")
+    .querySelectorAll("button")
+    .forEach((b, i) => {
+      b.setAttribute("aria-selected", i === eqBandIndex);
+      b.tabIndex = i === eqBandIndex ? 0 : -1;
+    });
+  [band.frequency, band.gain_db, band.q].forEach((v, i) => eqKnobs[i]?.set(v));
+  eqKnobs[1]?.setDisabled(band.kind >= 3);
+  $("eq-bypass").checked = eq.bypass;
+  $("eq-kind").value = band.kind;
+  const key = keyOf(eqTarget.type, eqTarget.index);
+  document
+    .querySelectorAll(`.eq-module[data-eq="${key}"]`)
+    .forEach((button) => {
+      button.classList.toggle("eq-off", eq.bypass);
+      button.querySelector("svg")?.replaceWith(eqSvg(eq));
+    });
+}
+function editEq() {
+  eqWriteVersion++;
+  refreshEq();
+  $("eq-edit-status").textContent = "Aplicando…";
+  if (!eqWriteTimer) eqWriteTimer = setTimeout(flushEq, 40);
+}
+function flushEq() {
+  if (!eqWriteTimer) return;
+  clearTimeout(eqWriteTimer);
+  eqWriteTimer = undefined;
+  const version = eqWriteVersion;
+  publish()
+    .then(() => {
+      if (version === eqWriteVersion)
+        $("eq-edit-status").textContent = "Aplicado · en vivo";
+    })
+    .catch((e) => {
+      $("eq-edit-status").textContent = "No se pudo aplicar";
+      error(e);
+    });
+}
+$("eq-dialog").addEventListener("close", flushEq);
+$("eq-kind").onchange = () => {
+  currentEq().bands[eqBandIndex].kind = Number($("eq-kind").value);
+  editEq();
+  flushEq();
 };
-$("counts").onclick = () => {
+$("eq-bypass").onchange = () => {
+  currentEq().bypass = $("eq-bypass").checked;
+  editEq();
+  flushEq();
+};
+$("eq-reset-band").onclick = () => {
+  currentEq().bands[eqBandIndex] = defaultEq().bands[eqBandIndex];
+  selectEqBand(eqBandIndex);
+  editEq();
+  flushEq();
+};
+$("eq-reset-all").onclick = () => {
+  targetOf(eqTarget.type, eqTarget.index).eq = defaultEq();
+  selectEqBand(eqBandIndex);
+  editEq();
+  flushEq();
+};
+
+function openCounts(focus = "channel-count") {
   $("channel-count").value = cfg.channels.length;
   $("aux-count").value = cfg.buses.length - 1;
   $("counts-error").textContent = "";
   $("counts-dialog").showModal();
-};
-$("apply-counts").onclick = async () => {
-  const button = $("apply-counts"),
-    channels = Number($("channel-count").value),
-    auxes = Number($("aux-count").value);
+  $(focus).focus();
+  $(focus).select();
+}
+$("counts").onclick = () => openCounts();
+$("channel-total").onclick = () => openCounts();
+$("aux-total").onclick = () => openCounts("aux-count");
+async function resizeStructure(
+  channels,
+  auxes,
+  channelFormat = "mono",
+  auxFormat = "mono",
+) {
+  if (structureBusy) throw Error("Hay un cambio de estructura en curso");
   if (
-    !$("channel-count").reportValidity() ||
-    !$("aux-count").reportValidity() ||
     !Number.isInteger(channels) ||
-    !Number.isInteger(auxes)
+    !Number.isInteger(auxes) ||
+    channels < 1 ||
+    channels > limits.channels ||
+    auxes < 0 ||
+    auxes > limits.auxes
   )
-    return;
-  const candidate = structuredClone(cfg);
-  candidate.channels = candidate.channels.slice(0, channels);
-  candidate.buses = candidate.buses.slice(0, auxes + 1);
-  while (candidate.channels.length < channels) {
-    const i = candidate.channels.length;
-    candidate.channels.push({
-      name: `Entrada ${i + 1}`,
-      format: $("new-channel-format").value,
-      input: i < cfg.inputs ? i : null,
-      input_right: i + 1 < cfg.inputs ? i + 1 : null,
-      gain_db: 0,
-      pan: 0,
-      mute: false,
-      sends_db: [],
-      pre: [],
-      inserts: [],
-      fx: null,
-      generator: { signal: "off", level_db: -30, frequency: 1000 },
-      eq: defaultEq(),
-    });
-  }
-  while (candidate.buses.length < auxes + 1)
-    candidate.buses.push({
-      name: `Monitor ${candidate.buses.length}`,
-      format: $("new-aux-format").value,
-      gain_db: -12,
-      mute: false,
-      output: null,
-      inserts: [],
-      fx: null,
-      eq: defaultEq(),
-    });
-  for (const ch of candidate.channels) {
-    ch.sends_db = ch.sends_db.slice(0, auxes);
-    ch.pre = ch.pre.slice(0, auxes);
-    while (ch.sends_db.length < auxes) ch.sends_db.push(-90);
-    while (ch.pre.length < auxes) ch.pre.push(true);
-  }
-  if (candidate.pc_monitor >= candidate.buses.length) candidate.pc_monitor = 0;
-  button.disabled = true;
-  button.textContent = "Aplicando…";
+    throw Error("Cantidad fuera de rango");
+  structureBusy = true;
+  render();
   try {
     await queue;
+    const candidate = structuredClone(cfg);
+    candidate.channels = candidate.channels.slice(0, channels);
+    candidate.buses = candidate.buses.slice(0, auxes + 1);
+    while (candidate.channels.length < channels) {
+      const i = candidate.channels.length;
+      candidate.channels.push({
+        name: `Entrada ${i + 1}`,
+        format: channelFormat,
+        input: i < cfg.inputs ? i : null,
+        input_right: i + 1 < cfg.inputs ? i + 1 : null,
+        gain_db: 0,
+        pan: 0,
+        mute: false,
+        sends_db: [],
+        pre: [],
+        inserts: [],
+        fx: null,
+        generator: { signal: "off", level_db: -30, frequency: 1000 },
+        eq: defaultEq(),
+      });
+    }
+    while (candidate.buses.length < auxes + 1)
+      candidate.buses.push({
+        name: `Monitor ${candidate.buses.length}`,
+        format: auxFormat,
+        gain_db: -12,
+        mute: false,
+        output: null,
+        inserts: [],
+        fx: null,
+        eq: defaultEq(),
+      });
+    for (const ch of candidate.channels) {
+      ch.sends_db = ch.sends_db.slice(0, auxes);
+      ch.pre = ch.pre.slice(0, auxes);
+      while (ch.sends_db.length < auxes) ch.sends_db.push(-90);
+      while (ch.pre.length < auxes) ch.pre.push(true);
+    }
+    if (candidate.pc_monitor >= candidate.buses.length)
+      candidate.pc_monitor = 0;
     await api("config", candidate);
     cfg = candidate;
     meterStates.clear();
+  } finally {
+    structureBusy = false;
     render();
+  }
+}
+function revealStrip(type, index) {
+  selectStrip(type, index);
+  const bank = $(type === "channel" ? "mixer" : "buses");
+  bank.scrollLeft = bank.scrollWidth;
+}
+$("add-channel").onclick = () =>
+  resizeStructure(cfg.channels.length + 1, cfg.buses.length - 1)
+    .then(() => revealStrip("channel", cfg.channels.length - 1))
+    .catch(error);
+$("add-aux").onclick = () =>
+  resizeStructure(cfg.channels.length, cfg.buses.length)
+    .then(() => revealStrip("bus", cfg.buses.length - 1))
+    .catch(error);
+$("apply-counts").onclick = async () => {
+  if (!$("channel-count").reportValidity() || !$("aux-count").reportValidity())
+    return;
+  const button = $("apply-counts");
+  button.disabled = true;
+  button.textContent = "Aplicando…";
+  try {
+    await resizeStructure(
+      Number($("channel-count").value),
+      Number($("aux-count").value),
+      $("new-channel-format").value,
+      $("new-aux-format").value,
+    );
     $("counts-dialog").close();
   } catch (e) {
     $("counts-error").textContent = e.message;

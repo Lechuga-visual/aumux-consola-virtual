@@ -23,7 +23,9 @@ pub struct Fx {
 }
 impl Fx {
     fn same_graph(&self, other: &Self) -> bool {
-        self.path == other.path && self.id == other.id && self.params == other.params
+        self.path == other.path
+            && self.id == other.id
+            && (self.id.starts_with("native/") || self.params == other.params)
     }
 }
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq)]
@@ -276,6 +278,22 @@ impl Config {
                     .any(|(k, v)| k.len() > 128 || !v.is_finite())
             {
                 return Err("Invalid effect configuration".into());
+            }
+            if fx.id.starts_with("native/") {
+                let info = crate::native_fx::registry()
+                    .iter()
+                    .find(|p| p.id == fx.id)
+                    .ok_or("Efecto nativo desconocido")?;
+                for (id, value) in &fx.params {
+                    let p = info
+                        .params
+                        .iter()
+                        .find(|p| p.id == id)
+                        .ok_or("Parámetro nativo desconocido")?;
+                    if !range(*value, p.min, p.max) {
+                        return Err(format!("Parámetro nativo fuera de rango: {id}"));
+                    }
+                }
             }
         }
         Ok(())
