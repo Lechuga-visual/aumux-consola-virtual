@@ -39,8 +39,7 @@ shutil.copytree(vendor, source/'vendor-rust', dirs_exist_ok=True)
 (source/'.cargo').mkdir(exist_ok=True)
 (source/'.cargo/config.toml').write_text(config.replace(str(vendor),'vendor-rust'))
 # Ship the visual editor guide and its images beside LEEME, and with the sources.
-minor='.'.join(version.split('.')[:2])
-visual=[root/'docs'/f'interfaz-{minor}.md', *sorted((root/'docs').glob(f'monitor-mix-{minor}*.png'))]
+visual=[root/'docs/hoja-de-ruta.md', root/'docs/control-remoto.md', *sorted((root/'docs').glob('interfaz-*.md')), *sorted((root/'docs').glob('monitor-mix-*.png'))]
 for p in visual:
     if p.is_file():
         shutil.copy2(p,stage/p.name)

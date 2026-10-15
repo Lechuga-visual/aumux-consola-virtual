@@ -39,9 +39,11 @@ kill -0 "$display_pid"
 /workspace/scratch/obs-build/receiver-test > /workspace/scratch/monitor-obs-test.log 2>&1
 tail -n 1 /workspace/scratch/monitor-obs-test.log
 MONITOR_OBS_TEST=/workspace/scratch/obs-build/receiver-test python3 desktop/tests/bridge-smoke.py
+python3 desktop/tests/listen-smoke.py
 if command -v chromium >/dev/null; then
   npm_config_cache=/workspace/scratch/npm-cache npm install --prefix /workspace/scratch/monitor-ui playwright-core@1.56.1 --no-audit --no-fund
   NODE_PATH=/workspace/scratch/monitor-ui/node_modules node desktop/tests/ui-smoke.cjs
+  NODE_PATH=/workspace/scratch/monitor-ui/node_modules node desktop/tests/workspace-smoke.cjs
 else
   echo 'Browser validation not run: Chromium unavailable'; exit 1
 fi

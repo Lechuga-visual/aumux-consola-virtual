@@ -58,6 +58,8 @@ function normalise(c) {
     ch.fx = null;
     ch.generator ||= { signal: "off", level_db: -30, frequency: 1000 };
     ch.eq ||= defaultEq();
+    ch.compressor ||= defaultCompressor();
+    ch.pin ||= "none";
     if (legacy) {
       ch.format = "mono";
       ch.input = i < c.inputs ? i : null;
@@ -69,6 +71,8 @@ function normalise(c) {
     if (b.fx) b.inserts.unshift(b.fx);
     b.fx = null;
     b.eq ||= defaultEq();
+    b.compressor ||= defaultCompressor();
+    b.pin ||= b === c.buses[0] ? "right" : "none";
     if (legacy) b.format = "stereo";
   });
   if (legacy) c.version = 2;
@@ -692,6 +696,7 @@ function arrangeStrip(card, type, index) {
     main.title = "Abrir envíos y nivel principal";
     main.onclick = () => openRouting(index);
   }
+  card.tabIndex = 0;
   nameRow.append(name);
   const format = el(
     "button",
@@ -734,6 +739,7 @@ function arrangeStrip(card, type, index) {
     source,
     rack,
     eqButton(type, index),
+    compressorButton(type, index),
     sends,
     pan,
     main,
@@ -832,6 +838,7 @@ function render() {
   $("pc").classList.toggle("active", lastStatus?.mode === "PC");
   updateSendLabels();
   selectStrip(selected.type, selected.index);
+  layoutStrips();
 }
 function inspectorSection(title) {
   const section = el("section", "inspector-section");
@@ -1108,6 +1115,7 @@ async function poll() {
     );
     bridge.title = `Enviados: ${s.bridge?.sent || 0} paquetes · Descartados: ${s.bridge_drops}\nLa confirmación verifica recepción en la fuente; revisa también su mute y la escena en OBS.`;
     updateLatency();
+    updateWorkspaceStatus(s);
   } catch (e) {
     $("status").textContent = "SIN CONEXIÓN";
     $("listen-status").textContent = "Sin conexión";
@@ -1173,11 +1181,19 @@ for (const [id, key] of [
 ])
   $(id).onchange = () => {
     cfg[key] = Number($(id).value);
-    if (key === "inputs")
+    if (key === "inputs") {
+      for (const node of [...cfg.channels, ...cfg.buses]) {
+        if (
+          node.compressor.source.type === "input" &&
+          node.compressor.source.index >= cfg.inputs
+        )
+          node.compressor.source = { type: "internal" };
+      }
       cfg.channels.forEach((c) => {
         if (c.input >= cfg.inputs) c.input = null;
         if (c.input_right >= cfg.inputs) c.input_right = null;
       });
+    }
     publish();
   };
 $("bridge").onchange = () => {
@@ -2188,6 +2204,8 @@ async function resizeStructure(
         fx: null,
         generator: { signal: "off", level_db: -30, frequency: 1000 },
         eq: defaultEq(),
+        compressor: defaultCompressor(),
+        pin: "none",
       });
     }
     while (candidate.buses.length < auxes + 1)
@@ -2200,6 +2218,8 @@ async function resizeStructure(
         inserts: [],
         fx: null,
         eq: defaultEq(),
+        compressor: defaultCompressor(),
+        pin: "none",
       });
     for (const ch of candidate.channels) {
       ch.sends_db = ch.sends_db.slice(0, auxes);
@@ -2209,6 +2229,13 @@ async function resizeStructure(
     }
     if (candidate.pc_monitor >= candidate.buses.length)
       candidate.pc_monitor = 0;
+    for (const node of [...candidate.channels, ...candidate.buses]) {
+      if (
+        node.compressor?.source?.type === "channel" &&
+        node.compressor.source.index >= channels
+      )
+        node.compressor.source = { type: "internal" };
+    }
     await api("config", candidate);
     cfg = candidate;
     meterStates.clear();
@@ -2219,8 +2246,9 @@ async function resizeStructure(
 }
 function revealStrip(type, index) {
   selectStrip(type, index);
-  const bank = $(type === "channel" ? "mixer" : "buses");
-  bank.scrollLeft = bank.scrollWidth;
+  document
+    .querySelector(`.strip[data-strip="${keyOf(type, index)}"]`)
+    ?.scrollIntoView({ block: "nearest", inline: "center" });
 }
 $("add-channel").onclick = () =>
   resizeStructure(cfg.channels.length + 1, cfg.buses.length - 1)
@@ -2251,31 +2279,20 @@ $("apply-counts").onclick = async () => {
     button.textContent = "Aplicar estructura";
   }
 };
-for (const [bank, bridge] of [
-  ["mixer", "meterbridge"],
-  ["buses", "outputbridge"],
-]) {
-  $(bank).addEventListener(
-    "scroll",
-    () => {
-      $(bridge).scrollLeft = $(bank).scrollLeft;
-    },
-    { passive: true },
-  );
-}
-
-Promise.all([
-  fetch("/api/config").then((r) => r.json()),
-  fetch("/api/limits").then((r) => r.json()),
-])
-  .then(([c, l]) => {
-    limits = l;
-    $("channel-count").max = l.channels;
-    $("aux-count").max = l.auxes;
-    $("inputs").max = l.inputs;
-    cfg = normalise(c);
-    render();
-    poll();
-    requestAnimationFrame(animateMeters);
-  })
-  .catch(error);
+document.addEventListener("DOMContentLoaded", () => {
+  Promise.all([
+    fetch("/api/config").then((r) => r.json()),
+    fetch("/api/limits").then((r) => r.json()),
+  ])
+    .then(([c, l]) => {
+      limits = l;
+      $("channel-count").max = l.channels;
+      $("aux-count").max = l.auxes;
+      $("inputs").max = l.inputs;
+      cfg = normalise(c);
+      render();
+      poll();
+      requestAnimationFrame(animateMeters);
+    })
+    .catch(error);
+});

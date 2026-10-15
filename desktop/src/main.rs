@@ -1,9 +1,11 @@
 mod bridge;
+mod compressor;
 mod config;
 mod eq;
 mod fx;
 mod generator;
 mod graph;
+mod listen;
 mod mixer;
 mod native;
 mod native_fx;
@@ -23,6 +25,7 @@ use tiny_http::{Header, Method, Request, Response, Server};
 
 struct App {
     config: Config,
+    listen: Arc<listen::Hub>,
     controls: Arc<Controls>,
     audio: native::Audio,
     system_audio: Option<native::Audio>,
@@ -39,7 +42,10 @@ impl App {
     fn new() -> Result<Self, String> {
         let config = Config::default();
         let controls = Controls::new(&config);
+        let listen = listen::Hub::new()?;
+        listen.configure(&config);
         Ok(Self {
+            listen,
             config,
             controls,
             audio: native::Audio::new(false)?,
@@ -55,6 +61,7 @@ impl App {
         })
     }
     fn stop(&mut self) {
+        self.listen.running(false);
         self.audio.stop();
         if let Some(audio) = &mut self.system_audio {
             audio.stop();
@@ -104,8 +111,10 @@ impl App {
         json!({"mode":if self.system_live {"PC"}else if self.live {"ASIO"} else if self.demo.is_some(){"DEMO"}else{"DETENIDO"},
             "meters":meters,"channel_meters":channel_meters,"channel_rms":channel_rms,
             "meters_stereo":meters_stereo,"rms_stereo":rms_stereo,
+            "gain_reduction_db":self.controls.compressor.iter().map(|c| if active { f32::from_bits(c.reduction.load(Relaxed)) } else { 0.0 }).collect::<Vec<_>>(),
             "emergency":self.controls.emergency.load(Relaxed),"failed":self.controls.failed.load(Relaxed),
             "xruns":self.controls.xruns.load(Relaxed),"clipped_blocks":self.controls.clipped.load(Relaxed),
+            "listen":self.listen.status(),
             "bridge_drops":self.bridge.dropped.load(Relaxed),"bridge":self.bridge.status(),"latencies":self.latencies,"actual_buffer":actual_buffer})
     }
     fn start(&mut self, mode: &str) -> Result<Value, String> {
@@ -118,7 +127,8 @@ impl App {
         self.controls.emergency.store(false, Relaxed);
         self.controls.xruns.store(0, Relaxed);
         self.controls.clipped.store(0, Relaxed);
-        let mixer = Mixer::new(&self.config, self.controls.clone())?;
+        let mut mixer = Mixer::new(&self.config, self.controls.clone())?;
+        mixer.listen = Some(self.listen.clone());
         self.latencies = mixer.latencies.clone();
         if mode == "demo" {
             self.demo = Some(mixer);
@@ -143,6 +153,7 @@ impl App {
                 .start(&self.config, mixer, self.bridge.clone(), false)?;
             self.live = true;
         }
+        self.listen.running(true);
         Ok(self.status())
     }
     fn demo_tick(&mut self) {
@@ -179,6 +190,7 @@ impl App {
                     let controls = Controls::new(&c);
                     let mut next =
                         Mixer::reconfigure(&c, controls.clone(), &self.config, &self.latencies)?;
+                    next.listen = Some(self.listen.clone());
                     let latencies = next.latencies.clone();
                     if let Some(old) = &mut self.demo {
                         old.fade_removed(&next);
@@ -218,6 +230,7 @@ impl App {
                     self.input.resize(256 * c.inputs as usize, 0.0);
                 }
                 self.bridge.enabled.store(c.obs_bridge, Relaxed);
+                self.listen.configure(&c);
                 self.config = c;
                 Ok(json!({"ok":true}))
             }
@@ -257,6 +270,19 @@ impl App {
                 }
                 Ok(fx::installed(extra))
             }
+            "/api/listen" => {
+                let v: Value = serde_json::from_str(body).map_err(|e| e.to_string())?;
+                if v["enabled"].as_bool() == Some(true) {
+                    let p = v["port"].as_u64().unwrap_or(17841);
+                    if p > 65535 {
+                        return Err("Puerto inválido".into());
+                    }
+                    self.listen.start(p as u16)
+                } else {
+                    self.listen.stop();
+                    Ok(self.listen.status())
+                }
+            }
             "/api/presets" => presets::command(body),
             "/api/inspect" => {
                 if self.live || self.demo.is_some() {
@@ -294,6 +320,11 @@ impl App {
     }
 }
 
+impl Drop for App {
+    fn drop(&mut self) {
+        self.listen.stop();
+    }
+}
 fn reply(req: Request, status: u16, content_type: &str, body: String) {
     let response = Response::from_string(body)
         .with_status_code(status)
@@ -385,6 +416,7 @@ fn run() -> Result<(), String> {
                     "text/javascript; charset=utf-8",
                     include_str!("../web/console.js").into(),
                 ),
+                "/workspace-ui.js" => reply(req,200,"text/javascript; charset=utf-8",include_str!("../web/workspace-ui.js").into()),
                 "/effects-ui.js" => reply(req,200,"text/javascript; charset=utf-8",include_str!("../web/effects-ui.js").into()),
                 "/api/config" => reply(
                     req,

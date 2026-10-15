@@ -64,8 +64,20 @@ impl Format {
         if self == Self::Stereo { 2 } else { 1 }
     }
 }
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum Pin {
+    #[default]
+    None,
+    Left,
+    Right,
+}
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Channel {
+    #[serde(default)]
+    pub pin: Pin,
+    #[serde(default)]
+    pub compressor: crate::compressor::Compressor,
     #[serde(default)]
     pub eq: crate::eq::Eq,
     pub name: String,
@@ -94,6 +106,10 @@ impl Channel {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Bus {
+    #[serde(default)]
+    pub pin: Pin,
+    #[serde(default)]
+    pub compressor: crate::compressor::Compressor,
     #[serde(default)]
     pub eq: crate::eq::Eq,
     pub name: String,
@@ -138,6 +154,8 @@ impl Default for Config {
             buffer: 256,
             channels: (0..DEFAULT_CHANNELS)
                 .map(|i| Channel {
+                    pin: Pin::None,
+                    compressor: crate::compressor::Compressor::default(),
                     eq: crate::eq::Eq::default(),
                     name: format!("Entrada {}", i + 1),
                     gain_db: 0.0,
@@ -155,6 +173,8 @@ impl Default for Config {
                 .collect(),
             buses: (0..=DEFAULT_AUXES)
                 .map(|i| Bus {
+                    pin: if i == 0 { Pin::Right } else { Pin::None },
+                    compressor: crate::compressor::Compressor::default(),
                     eq: crate::eq::Eq::default(),
                     name: if i == 0 {
                         "Master / OBS".into()
@@ -222,7 +242,10 @@ impl Config {
         }
         let mut assigned = [false; MAX_IO];
         for bus in &self.buses {
-            if !bus.eq.valid()
+            if !bus
+                .compressor
+                .valid(self.channels.len(), self.inputs as usize)
+                || !bus.eq.valid()
                 || !range(bus.gain_db, -90.0, 6.0)
                 || bus.name.len() > 120
                 || bus.effects().count() > INSERTS
@@ -244,7 +267,10 @@ impl Config {
             }
         }
         for c in &self.channels {
-            if !c.eq.valid()
+            if !c
+                .compressor
+                .valid(self.channels.len(), self.inputs as usize)
+                || !c.eq.valid()
                 || c.sends_db.len() != self.buses.len() - 1
                 || c.pre.len() != self.buses.len() - 1
                 || [c.input, c.input_right]

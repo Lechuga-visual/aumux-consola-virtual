@@ -3,12 +3,17 @@
 Miniapp Windows x64 para mezclar entradas ASIO o probar generadores por la
 salida normal del PC, crear mezclas auxiliares y enviar el master a OBS.
 
-**Prueba local:** [descargar Windows x64](dist/MonitorMix-0.6.0-Windows-x64.zip)
+**Prueba local:** [descargar Windows x64](dist/MonitorMix-0.7.0-Windows-x64.zip)
 e [instrucciones para Windows](docs/probar-en-windows.md).
 La descarga incluye el ejecutable, el receptor de OBS y el código fuente.
-Su checksum está en [SHA-256](dist/MonitorMix-0.6.0-Windows-x64.zip.sha256).
+Su checksum está en [SHA-256](dist/MonitorMix-0.7.0-Windows-x64.zip.sha256).
 
 ## Funciones actuales
+
+- Compresor nativo por canal, aux y master: curva, perillas, reducción de ganancia real y sidechain externo.
+- Superficie centrada con pocos canales; desplazamiento horizontal y tiras fijables a izquierda/derecha.
+- Menú contextual propio sobre las tiras y selección de texto reservada a campos editables.
+- **Escucha LAN** en otro puerto: cada navegador elige main o un aux; hasta ocho oyentes de referencia.
 
 - De 1 a 64 canales y de 0 a 32 auxiliares: botones **+ Canal / + Aux** sobre sus bancos y panel **Canales y auxiliares**, también con audio activo.
 - Canales y auxiliares mono/estéreo conmutables en vivo; los nuevos aux son mono.
@@ -36,7 +41,7 @@ La miniapp reutiliza **los crates DSP y VST3 de SoundCraft de Artcraft**,
 fijados a una revisión concreta. La interfaz y el ruteo son propios; no es
 un fork de todo el DAW. No requiere controlar CueMix ni instalar REAPER.
 
-![Consola Monitor Mix 0.6](docs/monitor-mix-0.6.png)
+![Consola Monitor Mix 0.7](docs/monitor-mix-0.7.png)
 
 Para probar sin hardware: **AUDIO PC → G en un canal → Control Room → Input**.
 DEMO procesa sin reproducir. Las escenas 0.1 siguen siendo compatibles.
@@ -85,7 +90,7 @@ administrador con OBS cerrado. OBS 32.2.2 x64 es compatible. Consulta
 [Dirección OSC, Mackie Control y Mackie HUI](docs/control-remoto.md): se prevé
 un modo controlador sin abrir audio, además del mezclador independiente.
 Estos protocolos y el mapa específico MOTU quedan para la siguiente etapa;
-no se implementan en 0.6.
+no se implementan en 0.7.
 
 ## Componentes anteriores
 
@@ -103,4 +108,7 @@ pendientes. La grabación multipista y OSC/Mackie también quedan pendientes.
 La aplicación combinada desde 0.5 se distribuye bajo GPL-3.0-only, con fuentes,
 licencias y procedencia en el ZIP.
 
-[Guía visual de los editores, presets y envíos 0.6](docs/interfaz-0.6.md).
+[Novedades y guía visual 0.7](docs/interfaz-0.7.md).
+
+[Hoja de ruta](docs/hoja-de-ruta.md): otros dispositivos y subsistemas Windows,
+mezclas personales desde la web, grabación multipista y control OSC/Mackie.

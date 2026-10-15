@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="es">
+  <meta charset="utf-8" /><meta
+    name="viewport"
+    content="width=device-width,initial-scale=1"
+  /><title>Monitor Mix · Escucha</title
+  ><style>
+    body {
+      margin: 0;
+      background: #121924;
+      color: #dce7f1;
+      font: 16px system-ui;
+    }
+    main {
+      max-width: 580px;
+      margin: 8vh auto;
+      padding: 28px;
+      background: #1e2a38;
+      border: 1px solid #40566a;
+      border-radius: 8px;
+    }
+    h1 {
+      font-size: 24px;
+    }
+    label {
+      display: block;
+      margin: 22px 0;
+    }
+    select,
+    button {
+      font: inherit;
+      padding: 12px;
+      background: #2a4054;
+      color: #eee;
+      border: 1px solid #66899b;
+      border-radius: 4px;
+    }
+    select {
+      width: 100%;
+      margin-top: 8px;
+    }
+    input {
+      width: 100%;
+    }
+    button {
+      cursor: pointer;
+    }
+    #stop {
+      margin-left: 8px;
+    }
+    p {
+      font-size: 13px;
+      color: #9fb1c2;
+      line-height: 1.6;
+    }
+    #state {
+      color: #81cebb;
+    }
+  </style>
+  <main>
+    <h1>MONITOR MIX · Escucha</h1>
+    <p>
+      Elige una mezcla para escuchar desde este dispositivo. Esta página solo
+      recibe audio.
+    </p>
+    <label>Mezcla<select id="bus"></select></label
+    ><button id="play">Escuchar</button><button id="stop">Detener</button
+    ><label
+      >Volumen local<input
+        id="volume"
+        type="range"
+        min="0"
+        max="1"
+        step="0.01"
+        value="0.5"
+    /></label>
+    <p id="state" role="status">Preparado</p>
+    <p>
+      Audio estéreo a 48 kHz. El navegador y la red añaden retardo: esta escucha
+      es de referencia y no sustituye el monitoreo de escenario de baja
+      latencia.
+    </p>
+  </main>
+  <script>
+    const key = "__KEY__",
+      bus = document.querySelector("#bus"),
+      state = document.querySelector("#state");
+    let session = 0;
+    let context,
+      gain,
+      abort,
+      sources = new Set(),
+      playing = false,
+      next = 0;
+    function stop() {
+      session++;
+      playing = false;
+      abort?.abort();
+      for (const s of sources) {
+        try {
+          s.stop();
+        } catch {}
+      }
+      sources.clear();
+      context?.close();
+      context = null;
+      state.textContent = "Detenido";
+      document.querySelector("#play").disabled = false;
+    }
+    async function play() {
+      stop();
+      const sessionId = session;
+      playing = true;
+      document.querySelector("#play").disabled = true;
+      try {
+        context = new AudioContext({ sampleRate: 48000 });
+        gain = context.createGain();
+        gain.gain.value = Number(document.querySelector("#volume").value);
+        gain.connect(context.destination);
+        await context.resume();
+        if (sessionId !== session) return;
+        abort = new AbortController();
+        const own = abort,
+          ctx = context;
+        const result = await fetch("/stream?key=" + key + "&bus=" + bus.value, {
+          signal: own.signal,
+        });
+        if (sessionId !== session) {
+          await result.body?.cancel();
+          return;
+        }
+        if (!result.ok) throw Error(await result.text());
+        const reader = result.body.getReader();
+        let tail = new Uint8Array(0);
+        next = ctx.currentTime + 0.12;
+        state.textContent =
+          "Escuchando · " + bus.options[bus.selectedIndex].text;
+        while (playing && !own.signal.aborted) {
+          const { value, done } = await reader.read();
+          if (done || own.signal.aborted || sessionId !== session) break;
+          const bytes = new Uint8Array(tail.length + value.length);
+          bytes.set(tail);
+          bytes.set(value, tail.length);
+          const frames = Math.floor(bytes.length / 8);
+          tail = bytes.slice(frames * 8);
+          if (!frames) continue;
+          if (next > ctx.currentTime + 0.4) {
+            for (const s of sources) {
+              try {
+                s.stop();
+              } catch {}
+            }
+            sources.clear();
+            next = ctx.currentTime + 0.12;
+          }
+          next = Math.max(next, ctx.currentTime + 0.06);
+          const audio = ctx.createBuffer(2, frames, 48000),
+            view = new DataView(bytes.buffer);
+          for (let side = 0; side < 2; side++) {
+            const lane = audio.getChannelData(side);
+            for (let f = 0; f < frames; f++)
+              lane[f] = view.getFloat32(f * 8 + side * 4, true);
+          }
+          const source = ctx.createBufferSource();
+          source.buffer = audio;
+          source.connect(gain);
+          sources.add(source);
+          source.onended = () => sources.delete(source);
+          source.start(next);
+          next += frames / 48000;
+        }
+        if (playing && abort === own) {
+          stop();
+          state.textContent = "Conexión finalizada";
+        }
+      } catch (e) {
+        if (e.name !== "AbortError" && sessionId === session) {
+          stop();
+          state.textContent = e.message;
+        }
+      }
+    }
+    document.querySelector("#play").onclick = play;
+    document.querySelector("#stop").onclick = stop;
+    document.querySelector("#volume").oninput = (e) => {
+      if (gain) gain.gain.value = Number(e.target.value);
+    };
+    bus.onchange = () => {
+      if (playing) play();
+    };
+    async function update() {
+      try {
+        const r = await fetch("/status?key=" + key);
+        if (!r.ok) throw Error("Enlace de escucha no válido");
+        const s = await r.json(),
+          value = bus.value;
+        bus.replaceChildren(
+          ...s.buses.map(
+            (b) =>
+              new Option(
+                (b.index === 0 ? "MAIN" : "AUX " + b.index) + " · " + b.name,
+                b.index,
+              ),
+          ),
+        );
+        if ([...bus.options].some((o) => o.value === value)) bus.value = value;
+        else if (playing) {
+          stop();
+          state.textContent = "La mezcla ya no existe";
+        }
+        if (!playing)
+          state.textContent = s.running
+            ? "Preparado · motor activo"
+            : "Motor detenido · la escucha entregará silencio";
+      } catch (e) {
+        state.textContent = e.message;
+      }
+    }
+    update();
+    setInterval(update, 1500);
+  </script>
+</html>

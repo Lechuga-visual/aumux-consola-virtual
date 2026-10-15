@@ -13,7 +13,7 @@
         <div class="brand">
           <span class="brand-icon"><i></i><i></i><i></i><i></i></span
           ><strong>MONITOR<span>MIX</span></strong
-          ><span class="version">0.6</span>
+          ><span class="version">0.7</span>
         </div>
         <div class="scene-title">
           CONSOLA DE MONITOREO <span>•</span>
@@ -40,7 +40,8 @@
         </div>
       </header>
       <nav class="transport">
-        <button id="settings" class="settings-button">⚙ MOTOR DE AUDIO</button
+        <button id="network-settings">Escucha LAN</button
+        ><button id="settings" class="settings-button">⚙ MOTOR DE AUDIO</button
         ><span class="separator"></span>
         <button
           id="pc"
@@ -71,8 +72,10 @@
           <span class="eyebrow">MEDICIÓN EN VIVO</span
           ><strong>Entradas / salidas</strong><span>Peak + RMS · dBFS</span>
         </div>
-        <div id="meterbridge" class="meterbridge-channels"></div>
-        <div id="outputbridge" class="meterbridge-outputs"></div>
+        <div id="meter-stage">
+          <div id="meterbridge" class="meterbridge-channels"></div>
+          <div id="outputbridge" class="meterbridge-outputs"></div>
+        </div>
         <div class="bridge-tools">
           <strong>Peak / RMS · dBFS</strong><span>Post-fader · L / R</span
           ><button id="reset-peaks">Restablecer picos</button>
@@ -84,69 +87,71 @@
             <div class="label-heading">CANAL</div>
             <div class="label-rows">
               <span></span><span>Entrada</span><span>Efectos</span
-              ><span>EQ</span><span>Aux</span><span>Pan</span><span>Main</span
-              ><span>Nombre</span><span>Mute / Gen</span><span>dB</span
-              ><span>Nivel</span><span>Peak</span><span></span>
+              ><span>EQ</span><span>Comp</span><span>Aux</span><span>Pan</span
+              ><span>Main</span><span>Nombre</span><span>Mute / Gen</span
+              ><span>dB</span><span>Nivel</span><span>Peak</span><span></span>
             </div>
             <div></div>
           </aside>
-          <section class="bank input-bank">
-            <div class="bank-heading">
-              <div class="bank-tools">
-                <button
-                  id="add-channel"
-                  class="add-strip"
-                  title="Agregar un canal mono sin detener el motor"
+          <div class="desk-tools">
+            <section class="input-bank">
+              <div class="bank-heading">
+                <div class="bank-tools">
+                  <button
+                    id="add-channel"
+                    class="add-strip"
+                    title="Agregar un canal mono sin detener el motor"
+                  >
+                    + Canal</button
+                  ><button
+                    id="channel-total"
+                    class="bank-total"
+                    title="Configurar cantidad de canales"
+                  >
+                    8 canales
+                  </button>
+                </div>
+                <label class="fader-flip"
+                  >Fader Flip
+                  <button id="main-layer" type="button">MAIN</button>
+                  <select id="fader-flip" aria-label="Fader Flip">
+                    <option value="-1">Main Level</option>
+                    <option value="0">Aux 1</option>
+                    <option value="1">Aux 2</option>
+                    <option value="2">Aux 3</option>
+                    <option value="3">Aux 4</option>
+                  </select></label
                 >
-                  + Canal</button
-                ><button
-                  id="channel-total"
-                  class="bank-total"
-                  title="Configurar cantidad de canales"
-                >
-                  8 canales
-                </button>
               </div>
-              <label class="fader-flip"
-                >Fader Flip <button id="main-layer" type="button">MAIN</button>
-                <select id="fader-flip" aria-label="Fader Flip">
-                  <option value="-1">Main Level</option>
-                  <option value="0">Aux 1</option>
-                  <option value="1">Aux 2</option>
-                  <option value="2">Aux 3</option>
-                  <option value="3">Aux 4</option>
-                </select></label
-              >
-            </div>
+            </section>
+            <section class="output-bank">
+              <div class="bank-heading">
+                <div class="bank-tools">
+                  <button
+                    id="add-aux"
+                    class="add-strip aux-add"
+                    title="Agregar un auxiliar mono sin detener el motor"
+                  >
+                    + Aux</button
+                  ><button
+                    id="aux-total"
+                    class="bank-total"
+                    title="Configurar cantidad de auxiliares"
+                  >
+                    4 aux
+                  </button>
+                </div>
+              </div>
+            </section>
+          </div>
+          <div id="mixer-stage" class="mixer-stage">
             <div id="mixer" class="strip-bank"></div>
-            <div class="bank-bottom">
-              <span id="layer-label">MEZCLA PRINCIPAL</span
-              ><span>Faders de canal / envíos</span>
-            </div>
-          </section>
-          <section class="bank output-bank">
-            <div class="bank-heading">
-              <div class="bank-tools">
-                <button
-                  id="add-aux"
-                  class="add-strip aux-add"
-                  title="Agregar un auxiliar mono sin detener el motor"
-                >
-                  + Aux</button
-                ><button
-                  id="aux-total"
-                  class="bank-total"
-                  title="Configurar cantidad de auxiliares"
-                >
-                  4 aux
-                </button>
-              </div>
-            </div>
             <div id="buses" class="strip-bank"></div>
-            <div class="bank-bottom">
-              <span>SALIDAS INDEPENDIENTES</span><span>L / R</span>
-            </div>
-          </section>
+          </div>
+          <div class="desk-footer bank-bottom">
+            <span id="layer-label">MEZCLA PRINCIPAL</span
+            ><span>Rueda: desplazar · clic derecho: acciones / fijación</span>
+          </div>
         </div>
         <aside class="sidebar">
           <section class="control-room">
@@ -429,6 +434,72 @@
       </p>
       <span id="routing-status" role="status">Cambios en vivo</span>
     </dialog>
+    <div id="strip-context" class="strip-context" role="menu" hidden></div>
+    <dialog id="compressor-dialog">
+      <div class="dialog-heading">
+        <h2 id="compressor-title">Compresor</h2>
+        <button data-close="compressor-dialog">✕</button>
+      </div>
+      <div id="comp-presets"></div>
+      <div class="compressor-top">
+        <div id="comp-graph"></div>
+        <div class="comp-gr">
+          <span>REDUCCIÓN DE GANANCIA</span>
+          <div class="gr-track"><i id="comp-gr-fill"></i></div>
+          <strong id="comp-gr-value">0.0 dB</strong
+          ><label><input id="comp-bypass" type="checkbox" /> Bypass</label>
+        </div>
+      </div>
+      <label class="sidechain-label"
+        >Detector / sidechain<select id="comp-source"></select
+      ></label>
+      <div id="comp-knobs" class="comp-knobs"></div>
+      <p class="hint">
+        Detector estéreo enlazado · sin lookahead. Las fuentes de canal se toman
+        después del EQ, antes de todos los compresores, inserts, faders y mutes;
+        no crean realimentación.
+      </p>
+      <span id="comp-status" role="status">Cambios en vivo</span>
+    </dialog>
+    <dialog id="network-dialog">
+      <div class="dialog-heading">
+        <h2>Escucha por red local</h2>
+        <button data-close="network-dialog">✕</button>
+      </div>
+      <p>
+        Comparte este enlace para escuchar el master o un auxiliar desde otro
+        dispositivo de la misma red.
+      </p>
+      <div class="form-row">
+        <label
+          >Puerto<input
+            id="network-port"
+            type="number"
+            min="1024"
+            max="65535"
+            value="17841" /></label
+        ><button id="network-toggle">Iniciar escucha LAN</button>
+      </div>
+      <label
+        >Enlace de escucha<input
+          id="network-url"
+          type="text"
+          readonly
+          spellcheck="false"
+      /></label>
+      <div class="form-row">
+        <button id="network-copy">Copiar enlace</button
+        ><a id="network-open" target="_blank" rel="noreferrer">Abrir escucha</a>
+      </div>
+      <p id="network-status" role="status"></p>
+      <p class="hint">
+        Hasta ocho oyentes simultáneos. Cada uno elige su mezcla y volumen
+        local. El búfer del navegador añade retardo; esta escucha no reemplaza
+        el monitoreo de escenario. Permite el puerto de Monitor Mix en el
+        firewall de la red privada si Windows lo solicita. Si hay varias redes,
+        usa la IP del PC accesible por los oyentes.
+      </p>
+    </dialog>
     <dialog id="help-dialog">
       <div class="dialog-heading">
         <h2>Probar la consola</h2>
@@ -484,5 +555,6 @@
     </dialog>
     <script src="/console.js"></script>
     <script src="/effects-ui.js"></script>
+    <script src="/workspace-ui.js"></script>
   </body>
 </html>

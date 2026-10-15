@@ -79,6 +79,7 @@ fn native_values(spec: Option<&Fx>) -> Vec<NativeValue> {
 }
 pub struct Controls {
     eq: Vec<crate::eq::Control>,
+    pub compressor: Vec<crate::compressor::Control>,
     native_params: Vec<[Vec<NativeValue>; INSERTS]>,
     input_route: Vec<AtomicU32>,
     bus_stereo: Vec<AtomicBool>,
@@ -118,6 +119,13 @@ impl Controls {
         let floats = |n| (0..n).map(|_| AtomicU32::new(0)).collect::<Vec<_>>();
         let flags = |n| (0..n).map(|_| AtomicBool::new(false)).collect::<Vec<_>>();
         let s = Arc::new(Self {
+            compressor: c
+                .channels
+                .iter()
+                .map(|c| c.compressor)
+                .chain(c.buses.iter().map(|b| b.compressor))
+                .map(crate::compressor::Control::new)
+                .collect(),
             native_params: c
                 .channels
                 .iter()
@@ -184,6 +192,7 @@ impl Controls {
         self.pc_monitor.store(c.pc_monitor as u32, Relaxed);
         for (i, ch) in c.channels.iter().enumerate() {
             self.eq[i].update(&ch.eq);
+            self.compressor[i].update(ch.compressor);
             // One atomic word prevents torn input-L/input-R/format changes.
             self.input_route[i].store(
                 ch.input.map_or(0, |v| v as u32 + 1)
@@ -208,6 +217,7 @@ impl Controls {
         }
         for (i, b) in c.buses.iter().enumerate() {
             self.eq[c.channels.len() + i].update(&b.eq);
+            self.compressor[c.channels.len() + i].update(b.compressor);
             self.bus_stereo[i].store(b.format == Format::Stereo, Relaxed);
             self.bus_gain[i].store(gain(b.gain_db).to_bits(), Relaxed);
             self.bus_mute[i].store(b.mute, Relaxed);
@@ -220,10 +230,14 @@ impl Controls {
 }
 
 pub struct Mixer {
+    pub listen: Option<Arc<crate::listen::Hub>>,
     pub controls: Arc<Controls>,
     channel: Vec<Vec<Vec<f32>>>,
     pub buses: Vec<Vec<Vec<f32>>>,
     channel_eq: Vec<crate::eq::Processor>,
+    keys: Vec<Vec<Vec<f32>>>,
+    channel_comp: Vec<crate::compressor::Processor>,
+    bus_comp: Vec<crate::compressor::Processor>,
     bus_eq: Vec<crate::eq::Processor>,
     channel_fx: Vec<Vec<Box<dyn Plugin>>>,
     bus_fx: Vec<Vec<Box<dyn Plugin>>>,
@@ -335,6 +349,20 @@ impl Mixer {
             latencies[channels + i] = bus_fx[i].iter().map(|p| p.latency()).sum();
         }
         Ok(Self {
+            listen: None,
+            keys: (0..channels)
+                .map(|_| vec![vec![0.0; MAX_FRAMES]; 2])
+                .collect(),
+            channel_comp: c
+                .channels
+                .iter()
+                .map(|c| crate::compressor::Processor::new(c.compressor))
+                .collect(),
+            bus_comp: c
+                .buses
+                .iter()
+                .map(|b| crate::compressor::Processor::new(b.compressor))
+                .collect(),
             controls,
             channel: (0..channels)
                 .map(|_| vec![vec![0.0; MAX_FRAMES]; 2])
@@ -407,6 +435,7 @@ impl Mixer {
             .store(old.controls.clipped.load(Relaxed), Relaxed);
         for i in 0..self.channel.len().min(old.channel.len()) {
             self.controls.channel_meters[i].inherit(&old.controls.channel_meters[i]);
+            std::mem::swap(&mut self.channel_comp[i], &mut old.channel_comp[i]);
             std::mem::swap(&mut self.channel_eq[i], &mut old.channel_eq[i]);
             std::mem::swap(&mut self.channel_fx[i], &mut old.channel_fx[i]);
             std::mem::swap(&mut self.generators[i], &mut old.generators[i]);
@@ -422,6 +451,7 @@ impl Mixer {
         for b in 0..self.buses.len().min(old.buses.len()) {
             self.controls.bus_meters[b].inherit(&old.controls.bus_meters[b]);
             self.controls.meters[b].store(old.controls.meters[b].load(Relaxed), Relaxed);
+            std::mem::swap(&mut self.bus_comp[b], &mut old.bus_comp[b]);
             std::mem::swap(&mut self.bus_eq[b], &mut old.bus_eq[b]);
             std::mem::swap(&mut self.bus_fx[b], &mut old.bus_fx[b]);
             self.previous_bus[b] = old.previous_bus[b];
@@ -462,6 +492,12 @@ impl Mixer {
                 .chain(self.controls.bus_meters.iter())
             {
                 m.silence();
+            }
+            for c in &self.controls.compressor {
+                c.reduction.store(0.0_f32.to_bits(), Relaxed);
+            }
+            if let Some(hub) = &self.listen {
+                hub.publish(&self.buses, frames);
             }
             return true;
         }
@@ -527,6 +563,22 @@ impl Mixer {
             self.generator_blend[i] = blend;
             self.generator_level[i] = noise_gain;
             self.channel_eq[i].process(ch, frames, &self.controls.eq[i], self.rate);
+            for side in 0..2 {
+                self.keys[i][side][..frames].copy_from_slice(&ch[side][..frames]);
+            }
+        }
+        for i in 0..self.channel.len() {
+            let route = self.controls.input_route[i].load(Relaxed);
+            let mono = if route & (1 << 16) == 0 { 1.0 } else { 0.0 };
+            let ch = &mut self.channel[i];
+            self.channel_comp[i].process(
+                ch,
+                &self.keys,
+                input,
+                self.inputs,
+                frames,
+                &self.controls.compressor[i],
+            );
             for (slot, p) in self.channel_fx[i].iter_mut().enumerate() {
                 self.controls.apply_native(i, slot, &mut **p);
                 if !self.controls.bypass[i][slot].load(Relaxed) {
@@ -612,6 +664,14 @@ impl Mixer {
                 &self.controls.eq[self.channel.len() + b],
                 self.rate,
             );
+            self.bus_comp[b].process(
+                bus,
+                &self.keys,
+                input,
+                self.inputs,
+                frames,
+                &self.controls.compressor[self.channel.len() + b],
+            );
             for (slot, p) in self.bus_fx[b].iter_mut().enumerate() {
                 self.controls
                     .apply_native(self.channel.len() + b, slot, &mut **p);
@@ -670,6 +730,9 @@ impl Mixer {
             self.controls.bus_meters[b].record(stereo_peak, stereo_energy, frames, self.rate);
             self.previous_bus[b] = target;
             self.previous_bus_mono[b] = self.bus_mono[b];
+        }
+        if let Some(hub) = &self.listen {
+            hub.publish(&self.buses, frames);
         }
         true
     }
@@ -1111,6 +1174,37 @@ mod tests {
             .params
             .insert("Mix".into(), 0.5);
         assert!(!c.same_graph(&other));
+    }
+    #[test]
+    fn sidechain_keys_are_available_in_the_first_block_regardless_of_channel_order() {
+        for (target, source) in [(0, 7), (7, 0)] {
+            let (mut c, _) = setup();
+            c.inputs = 2;
+            for ch in &mut c.channels {
+                ch.input = None;
+                ch.input_right = None;
+            }
+            c.channels[target].mute = false;
+            c.channels[target].input = Some(0);
+            c.channels[target].gain_db = 0.0;
+            c.channels[source].mute = true;
+            c.channels[source].input = Some(1);
+            c.channels[target].compressor = crate::compressor::Compressor {
+                bypass: false,
+                threshold: -30.0,
+                knee: 0.0,
+                attack: 0.1,
+                source: crate::compressor::Source::Channel(source),
+                ..Default::default()
+            };
+            let ctl = Controls::new(&c);
+            let mut m = Mixer::new(&c, ctl.clone()).unwrap();
+            let input = (0..64).flat_map(|_| [0.1, 1.0]).collect::<Vec<_>>();
+            let mut out = vec![0.0; 640];
+            crate::test_support::no_heap(|| m.process(&input, &mut out, 64, 10));
+            assert!(out[630] > 0.006 && out[630] < 0.009, "{}", out[630]);
+            assert!(f32::from_bits(ctl.compressor[target].reduction.load(Relaxed)) > 22.0);
+        }
     }
     #[test]
     fn old_scenes_migrate_and_reject_a_fifth_insert() {
