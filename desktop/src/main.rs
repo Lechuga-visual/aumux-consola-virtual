@@ -15,6 +15,7 @@ mod native_fx;
 mod network;
 mod presets;
 mod remote;
+mod telemetry;
 #[cfg(test)]
 mod test_support;
 mod tray;
@@ -45,6 +46,7 @@ struct App {
     input: Vec<f32>,
     output: Vec<f32>,
     next: Instant,
+    system: telemetry::Telemetry,
 }
 impl App {
     fn new() -> Result<Self, String> {
@@ -68,6 +70,7 @@ impl App {
             input: vec![0.0; 256 * DEFAULT_CHANNELS],
             output: vec![0.0; 256 * 64],
             next: Instant::now(),
+            system: telemetry::Telemetry::new(),
         })
     }
     fn stop(&mut self) {
@@ -127,6 +130,7 @@ impl App {
             "listen":self.listen.status(),
             "remote":self.remote.status(),
             "latency":self.latency(),
+            "system":self.system.cached(),
             "bridge_drops":self.bridge.dropped.load(Relaxed),"bridge":self.bridge.status(),"latencies":self.latencies,"actual_buffer":actual_buffer})
     }
     fn start(&mut self, mode: &str) -> Result<Value, String> {
@@ -206,6 +210,13 @@ impl App {
             self.live || self.demo.is_some(),
             self.bridge.queue_depth(),
         )
+    }
+    #[cfg(windows)]
+    fn update_tray(&self, tray: &tray::Tray) {
+        let remote = self.remote.status();
+        let preferred = remote["host"].as_str().unwrap_or("");
+        let ip = telemetry::local_ipv4(preferred, &network::addresses());
+        tray.update(ip.as_deref(), &self.latency(), self.system.cached());
     }
     fn read_api(&mut self, path: &str) -> Result<Value, String> {
         match path {
@@ -514,7 +525,7 @@ fn run() -> Result<(), String> {
     let page = include_str!("../web/index.html").replace("__TOKEN__", &token);
     let mut app = App::new()?;
     println!(
-        "Monitor Mix {} — prototipo\n{url}\nAudio detenido. Cierra esta ventana o pulsa Ctrl+C para salir.",
+        "AuMux {}\n{url}\nAudio detenido. Usa Cerrar servicio en el icono de notificación para salir.",
         env!("CARGO_PKG_VERSION")
     );
     if !args.iter().any(|a| a == "--no-browser") {
@@ -526,9 +537,16 @@ fn run() -> Result<(), String> {
     #[cfg(windows)]
     if let Some(tray) = &tray {
         tray.start()?;
+        app.update_tray(tray);
     }
     let mut next_remote = Instant::now();
     loop {
+        if app.system.refresh_if_due() {
+            #[cfg(windows)]
+            if let Some(tray) = &tray {
+                app.update_tray(tray);
+            }
+        }
         #[cfg(windows)]
         if let Some(tray) = &tray {
             let actions = tray.poll();
@@ -582,6 +600,12 @@ fn run() -> Result<(), String> {
         let path = req.url().split('?').next().unwrap_or("").to_string();
         if *req.method() == Method::Get {
             match path.as_str() {
+                "/brand-logo.png" => {
+                    let response = Response::from_data(include_bytes!("../assets/aumux-logo.png").as_slice())
+                        .with_header(Header::from_bytes("Content-Type", "image/png").unwrap())
+                        .with_header(Header::from_bytes("X-Content-Type-Options", "nosniff").unwrap());
+                    let _ = req.respond(response);
+                }
                 "/" => reply(req, 200, "text/html; charset=utf-8", page.clone()),
                 "/console.css" => reply(
                     req,
@@ -688,7 +712,7 @@ fn open_app_window(url: &str) {
 }
 fn main() {
     if let Err(e) = run() {
-        eprintln!("Monitor Mix: {e}");
+        eprintln!("AuMux: {e}");
         #[cfg(windows)]
         if !std::env::args().any(|arg| arg == "--no-browser" || arg == "--self-test") {
             tray::error(&e);

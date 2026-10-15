@@ -1,4 +1,4 @@
-/* Monitor Mix console: functional modules aligned like a compact broadcast desk. */
+/* AuMux console: functional modules aligned like a compact broadcast desk. */
 :root {
   color-scheme: dark;
   --base: #1d2027;
@@ -112,25 +112,12 @@ select:disabled {
   color: #8a939d;
   font-weight: 400;
 }
-.brand-icon {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  height: 17px;
-}
-.brand-icon i {
-  width: 2px;
-  height: 10px;
-  background: #62a78b;
-}
-.brand-icon i:nth-child(2) {
-  height: 17px;
-}
-.brand-icon i:nth-child(3) {
-  height: 13px;
-}
-.brand-icon i:nth-child(4) {
-  height: 7px;
+.brand-logo {
+  display: block;
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
 }
 .version {
   font:
@@ -937,10 +924,34 @@ select:disabled {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-.prototype {
-  color: #536073;
-  font-size: 7px;
-  letter-spacing: 1px;
+.system-metrics {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 10px;
+  color: #a1b0be;
+  font:
+    10px Consolas,
+    monospace;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.system-metrics button {
+  border: 0;
+  background: transparent;
+  padding: 2px 0;
+  color: #c5d9df;
+  font: inherit;
+}
+@media (max-width: 600px) {
+  .statusbar {
+    padding-inline: 6px;
+    gap: 6px;
+  }
+  .system-metrics {
+    gap: 6px;
+    font-size: 9px;
+  }
 }
 .inspector-title {
   display: flex;

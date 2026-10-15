@@ -653,10 +653,6 @@ function updateRemoteAdmin(n) {
     }),
   );
 }
-$("remote-settings").onclick = () => {
-  $("network-settings").click();
-  showPreference("mix");
-};
 $("network-host-apply").onclick = async () => {
   try {
     const v = await api("network-host", { host: $("network-host").value });

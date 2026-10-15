@@ -1,4 +1,6 @@
 //! Personal aux control. HTTP and the bounded command queue never run in audio callbacks.
+#[path = "remote_ws.rs"]
+mod ws;
 use crate::{config::Config, mixer::Controls};
 use crossbeam_queue::ArrayQueue;
 use serde::Deserialize;
@@ -68,6 +70,7 @@ pub struct Rpc {
 pub struct Remote {
     state: Mutex<State>,
     queue: ArrayQueue<Pending>,
+    ws_queue: ArrayQueue<ws::Pending>,
     runtime: Mutex<Option<Runtime>>,
     enabled: AtomicBool,
     port: AtomicU16,
@@ -88,6 +91,7 @@ impl Remote {
         Arc::new(Self {
             state: Mutex::new(State::default()),
             queue: ArrayQueue::new(64),
+            ws_queue: ArrayQueue::new(64),
             runtime: Mutex::new(None),
             enabled: AtomicBool::new(false),
             port: AtomicU16::new(17842),
@@ -374,6 +378,7 @@ impl Remote {
         Ok(())
     }
     pub fn drain(&self, c: &mut Config, ctl: &Controls, running: bool) {
+        ws::drain(self, c, ctl, running);
         let mut replies = Vec::new();
         for _ in 0..32 {
             let Some(p) = self.queue.pop() else { break };
@@ -428,6 +433,18 @@ impl Remote {
             if Some(origin.strip_prefix("http://").unwrap_or("")) != header("Host") {
                 return send(&mut stream, 403, "text/plain", "Origin denied");
             }
+        }
+        if method == "GET" && path == "/brand-logo.png" {
+            let logo = include_bytes!("../assets/aumux-logo.png");
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nContent-Length: {}\r\nConnection: close\r\nX-Content-Type-Options: nosniff\r\n\r\n",
+                logo.len()
+            )?;
+            return stream.write_all(logo);
+        }
+        if path == "/mix/ws" {
+            return ws::serve(self, stream, raw, alive);
         }
         let cookies = header("Cookie").unwrap_or("");
         let mix_cookie = crate::access::cookie_value(cookies, "mm_mix");

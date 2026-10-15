@@ -1,4 +1,4 @@
-# Monitor Mix 0.10 · prueba local en Windows x64
+# AuMux 0.11 · prueba local en Windows x64
 
 Miniapp de mezcla con canales y auxiliares configurables y master estéreo, a 48 kHz. Reutiliza DSP
 y host VST3 de SoundCraft de Artcraft, con una superficie y un ruteo propios.
@@ -6,7 +6,7 @@ Es un prototipo para pruebas; todavía no está validado para una sesión en viv
 
 ## Probar sonido sin ASIO ni interfaz externa
 
-1. Extrae **todo** `MonitorMix-0.10.0-Windows-x64.zip` y ejecuta `MonitorMix.exe`.
+1. Extrae **todo** `AuMux-0.11.0-Windows-x64.zip` y ejecuta `AuMux.exe`.
    Cierra la versión anterior antes de abrir esta.
 2. Pulsa **AUDIO PC**. Usa los parlantes/audífonos predeterminados de Windows
    mediante WASAPI, sin controlador ASIO ni dispositivo MOTU.
@@ -30,31 +30,42 @@ que quieras probar. Puede enviar su master al receptor OBS.
 **SILENCIO TOTAL** corta todos los buses y la escucha. El mismo botón cambia
 a **REACTIVAR AUDIO**: púlsalo para recuperar el sonido sin detener el motor,
 con una entrada gradual de un bloque. **DETENER** libera el dispositivo. Cerrar la consola
-de Monitor Mix termina la app; cerrar solo su ventana gráfica no detiene el
-proceso ni el audio.
+de AuMux no detiene el proceso ni el audio. Usa **Cerrar servicio** desde la bandeja
+y confirma con **Sí** para terminar el motor y los servidores.
 
-## Novedades 0.10
+## Novedades 0.11
 
-- **Preferencias** agrupa consola remota, auxiliares, escucha y redes en categorías.
-  Inicia los servidores y elige IP/puertos en **Redes y servidores**.
-- **Herramientas → Interfaz touch** se activa manualmente y se recuerda por navegador.
-  El menú queda anclado al botón, también en touch.
-- Escucha con objetivo de búfer 40/80/120/200 ms y reconexión automática.
-- Inicio normal sin terminal, con icono de bandeja para abrir la consola o salir.
-  Una segunda ejecución abre la instancia existente. Cerrar la consola deja audio
-  y servidores activos; usa **Salir** desde el icono para detenerlos.
-- El paquete aún no tiene firma Authenticode: [opciones de firma](firma-windows.md).
+- El programa se llama **AuMux**, incorpora su logo y se ejecuta con **AuMux.exe**.
+- **Preferencias → Redes y servidores** aparece primero. Consola remota,
+  control de auxiliares y escucha tienen páginas propias. El bloque antiguo de
+  control remoto se retira de la superficie principal.
+- El control de auxiliares usa WebSocket: envía los últimos cambios de controles
+  en tandas de 80 ms, recibe estado cada 100 ms y confirma después de aplicar.
+  Si se corta la conexión, conserva la vista y se reconecta sin repetir movimientos
+  pendientes de la conexión anterior. El audio usa su transporte separado.
+- El pie de consola muestra CPU y RAM de este proceso y la latencia declarada por
+  el driver; cuando no existe ese dato, muestra la duración de bloque identificada
+  como tal. No es una medición física de ida y vuelta.
+- La bandeja muestra **Abrir consola**, IP local, latencia, CPU, RAM y
+  **Cerrar servicio**, en ese orden. Cerrar servicio requiere confirmación; **No**
+  conserva la app y el audio activos. Cerrar la ventana del navegador tampoco
+  detiene el servicio.
+- El modo touch sigue siendo manual en **Herramientas → Interfaz touch**.
+- Se conservan escucha con búfer 40/80/120/200 ms y reconexión automática,
+  contraseñas por función y enlaces personales de auxiliares.
+- El paquete sigue sin firma Authenticode: [opciones de firma](firma-windows.md).
 
-Consulta [la guía 0.10](interfaz-0.10.md). La marca superior debe indicar 0.10.
+Consulta [la guía 0.11](interfaz-0.11.md). La marca superior debe indicar AuMux 0.11.
 
 ## Control remoto web 0.8
 
-**Control remoto → Iniciar control remoto → participante + auxiliar → Crear enlace**.
+**Preferencias → Redes y servidores → Iniciar control remoto**; después,
+**Control de auxiliares → participante + auxiliar → Crear enlace**.
 El participante ajusta solo sus envíos. Puedes permitir PRE/POST y limitar nivel.
 Para Tailscale, usa la IP 100.x o MagicDNS en **Dirección para compartir** y aplica.
 Control usa TCP 17842 y escucha TCP 17841; la escucha sigue teniendo búfer.
 Consulta [la guía de control remoto y Tailscale](interfaz-0.8.md) para pasos,
-permisos, reconexión y límites. Los permisos y enlaces siguen siendo compatibles; consulta la organización actual en la guía 0.10.
+permisos, reconexión y límites. Los permisos y enlaces siguen siendo compatibles; consulta la organización actual en la guía 0.11.
 
 ## Novedades 0.7
 
@@ -148,7 +159,9 @@ habitual. Si no están disponibles, se abre el navegador predeterminado.
 El motor de audio es un proceso Rust/C++ local; la superficie sigue siendo
 HTML/CSS/JS. No se ha sustituido por un toolkit gráfico nativo.
 
-La consola de texto permanece abierta para diagnóstico. El botón de pantalla
+El inicio normal no abre una terminal. Para diagnóstico desde PowerShell puedes
+usar `AuMux.exe --no-browser`; las opciones de prueba también admiten ejecución
+sin bandeja. El botón de pantalla
 completa amplía la superficie. El escritorio está pensado para pantallas de
 1280 píxeles o más; las entradas se desplazan horizontalmente si hace falta.
 
@@ -208,6 +221,7 @@ El selector **Presets** ofrece los valores iniciales y tus presets guardados.
 Escribe un nombre y pulsa Guardar; elige uno para recuperarlo. También puedes
 borrarlo, exportarlo o importar un JSON del mismo efecto. La biblioteca se
 conserva en `%LOCALAPPDATA%\MonitorMix\presets.json`; puedes respaldarla.
+La ruta interna anterior se mantiene para no perder las bibliotecas existentes.
 Se guardan parámetros numéricos, no bancos binarios ni presets internos VST3.
 
 Pulsa **Envíos ↗** en la tira de entrada para abrir el nivel principal, paneo
@@ -233,9 +247,11 @@ activa sidechains; la compatibilidad con tus plugins necesita prueba local.
    `%PROGRAMDATA%\obs-studio\plugins\monitor-mix-receiver\bin\64bit`,
    verifica la copia y conserva un respaldo si ya existía el receptor.
 2. Abre OBS x64 **32.1 o posterior** y añade **Monitor Mix — master local**.
+   AuMux conserva ese nombre, el ID de fuente y `monitor-mix-receiver.dll` para
+   mantener las escenas y el receptor existentes.
    Crea una sola fuente y reutilízala en las demás escenas.
 3. Activa **MASTER → OBS** y arranca AUDIO PC, DEMO o ASIO.
-4. Monitor Mix debe mostrar **OBS recibe** cuando la fuente confirma recepción.
+4. AuMux debe mostrar **OBS recibe** cuando la fuente confirma recepción.
    Comprueba el medidor en OBS y realiza una grabación corta. Si indica
    **OBS sin receptor**, ejecuta `Diagnosticar-OBS.cmd`: imprime rutas y las
    líneas relevantes del último registro sin modificar OBS.
@@ -261,7 +277,7 @@ La copia 0.2 en `%APPDATA%` no se utiliza en Windows normal; puedes eliminar
 
 ## Validación y diagnóstico
 
-En este entorno se comprobaron 32 pruebas del motor, incluidas medición
+La validación automática del motor incluye medición
 Peak/RMS de un seno conocido, ruido independiente y su espectro, selección de
 bus para escucha PC, migración de escenas y cadenas/bypass con un VST3 binario
 real de prueba. También se probaron la interfaz en Chromium y el puente desde
@@ -281,13 +297,13 @@ selección de pistas o presencia en la escena de grabación.
 Prueba de lógica sin hardware desde PowerShell:
 
 ```powershell
-.\MonitorMix.exe --self-test
+.\AuMux.exe --self-test
 ```
 
 ## OSC y superficies Mackie
 
 Se dejó anotada la dirección futura: mezclador independiente o controlador MIDI
-Mackie Control/HUI, además de OSC. No están implementados en 0.9. El mapa para
+Mackie Control/HUI, además de OSC. No están implementados en 0.11. El mapa para
 CueMix/MOTU necesita comprobar documentación y mensajes con el equipo.
 
 Las pruebas de C++ nativo comprueban los 21 inserts y el EQ con ASan/UBSan,
@@ -303,7 +319,7 @@ Grabación multipista y OSC/Mackie pendientes.
 
 Si no aparecen **+ Canal**, **+ Aux** y **Canales y auxiliares**, cierra el
 proceso anterior y abre el ejecutable del ZIP nuevo: la marca superior debe
-mostrar **0.10**. Se prueba en Windows extrayendo todo el ZIP; no mezcles
+mostrar **AuMux 0.11**. Se prueba en Windows extrayendo todo el ZIP; no mezcles
 archivos de varias versiones.
 
 Las novedades de dinámica, superficie adaptativa y escucha LAN se describen en

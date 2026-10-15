@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
-cd /workspace/audio-obs-asio
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
 export CARGO_HOME=/workspace/.cargo RUSTUP_HOME=/workspace/.rustup
 export PATH="/workspace/.cargo/bin:$PATH"
+export PYTHONPATH="/workspace/.aumux-test-deps${PYTHONPATH:+:$PYTHONPATH}"
 export CXXFLAGS=-I/workspace/.audio-obs-sysroot/usr/include
 export RUSTFLAGS='-L native=/workspace/.audio-obs-sysroot/usr/lib/x86_64-linux-gnu'
 mkdir -p /workspace/scratch/obs-build
@@ -22,7 +23,7 @@ cp /workspace/scratch/vst3-fixture-target/debug/libvst3_fixture.so /workspace/sc
 export MONITOR_VST3_FIXTURE=/workspace/scratch/Fixture.vst3
 cargo +1.95.0 test --manifest-path desktop/Cargo.toml --locked -j 2 -- --include-ignored
 cargo +1.95.0 build --manifest-path desktop/Cargo.toml --locked -j 2
-desktop/target/debug/monitor-mix --self-test
+desktop/target/debug/aumux --self-test
 g++ -std=c++17 -O1 -I/workspace/.audio-obs-sysroot/usr/include/obs -I/workspace/.audio-obs-sysroot/usr/include \
   desktop/native/obs-receiver.cpp desktop/native/obs-receiver-test.cpp \
   -L/workspace/.audio-obs-sysroot/usr/lib/x86_64-linux-gnu \
@@ -41,6 +42,7 @@ tail -n 1 /workspace/scratch/monitor-obs-test.log
 MONITOR_OBS_TEST=/workspace/scratch/obs-build/receiver-test python3 desktop/tests/bridge-smoke.py
 python3 desktop/tests/listen-smoke.py
 python3 desktop/tests/remote-smoke.py
+python3 desktop/tests/websocket-smoke.py
 python3 desktop/tests/access-smoke.py
 python3 desktop/tests/network-smoke.py
 python3 desktop/tests/local-http-smoke.py
@@ -49,6 +51,8 @@ if command -v chromium >/dev/null; then
   NODE_PATH=/workspace/scratch/monitor-ui/node_modules node desktop/tests/ui-smoke.cjs
   NODE_PATH=/workspace/scratch/monitor-ui/node_modules node desktop/tests/workspace-smoke.cjs
   NODE_PATH=/workspace/scratch/monitor-ui/node_modules node desktop/tests/remote-ui-smoke.cjs
+  NODE_PATH=/workspace/scratch/monitor-ui/node_modules node desktop/tests/websocket-ui.cjs
+  NODE_PATH=/workspace/scratch/monitor-ui/node_modules node desktop/tests/websocket-network-ui.cjs
   NODE_PATH=/workspace/scratch/monitor-ui/node_modules node desktop/tests/touch-access-ui.cjs
 else
   echo 'Browser validation not run: Chromium unavailable'; exit 1

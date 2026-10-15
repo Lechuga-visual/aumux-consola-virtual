@@ -4,7 +4,7 @@ const { spawn } = require("node:child_process");
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 (async () => {
-  const app = spawn("desktop/target/debug/monitor-mix", ["--no-browser"], {
+  const app = spawn("desktop/target/debug/aumux", ["--no-browser"], {
     env: {
       ...process.env,
       MONITOR_REMOTE_BIND: "127.0.0.1",
@@ -55,7 +55,8 @@ const fs = require("node:fs/promises");
       await publish();
       await api("start", { mode: "demo" });
     });
-    await operator.locator("#remote-settings").click();
+    await operator.locator("#network-settings").click();
+    await operator.locator("#pref-tab-mix").click();
     await operator.evaluate(async () => {
       lastStatus.remote = await api("remote", { action: "start", port: 0 });
       updateRemoteAdmin(lastStatus.remote);
@@ -100,7 +101,7 @@ const fs = require("node:fs/promises");
         .locator('[aria-label="Enlace de Baterista"]')
         .inputValue();
     await operator.screenshot({
-      path: "/workspace/scratch/monitor-mix-personal-remote-admin.png",
+      path: "/workspace/scratch/aumux-personal-remote-admin.png",
     });
     await operator.locator("[data-close=network-dialog]").click();
     const contextA = await browser.newContext({
@@ -180,14 +181,14 @@ const fs = require("node:fs/promises");
     await b.locator(".controls button:nth-child(2)").first().click();
     await b.waitForFunction(() => state.channels[0].pre === false && !busy);
     await a.screenshot({
-      path: "/workspace/scratch/monitor-mix-personal-remote.png",
+      path: "/workspace/scratch/aumux-personal-remote.png",
     });
     await b.screenshot({
-      path: "/workspace/scratch/monitor-mix-personal-remote-mobile.png",
+      path: "/workspace/scratch/aumux-personal-remote-mobile.png",
     });
     await contextA.setOffline(true);
-    await a.waitForFunction(
-      () => document.querySelector("#status").textContent === "Sin conexión",
+    await a.waitForFunction(() =>
+      document.querySelector("#status").textContent.startsWith("Reconectando"),
     );
     assert(await a.locator(".fader").first().isDisabled());
     await operator.evaluate(async () => {
@@ -199,7 +200,8 @@ const fs = require("node:fs/promises");
       () => connected && state.channels[0].level_db === -24,
     );
     assert.equal(await a.locator(".value").first().inputValue(), "-24");
-    await operator.locator("#remote-settings").click();
+    await operator.locator("#network-settings").click();
+    await operator.locator("#pref-tab-mix").click();
     await operator
       .locator(".remote-link")
       .filter({ hasText: "Voz principal" })

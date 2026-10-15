@@ -459,7 +459,7 @@ function downloadPreset(preset) {
   );
   a.download =
     (preset.name || "Preset").replace(/[^a-z0-9_.-]/gi, "_") +
-    ".monitorpreset.json";
+    ".aumuxpreset.json";
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }

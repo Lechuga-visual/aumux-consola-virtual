@@ -2,7 +2,7 @@
 import json,os,re,struct,subprocess,time,urllib.request,urllib.error,concurrent.futures,math
 from pathlib import Path
 root=Path(__file__).resolve().parents[2]
-app=subprocess.Popen([str(root/'desktop/target/debug/monitor-mix'),'--no-browser'],stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True,env={**os.environ,'MONITOR_LISTEN_HOST':'127.0.0.1'})
+app=subprocess.Popen([str(root/'desktop/target/debug/aumux'),'--no-browser'],stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True,env={**os.environ,'MONITOR_LISTEN_HOST':'127.0.0.1'})
 streams=[]
 try:
     url=''
@@ -23,7 +23,7 @@ try:
     for path,expected in [('/',403),('/api/config?key='+key,404)]:
         try:urllib.request.urlopen(origin+path);raise AssertionError('Read-only monitor access check failed')
         except urllib.error.HTTPError as e:assert e.code==expected
-    assert b'MONITOR MIX' in urllib.request.urlopen(link).read()
+    assert b'AuMux' in urllib.request.urlopen(link).read()
     metadata=json.load(urllib.request.urlopen(origin+'/status?key='+key));assert len(metadata['buses'])==5 and metadata['sample_rate']==48000
     def record(bus):
         stream=urllib.request.urlopen(origin+'/stream?key='+key+'&bus='+str(bus),timeout=5);streams.append(stream);raw=stream.read(48000*8//4);stream.close();values=struct.unpack('<'+'f'*(len(raw)//4),raw);assert all(math.isfinite(v) for v in values);return math.sqrt(sum(v*v for v in values)/len(values))

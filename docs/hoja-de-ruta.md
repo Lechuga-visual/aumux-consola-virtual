@@ -1,6 +1,6 @@
 # Hoja de ruta
 
-Estado a partir de Monitor Mix 0.10. Todos los caminos de audio seguirán a
+Estado a partir de AuMux 0.11. Todos los caminos de audio seguirán a
 **48 kHz** en esta etapa. Esta lista registra tareas pendientes y avances,
 sin fechas comprometidas. Los instrumentos virtuales quedan
 fuera del alcance; el proyecto se centra en mezcla y procesamiento de audio.
@@ -28,8 +28,9 @@ parte del criterio de aceptación.
   mover un fader por web no debe agregar un buffer al audio local.
 
 **Siguiente trabajo prioritario de audio:** revisar el transporte y la reproducción
-LAN antes de considerarlos aptos para monitoreo de participantes. La versión 0.10
-permite objetivos de búfer de 40/80/120/200 ms en el navegador (80 ms inicialmente), además de red y dispositivo;
+LAN antes de considerarlos aptos para monitoreo de participantes. Desde 0.10 se
+permiten objetivos de búfer de 40/80/120/200 ms en el navegador (80 ms inicialmente),
+además de red y dispositivo;
 es una implementación inicial de escucha y todavía no cumple ese objetivo.
 Evaluar transporte, paquetes y búfer adaptativo para evitar acumulación de
 retraso; comparar alternativas como WebRTC y, si el navegador no permite el
@@ -50,14 +51,16 @@ tratamiento de relojes independientes antes de habilitar rutas combinadas.
 
 La agregación de varios dispositivos ASIO queda **fuera del alcance acordado**.
 
-## Mezclas y consola remotas por web · disponibles en 0.9
+## Mezclas y consola remotas por web · disponibles en 0.11
 
 Ya implementado: superficie por auxiliar con faders y mute de envío, permiso
 PRE/POST, límite de nivel, enlaces revocables, sincronización con la consola y
 reconexión sin reproducir cambios antiguos. Enlaces con IP Tailscale/MagicDNS
 para control y escucha. Se añaden vistas touch, enlaces unificados con contraseña
 u abiertos, selector de auxiliar, consola principal remota y selección de interfaz
-de red. Ver [guía 0.9](interfaz-0.9.md).
+de red. En 0.11 el control de auxiliares usa WebSocket, agrupa los últimos cambios
+cada 80 ms y recibe estado cada 100 ms; las confirmaciones llegan después de aplicar.
+La reconexión descarta comandos pendientes antiguos. Ver [guía 0.11](interfaz-0.11.md).
 
 Pendiente: optimizar y medir transporte de escucha para monitoreo de mínima
 latencia, validar sesiones largas y varios dispositivos reales en LAN/tailnet,
@@ -87,4 +90,4 @@ estas funciones; no se simulan mediciones ni se ejecuta análisis pendiente.
   de estabilidad/latencia con ASIO y hardware real.
 
 Ver [control remoto](control-remoto.md) para el diseño previo de OSC/Mackie y
-[la versión actual](interfaz-0.10.md) para lo ya implementado.
+[la versión actual](interfaz-0.11.md) para lo ya implementado.

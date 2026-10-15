@@ -29,6 +29,6 @@ Copy-Item $source $target -Force
 Unblock-File -Path $target
 if ((Get-FileHash $source).Hash -ne (Get-FileHash $target).Hash) { throw 'La copia no coincide con el receptor original.' }
 Write-Host "Receptor copiado y verificado en $target"
-Write-Host 'Abre OBS x64 32.1 o posterior, sin modo seguro, y agrega la fuente Monitor Mix - master local.'
+Write-Host 'Abre OBS x64 32.1 o posterior, sin modo seguro, y agrega la fuente AuMux - master local.'
 Write-Host 'Esto verifica los archivos; el registro de OBS confirma si el modulo se cargo.'
 Write-Host 'Si no aparece, ejecuta Diagnosticar-OBS.cmd. Para OBS portable usa -ObsRoot con la carpeta de OBS.'

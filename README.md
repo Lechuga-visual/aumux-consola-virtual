@@ -1,7 +1,9 @@
-# Monitor Mix
+# AuMux
 
-Miniapp Windows x64 para mezclar entradas ASIO o probar generadores por la
+**AuMux**, antes Monitor Mix, es una miniapp Windows x64 para mezclar entradas ASIO o probar generadores por la
 salida normal del PC, crear mezclas auxiliares y enviar el master a OBS.
+El repositorio conserva por ahora su dirección `Lechuga-visual/audio-obs-asio`;
+el producto y los archivos de esta versión ya usan AuMux.
 
 **Prioridad del proyecto:** mezcla y monitoreo en tiempo real con la menor
 latencia estable de extremo a extremo, también hacia OBS y por red. La escucha
@@ -9,15 +11,18 @@ web permite objetivos de búfer de 40/80/120/200 ms (80 ms inicialmente), más e
 su optimización y medición son prioritarias en la
 [hoja de ruta](docs/hoja-de-ruta.md).
 
-**Prueba local:** [descargar Windows x64](dist/MonitorMix-0.10.0-Windows-x64.zip)
+**Prueba local:** [descargar Windows x64](dist/AuMux-0.11.0-Windows-x64.zip)
 e [instrucciones para Windows](docs/probar-en-windows.md).
 La descarga incluye el ejecutable, el receptor de OBS y el código fuente.
-Su checksum está en [SHA-256](dist/MonitorMix-0.10.0-Windows-x64.zip.sha256).
+Su checksum está en [SHA-256](dist/AuMux-0.11.0-Windows-x64.zip.sha256).
 
 ## Funciones actuales
 
-- Preferencias por categoría: consola remota, auxiliares, escucha y redes/servidores.
-- Bandeja de Windows sin terminal; abrir consola, salir y detección de segunda instancia normal.
+- Marca AuMux y logo propio; ejecutable **AuMux.exe**.
+- Preferencias por categoría, con **Redes y servidores** al principio; consola remota, auxiliares y escucha tienen páginas propias.
+- Control de auxiliares por **WebSocket**: cambios agrupados cada 80 ms, estado cada 100 ms y confirmación después de aplicar. Reconecta consultando el estado real y descarta cambios pendientes antiguos.
+- CPU y RAM del proceso y latencia declarada por el driver —o duración de bloque si no está disponible— en el pie de consola.
+- Bandeja de Windows sin terminal: abrir consola, IP local, latencia, CPU, RAM y cerrar servicio con confirmación. Detección de segunda instancia normal.
 - Lectura HTTP por bloques, reconexión de escucha y selección del objetivo de búfer de red.
 - Preparación de firma Authenticode y [opciones gratuitas para código abierto](docs/firma-windows.md).
 
@@ -61,14 +66,14 @@ La miniapp reutiliza **los crates DSP y VST3 de SoundCraft de Artcraft**,
 fijados a una revisión concreta. La interfaz y el ruteo son propios; no es
 un fork de todo el DAW. No requiere controlar CueMix ni instalar REAPER.
 
-![Consola Monitor Mix touch 0.10](docs/monitor-mix-0.10-main-touch.png)
+![Consola AuMux touch 0.11](docs/aumux-0.11-main-touch.png)
 
 Para probar sin hardware: **AUDIO PC → G en un canal → Control Room → Input**.
 DEMO procesa sin reproducir. Las escenas 0.1 siguen siendo compatibles.
 
 ## Ejecutar y compilar
 
-El ZIP Windows incluye el ejecutable, el receptor OBS, guía y fuente. No
+El ZIP Windows incluye **AuMux.exe**, el receptor OBS, guía y fuente. No
 necesita compilador para probarlo. Arranca detenido, sin salidas asignadas.
 
 Código de la app: `desktop/`. Para compilar localmente en Windows con Rust
@@ -77,8 +82,18 @@ El Cargo.lock se conserva; usar siempre `--locked`.
 
 En esta máquina Linux, `bash tools/setup-cloud.sh` prepara las dependencias
 en `/workspace` y verifica el motor y la compilación cruzada. La UI se inicia
-con `desktop/target/debug/monitor-mix --no-browser` y la consola imprime su
+con `desktop/target/debug/aumux --no-browser` y la consola imprime su
 dirección local. El modo DEMO no abre hardware. Cierra el proceso al acabar.
+
+`bash tools/validate-desktop.sh` ejecuta las pruebas de audio, red y Chromium.
+La preparación instala el cliente Python de pruebas WebSocket fijado en
+`desktop/tests/requirements.txt` dentro de `/workspace/.aumux-test-deps`, mediante
+HTTPS y sin modificar los paquetes globales. La app distribuida no requiere
+Python. Con la app compilada, la prueba de red se puede repetir con:
+
+```sh
+PYTHONPATH=/workspace/.aumux-test-deps python3 desktop/tests/websocket-smoke.py
+```
 
 ## Validación y límites
 
@@ -94,14 +109,16 @@ abren al inicio. Cambiar dispositivo, entradas físicas abiertas o buffer exige
 detener el motor. Agregar, quitar, reordenar o editar parámetros VST3 exige
 detenerlo; parámetros nativos, EQ, bypass, niveles, envíos, formatos y cantidad
 de tiras funcionan en vivo. Los presets de usuario se guardan en
-`%LOCALAPPDATA%\MonitorMix\presets.json` en Windows.
+`%LOCALAPPDATA%\MonitorMix\presets.json` en Windows. Se conserva esa carpeta
+interna para seguir encontrando las bibliotecas de versiones anteriores.
 
 Es un prototipo: no hay compensación de latencia, editor nativo VST3 ni
 estado binario de presets; se admiten cuatro inserts por tira. Faltan las pruebas
 de ASIO real, compatibilidad de efectos, sincronía con video y sesiones largas.
 La guía detalla estas limitaciones y la prueba paso a paso.
 
-En 0.3 se corrigió la ruta del receptor: ejecuta el nuevo instalador como
+El receptor conserva su DLL, ID y nombre de fuente **Monitor Mix — master local**
+para mantener las escenas OBS existentes. En 0.3 se corrigió su ruta: ejecuta el nuevo instalador como
 administrador con OBS cerrado. OBS 32.2.2 x64 es compatible. Consulta
 [el puente y la alternativa ReaStream](docs/puente-obs.md).
 
@@ -110,7 +127,7 @@ administrador con OBS cerrado. OBS 32.2.2 x64 es compatible. Consulta
 [Dirección OSC, Mackie Control y Mackie HUI](docs/control-remoto.md): se prevé
 un modo controlador sin abrir audio, además del mezclador independiente.
 Estos protocolos y el mapa específico MOTU quedan para la siguiente etapa;
-no se implementan en 0.9.
+no se implementan en 0.11.
 
 ## Componentes anteriores
 
@@ -133,4 +150,4 @@ licencias y procedencia en el ZIP.
 [Hoja de ruta](docs/hoja-de-ruta.md): otros dispositivos y subsistemas Windows,
 optimización de escucha de baja latencia, grabación multipista y control OSC/Mackie.
 
-[Preferencias, bandeja de Windows, touch manual y red 0.10](docs/interfaz-0.10.md).
+[AuMux, auxiliares WebSocket, preferencias y bandeja 0.11](docs/interfaz-0.11.md).

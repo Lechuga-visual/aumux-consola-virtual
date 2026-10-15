@@ -1,4 +1,4 @@
-# Identidad y firma de Monitor Mix en Windows
+# Identidad y firma de AuMux en Windows
 
 La firma Authenticode identifica al editor y protege la integridad de los archivos.
 El certificado relaciona al firmante con una clave pública; la firma de cada
@@ -16,7 +16,7 @@ sus condiciones vigentes deben comprobarse al solicitarlo. Este entorno no pudo
 consultar las páginas del programa (HTTP 403), por lo que no se ha verificado aquí
 el formulario ni los requisitos actuales.
 
-Para preparar la solicitud de Monitor Mix:
+Para preparar la solicitud de AuMux:
 
 1. Identificar al mantenedor y acreditar control de `Lechuga-visual/audio-obs-asio`.
 2. Presentar el repositorio público, la licencia y los avisos de terceros.
@@ -51,7 +51,7 @@ hardware compatible). Requiere `signtool.exe` del Windows SDK. No recibe claves
 privadas ni contraseñas por argumentos.
 
 ```powershell
-.\source\tools\sign-windows.ps1 -PackageDirectory C:\MonitorMix-0.10.0-Windows-x64 -CertificateThumbprint HUELLA_DEL_CERTIFICADO
+.\source\tools\sign-windows.ps1 -PackageDirectory C:\AuMux-0.11.0-Windows-x64 -CertificateThumbprint HUELLA_DEL_CERTIFICADO
 ```
 
 Firma y verifica el EXE y receptor OBS; firma los scripts PowerShell, vuelve a
@@ -63,7 +63,7 @@ este script. Los `.cmd` son lanzadores de texto y no admiten Authenticode como u
 Puedes comprobar una descarga en Windows con:
 
 ```powershell
-Get-AuthenticodeSignature .\MonitorMix.exe | Format-List Status,SignerCertificate,TimeStamperCertificate
+Get-AuthenticodeSignature .\AuMux.exe | Format-List Status,SignerCertificate,TimeStamperCertificate
 Get-AuthenticodeSignature .\obs-plugin\monitor-mix-receiver.dll | Format-List Status,SignerCertificate
 ```
 

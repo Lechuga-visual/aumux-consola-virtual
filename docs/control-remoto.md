@@ -1,18 +1,20 @@
 # Dirección prevista: mezclador y superficie de control
 
-Requisito acordado: Monitor Mix debe poder funcionar como mezclador independiente
+Requisito acordado: AuMux debe poder funcionar como mezclador independiente
 y, en una etapa posterior, como superficie de control OSC o MIDI Mackie Control /
-Mackie HUI. Esta dirección queda documentada; **la versión 0.4 no implementa esos
+Mackie HUI. Esta dirección queda documentada; **la versión 0.11 no implementa esos
 protocolos ni controla CueMix/MOTU**. El trabajo actual es la superficie de mezcla.
 
 El control de mezclas personales por web ya está disponible en 0.8, con acceso
 limitado a un auxiliar por enlace y direcciones LAN/Tailscale/MagicDNS. En 0.9 se
 añaden enlaces compartidos con selección de auxiliar y consola completa con
-autorización independiente. Consulta [la guía web](interfaz-0.9.md). OSC y Mackie siguen pendientes.
+autorización independiente. En 0.11 el control de auxiliares pasa a WebSocket con tandas de cambios de 80 ms
+y estado cada 100 ms. Consulta [la guía web actual](interfaz-0.11.md). OSC y Mackie
+siguen pendientes.
 
 ## Modos que se quieren incorporar
 
-| Modo | Motor de Monitor Mix | Destino de los controles |
+| Modo | Motor de AuMux | Destino de los controles |
 | --- | --- | --- |
 | Independiente | ASIO, AUDIO PC o DEMO | Mezcla, VST3, auxiliares y master propios |
 | Controlador Mackie Control | No requiere abrir audio | Aplicación/dispositivo externo mediante MIDI |

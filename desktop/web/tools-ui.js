@@ -36,6 +36,7 @@ function openLatency() {
 }
 $("open-diagnostics").onclick = openLatency;
 $("latency-badge").onclick = openLatency;
+$("system-latency").onclick = openLatency;
 function calculateLatency() {
   const ids = [
     "calc-frames",
@@ -73,6 +74,31 @@ const fmtMs = (v) =>
   typeof v === "number" && Number.isFinite(v)
     ? v.toFixed(2) + " ms"
     : "Sin dato";
+let lastSystemMetricsUpdate = -Infinity;
+function updateSystemMetrics(s) {
+  const now = performance.now();
+  if (now - lastSystemMetricsUpdate < 1000) return;
+  lastSystemMetricsUpdate = now;
+  const cpu = s.system?.cpu_percent;
+  const ram = s.system?.ram_bytes;
+  $("system-cpu").textContent =
+    typeof cpu === "number" && Number.isFinite(cpu)
+      ? `CPU: ${cpu.toFixed(1)} %`
+      : "CPU: —";
+  $("system-ram").textContent =
+    typeof ram === "number" && Number.isFinite(ram)
+      ? `RAM: ${(ram / 1048576).toFixed(0)} MiB`
+      : "RAM: —";
+  const driver = s.latency?.driver_ms;
+  const block = s.latency?.block_ms;
+  const measuredDriver = typeof driver === "number" && Number.isFinite(driver);
+  const value = measuredDriver ? driver : block;
+  $("system-latency").textContent =
+    `${measuredDriver ? "Driver" : "Bloque"}: ${typeof value === "number" && Number.isFinite(value) ? value.toFixed(2) + " ms" : "—"}`;
+  $("system-latency").title = measuredDriver
+    ? "Latencia total declarada por el driver de audio. No incluye todos los efectos, OBS ni la red; no es una medición de extremo a extremo. Pulsa para ver los componentes."
+    : "Duración calculada de un bloque del motor. El driver no informa latencia; este dato no es el retardo total de escucha. Pulsa para ver los componentes.";
+}
 let latencyRouteSignature = "";
 function updateLatencyTools(s) {
   const l = s.latency;

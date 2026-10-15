@@ -2,7 +2,7 @@
 import json, os, re, socket, subprocess, time, urllib.request, urllib.error
 from pathlib import Path
 root = Path(__file__).resolve().parents[2]
-app = subprocess.Popen([str(root/'desktop/target/debug/monitor-mix'), '--no-browser'], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, env={**os.environ, 'MONITOR_REMOTE_BIND':'127.0.0.1', 'MONITOR_LISTEN_HOST':'127.0.0.1'})
+app = subprocess.Popen([str(root/'desktop/target/debug/aumux'), '--no-browser'], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, env={**os.environ, 'MONITOR_REMOTE_BIND':'127.0.0.1', 'MONITOR_LISTEN_HOST':'127.0.0.1'})
 try:
     for line in app.stdout:
         match = re.search(r'http://127\.0\.0\.1:\d+', line)

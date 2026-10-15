@@ -4,16 +4,23 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <meta name="monitor-token" content="__TOKEN__" />
-    <title>Monitor Mix · Console</title>
+    <title>AuMux · Consola</title>
+    <link rel="icon" type="image/png" href="/brand-logo.png" />
     <link rel="stylesheet" href="/console.css" />
   </head>
   <body>
     <div class="app">
       <header class="titlebar">
         <div class="brand">
-          <span class="brand-icon"><i></i><i></i><i></i><i></i></span
-          ><strong>MONITOR<span>MIX</span></strong
-          ><span class="version">0.10</span>
+          <img
+            class="brand-logo"
+            src="/brand-logo.png"
+            alt=""
+            width="30"
+            height="30"
+          />
+          <strong>Au<span>Mux</span></strong>
+          <span class="version">0.11</span>
         </div>
         <div class="scene-title">
           CONSOLA DE MONITOREO <span>•</span>
@@ -56,8 +63,7 @@
         </div>
       </header>
       <nav class="transport">
-        <button id="remote-settings">Control remoto</button
-        ><button id="network-settings">Preferencias</button
+        <button id="network-settings">Preferencias</button
         ><button id="settings" class="settings-button">⚙ MOTOR DE AUDIO</button
         ><span class="separator"></span>
         <button
@@ -199,7 +205,29 @@
         ><span id="stats"
           >Audio detenido · activa DEMO y un generador para probar las
           rutas.</span
-        ><span class="prototype">PROTOTIPO</span>
+        >
+        <div
+          id="system-metrics"
+          class="system-metrics"
+          aria-label="Estado del proceso AuMux"
+        >
+          <span
+            id="system-cpu"
+            title="CPU del proceso AuMux respecto de la capacidad total del PC. No incluye el navegador."
+            >CPU: —</span
+          >
+          <span
+            id="system-ram"
+            title="Memoria RAM residente del proceso AuMux. No incluye el navegador."
+            >RAM: —</span
+          >
+          <button
+            id="system-latency"
+            title="Ver los componentes de latencia. No es una medición de extremo a extremo."
+          >
+            Bloque: —
+          </button>
+        </div>
       </footer>
     </div>
     <input id="scene" type="file" accept=".json" hidden />
@@ -495,6 +523,15 @@
           aria-orientation="vertical"
         >
           <button
+            id="pref-tab-network"
+            role="tab"
+            data-preference="network"
+            aria-controls="pref-network"
+            aria-selected="true"
+          >
+            Redes y servidores
+          </button>
+          <button
             id="pref-tab-console"
             role="tab"
             data-preference="console"
@@ -523,15 +560,6 @@
             tabindex="-1"
           >
             Escucha
-          </button>
-          <button
-            id="pref-tab-network"
-            role="tab"
-            data-preference="network"
-            aria-controls="pref-network"
-            aria-selected="true"
-          >
-            Redes y servidores
           </button>
         </nav>
         <div class="preferences-content">
@@ -768,8 +796,8 @@
               </div>
             </div>
             <p class="hint">
-              Una sola instancia por puerto. Si abres otra copia de Monitor Mix,
-              usa puertos diferentes. Permite ambos puertos en el firewall de
+              Una sola instancia por puerto. Si abres otra copia de AuMux, usa
+              puertos diferentes. Permite ambos puertos en el firewall de
               Windows para la red utilizada. En Tailscale todos los
               participantes necesitan acceso al PC en el tailnet.
             </p>
@@ -862,8 +890,8 @@
       <p>
         <b>+ Canal</b> y <b>+ Aux</b> están sobre sus bancos.
         <b>Canales y auxiliares</b> permite fijar cantidades o retirar tiras. Si
-        no ves estos botones, comprueba que la versión junto a MONITOR MIX sea
-        0.6.
+        no ves estos botones, comprueba que estás usando la versión más reciente
+        de AuMux.
       </p>
       <ol>
         <li>
@@ -902,9 +930,9 @@
         gráfico nativo VST3.
       </p>
       <p class="hint">
-        Cerrar la ventana de la consola no detiene el audio. Usa DETENER o
-        elige Salir desde el icono de Monitor Mix en la bandeja de Windows. Los índices de conectores físicos
-        dependen del controlador.
+        Cerrar la ventana de la consola no detiene el audio. Usa DETENER o elige
+        Salir desde el icono de AuMux en la bandeja de Windows. Los índices de
+        conectores físicos dependen del controlador.
       </p>
     </dialog>
     <script src="/console.js"></script>

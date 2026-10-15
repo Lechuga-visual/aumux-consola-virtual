@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-cd /workspace/audio-obs-asio
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
 export CARGO_HOME=/workspace/.cargo RUSTUP_HOME=/workspace/.rustup
 export PATH="/workspace/.cargo/bin:/workspace/.audio-obs-sysroot/usr/bin:$PATH"
 export CXX_x86_64_pc_windows_gnu=x86_64-w64-mingw32-g++-posix

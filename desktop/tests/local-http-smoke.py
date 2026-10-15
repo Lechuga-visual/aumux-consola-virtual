@@ -2,7 +2,7 @@
 import http.client, re, socket, subprocess
 from pathlib import Path
 root=Path(__file__).resolve().parents[2]
-app=subprocess.Popen([str(root/'desktop/target/debug/monitor-mix'),'--no-browser'], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,text=True)
+app=subprocess.Popen([str(root/'desktop/target/debug/aumux'),'--no-browser'], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,text=True)
 try:
     for line in app.stdout:
         match=re.search(r'http://127\.0\.0\.1:(\d+)',line)

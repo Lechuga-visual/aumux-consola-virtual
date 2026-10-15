@@ -9,11 +9,11 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $PackageDirectory = (Resolve-Path -LiteralPath $PackageDirectory).Path
-if (-not (Test-Path -LiteralPath (Join-Path $PackageDirectory 'MonitorMix.exe'))) { throw 'Select an extracted Monitor Mix release directory.' }
+if (-not (Test-Path -LiteralPath (Join-Path $PackageDirectory 'AuMux.exe'))) { throw 'Select an extracted AuMux release directory.' }
 $certificate = Get-Item -LiteralPath "Cert:\CurrentUser\My\$CertificateThumbprint" -ErrorAction Stop
 if (-not $certificate.HasPrivateKey) { throw 'The certificate has no accessible signing key.' }
 if ($certificate.NotAfter -le (Get-Date)) { throw 'The signing certificate has expired.' }
-$files = @('MonitorMix.exe', 'obs-plugin\monitor-mix-receiver.dll')
+$files = @('AuMux.exe', 'obs-plugin\monitor-mix-receiver.dll')
 foreach ($relative in $files) {
     $file = Join-Path $PackageDirectory $relative
     & $SignTool sign /sha1 $CertificateThumbprint /fd SHA256 /tr $TimestampServer /td SHA256 $file

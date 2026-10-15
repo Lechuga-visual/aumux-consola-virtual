@@ -9,10 +9,12 @@ import tomllib
 root = Path(__file__).resolve().parents[1]
 dist = root / "dist"
 version=tomllib.loads((root/'desktop/Cargo.toml').read_text())['package']['version']
-stage = dist / f"MonitorMix-{version}-Windows-x64"
-stage.mkdir(parents=True, exist_ok=True)
+stage = dist / f"AuMux-{version}-Windows-x64"
+if stage.exists():
+    shutil.rmtree(stage)
+stage.mkdir(parents=True)
 (stage / "obs-plugin").mkdir(exist_ok=True)
-shutil.copy2(root / "desktop/target/x86_64-pc-windows-gnu/release/monitor-mix.exe", stage / "MonitorMix.exe")
+shutil.copy2(root / "desktop/target/x86_64-pc-windows-gnu/release/aumux.exe", stage / "AuMux.exe")
 shutil.copy2("/workspace/scratch/obs-build/monitor-mix-receiver.dll", stage / "obs-plugin/monitor-mix-receiver.dll")
 for name in ["Instalar-receptor-OBS.cmd", "Instalar-receptor-OBS.ps1", "Diagnosticar-OBS.cmd", "Diagnosticar-OBS.ps1", "THIRD_PARTY.md", "COPYING.GPL-3.0"]:
     shutil.copy2(root / "desktop" / name, stage / name)
@@ -39,7 +41,7 @@ shutil.copytree(vendor, source/'vendor-rust', dirs_exist_ok=True)
 (source/'.cargo').mkdir(exist_ok=True)
 (source/'.cargo/config.toml').write_text(config.replace(str(vendor),'vendor-rust'))
 # Ship the visual editor guide and its images beside LEEME, and with the sources.
-visual=[root/'docs/firma-windows.md', root/'docs/hoja-de-ruta.md', root/'docs/control-remoto.md', *sorted((root/'docs').glob('interfaz-*.md')), *sorted((root/'docs').glob('monitor-mix-*.png'))]
+visual=[root/'docs/firma-windows.md', root/'docs/hoja-de-ruta.md', root/'docs/control-remoto.md', *sorted((root/'docs').glob('interfaz-*.md')), *sorted((root/'docs').glob('monitor-mix-*.png')), *sorted((root/'docs').glob('aumux-*.png'))]
 for p in visual:
     if p.is_file():
         shutil.copy2(p,stage/p.name)
@@ -48,7 +50,7 @@ shutil.copy2(root/'README.md',source/'README.md')
 metadata = json.loads(Path("/workspace/scratch/monitor-cargo-metadata.json").read_text())
 licenses = stage / "licenses"
 for package in metadata["packages"]:
-    if package["name"] == "monitor-mix":
+    if package["id"] in metadata["workspace_members"]:
         continue
     folder = Path(package["manifest_path"]).parent
     if package["name"].startswith("soundcraft-"):
@@ -92,7 +94,7 @@ with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED, compresslevel=7, strict
             out.write(p, p.relative_to(stage))
 with zipfile.ZipFile(archive) as check:
     assert check.testzip() is None
-    assert {"MonitorMix.exe", "obs-plugin/monitor-mix-receiver.dll", "LEEME.md"} <= set(check.namelist())
+    assert {"AuMux.exe", "obs-plugin/monitor-mix-receiver.dll", "LEEME.md", "source/desktop/assets/aumux-logo.png", "source/desktop/assets/aumux.ico"} <= set(check.namelist())
 digest = hashlib.sha256(archive.read_bytes()).hexdigest()
 archive.with_suffix(".zip.sha256").write_text(f"{digest}  {archive.name}\n")
 print(f"Created {archive} ({archive.stat().st_size:,} bytes); ZIP integrity verified")

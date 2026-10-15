@@ -5,7 +5,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 (async () => {
   const app = spawn(
-    process.env.MONITOR_BINARY || "desktop/target/debug/monitor-mix",
+    process.env.MONITOR_BINARY || "desktop/target/debug/aumux",
     ["--no-browser"],
     {
       env: {

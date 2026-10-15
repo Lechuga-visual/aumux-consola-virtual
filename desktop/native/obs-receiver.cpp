@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// Receives Monitor Mix's stereo master on loopback UDP 17840.
+// Receives AuMux's stereo master on loopback UDP 17840.
 #ifdef _WIN32
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -86,7 +86,7 @@ struct Receiver {
         }
     }
 };
-const char* name(void*) { return "Monitor Mix — master local"; }
+const char* name(void*) { return "AuMux — master local"; }
 void* create(obs_data_t*, obs_source_t* source) {
     try {
         auto r = std::make_unique<Receiver>(source);
@@ -99,12 +99,12 @@ void* create(obs_data_t*, obs_source_t* source) {
         sockaddr_in addr{}; addr.sin_family = AF_INET; addr.sin_port = htons(17840);
         addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
         if (bind(r->socket, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0) {
-            blog(LOG_ERROR, "[Monitor Mix] UDP 17840 is occupied. Reuse the existing source instead of creating another.");
+            blog(LOG_ERROR, "[AuMux] UDP 17840 is occupied. Reuse the existing source instead of creating another.");
             return nullptr;
         }
         r->thread = std::thread([p = r.get()] { p->receive(); });
         return r.release();
-    } catch (...) { blog(LOG_ERROR, "[Monitor Mix] Cannot create receiver"); return nullptr; }
+    } catch (...) { blog(LOG_ERROR, "[AuMux] Cannot create receiver"); return nullptr; }
 }
 void destroy(void* data) { delete static_cast<Receiver*>(data); }
 }
@@ -117,7 +117,7 @@ MODULE_EXPORT bool obs_module_load() {
     info.id = "monitor_mix_receiver"; info.type = OBS_SOURCE_TYPE_INPUT;
     info.output_flags = OBS_SOURCE_AUDIO; info.get_name = name; info.create = create; info.destroy = destroy;
     obs_register_source(&info);
-    blog(LOG_INFO, "[Monitor Mix] Receiver registered: add source Monitor Mix - master local (UDP 127.0.0.1:17840)");
+    blog(LOG_INFO, "[AuMux] Receiver registered: add source AuMux - master local (UDP 127.0.0.1:17840)");
     return true;
 }
 MODULE_EXPORT void obs_module_unload() {
@@ -125,4 +125,4 @@ MODULE_EXPORT void obs_module_unload() {
     WSACleanup();
 #endif
 }
-MODULE_EXPORT const char* obs_module_description() { return "Stereo master from the local Monitor Mix prototype"; }
+MODULE_EXPORT const char* obs_module_description() { return "Stereo master from the local AuMux mixer"; }

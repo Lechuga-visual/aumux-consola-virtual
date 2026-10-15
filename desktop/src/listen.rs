@@ -277,6 +277,14 @@ impl Hub {
             return response(&mut stream, 405, "text/plain", b"Read-only monitor");
         }
         let (path, query) = uri.split_once('?').unwrap_or((uri, ""));
+        if path == "/brand-logo.png" {
+            return response(
+                &mut stream,
+                200,
+                "image/png",
+                include_bytes!("../assets/aumux-logo.png"),
+            );
+        }
         let query: Vec<_> = query.split('&').filter_map(|p| p.split_once('=')).collect();
         let key_access = query.iter().any(|(k, v)| *k == "key" && *v == self.key)
             && self.gate.status()["mode"] == "disabled";

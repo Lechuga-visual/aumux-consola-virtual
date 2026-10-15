@@ -1,0 +1,2 @@
+# Test-only Python client; AuMux does not require Python at runtime.
+websockets==16.0

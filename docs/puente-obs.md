@@ -1,7 +1,11 @@
-# Master de Monitor Mix hacia OBS
+# Master de AuMux hacia OBS
 
 El receptor es un plugin **de fuente de audio de OBS**; no es un filtro VST.
 No necesita REAPER, ASIO dentro de OBS ni cable virtual.
+
+Desde 0.11 la app se llama AuMux. La DLL `monitor-mix-receiver.dll`, el ID
+de fuente, el protocolo UDP y el nombre **Monitor Mix — master local** permanecen
+compatibles para conservar las escenas y las instalaciones existentes.
 
 ```mermaid
 flowchart LR
@@ -64,14 +68,14 @@ no sustituye un limitador. No se aplica un códec con pérdida.
 
 ReaStream se distribuye gratis dentro de [ReaPlugs](https://www.reaper.fm/reaplugs/).
 La edición ReaPlugs para Windows es VST2; OBS puede alojar filtros VST2, mientras
-que Monitor Mix actualmente aloja VST3. Por eso poner ReaStream en OBS no basta:
+que AuMux actualmente aloja VST3. Por eso poner ReaStream en OBS no basta:
 también hace falta un emisor compatible. No se puede insertarlo directamente
 en nuestra cadena VST3 ni reemplazar el DLL de fuente por el DLL de ReaStream.
 
 Una ruta alternativa con software existente es enviar desde un host que admita
 ReaStream VST2 (por ejemplo, REAPER) y recibir con ReaStream en un filtro VST2 de
 una fuente de audio activa en OBS, con identificador coincidente. Eso añade otro
-host y exige conectar primero el master de Monitor Mix a ese host; no simplifica
+host y exige conectar primero el master de AuMux a ese host; no simplifica
 esta instalación concreta. REAPER tiene su propia licencia, separada de ReaPlugs.
 
 Una salida nativa compatible con ReaStream permitiría eliminar ese host emisor,

@@ -8,7 +8,7 @@ const path = require("node:path");
 (async () => {
   const binary =
     process.env.MONITOR_BINARY ||
-    path.resolve("desktop/target/debug/monitor-mix");
+    path.resolve("desktop/target/debug/aumux");
   const presetDir = await fs.mkdtemp("/workspace/scratch/monitor-ui-presets-");
   const app = spawn(binary, ["--no-browser"], {
     stdio: ["ignore", "pipe", "pipe"],

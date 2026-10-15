@@ -32,7 +32,7 @@ app = receiver = None
 try:
     receiver = subprocess.Popen([os.environ["MONITOR_OBS_TEST"], "--external"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     line_until(receiver, r"READY: libobs receiver bound")
-    app = subprocess.Popen([os.environ.get("MONITOR_BINARY", "desktop/target/debug/monitor-mix"), "--no-browser"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    app = subprocess.Popen([os.environ.get("MONITOR_BINARY", "desktop/target/debug/aumux"), "--no-browser"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     base = line_until(app, r"http://127\.0\.0\.1:\d+").group(0)
     page = urllib.request.urlopen(base).read().decode()
     token = re.search(r'name="monitor-token" content="([^"]+)"', page).group(1)

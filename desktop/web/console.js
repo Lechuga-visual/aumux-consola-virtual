@@ -1274,6 +1274,7 @@ async function poll() {
     updateLatency();
     updateWorkspaceStatus(s);
     updateLatencyTools(s);
+    updateSystemMetrics(s);
     syncRemoteMix(s);
   } catch (e) {
     failedStatusPolls++;
@@ -1473,7 +1474,7 @@ $("save").onclick = async () => {
     a.href = URL.createObjectURL(
       new Blob([JSON.stringify(cfg, null, 2)], { type: "application/json" }),
     );
-    a.download = "monitor-mix.json";
+    a.download = "aumux.json";
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   } catch (e) {
