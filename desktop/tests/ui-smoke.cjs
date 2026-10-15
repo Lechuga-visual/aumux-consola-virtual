@@ -11,6 +11,7 @@ const path = require("node:path");
     path.resolve("desktop/target/debug/monitor-mix");
   const app = spawn(binary, ["--no-browser"], {
     stdio: ["ignore", "pipe", "pipe"],
+    env: { ...process.env, VST3_PATH: process.env.MONITOR_VST3_FIXTURE || "" },
   });
   let browser;
   try {
@@ -50,6 +51,84 @@ const path = require("node:path");
     assert.equal(await page.locator("#buses .strip").count(), 5);
     assert.equal(await page.locator("#mixer .insert-row").count(), 32);
     assert.equal(await page.locator("#buses .insert-row").count(), 20);
+    // Printed detents, physical pointer position and exact numeric entry must agree.
+    for (const viewport of [
+      { width: 1640, height: 980 },
+      { width: 1280, height: 800 },
+    ]) {
+      await page.setViewportSize(viewport);
+      for (const value of [0, -6, -12, -24]) {
+        const mark = page
+          .locator("#mixer .strip")
+          .first()
+          .locator(".fader-scale span")
+          .filter({ hasText: new RegExp(`^${value}$`) });
+        await mark.click();
+        await page.waitForFunction(
+          async (value) =>
+            (await (await fetch("/api/config")).json()).channels[0].gain_db ===
+            value,
+          value,
+        );
+        assert.equal(
+          await page.locator("#fader-value-c0").inputValue(),
+          value.toFixed(1),
+        );
+        // Click the native track at the same vertical coordinate as the printed mark.
+        const rect = await page
+          .locator("#mixer .fader input")
+          .first()
+          .boundingBox();
+        const tick = await mark.boundingBox();
+        await page.mouse.click(
+          rect.x + rect.width / 2,
+          tick.y + tick.height / 2,
+        );
+        await page.waitForFunction(
+          async (value) =>
+            (await (await fetch("/api/config")).json()).channels[0].gain_db ===
+            value,
+          value,
+        );
+      }
+    }
+    await page.setViewportSize({ width: 1640, height: 980 });
+    await page.locator("#fader-value-c0").fill("-5.3");
+    await page.locator("#fader-value-c0").press("Enter");
+    await page.waitForFunction(
+      async () =>
+        (await (await fetch("/api/config")).json()).channels[0].gain_db ===
+        -5.3,
+    );
+    await page.locator("#fader-value-c0").fill("0");
+    await page.locator("#fader-value-c0").press("Enter");
+    await page.waitForFunction(
+      async () =>
+        (await (await fetch("/api/config")).json()).channels[0].gain_db === 0,
+    );
+    await page.locator("#mixer .fader input").first().press("ArrowDown");
+    await page.waitForFunction(
+      async () =>
+        (await (await fetch("/api/config")).json()).channels[0].gain_db === -1,
+    );
+    await page.locator("#mixer .fader input").first().press("Shift+ArrowUp");
+    await page.waitForFunction(
+      async () =>
+        (await (await fetch("/api/config")).json()).channels[0].gain_db ===
+        -0.9,
+    );
+    await page.locator("#fader-value-c0").fill("0");
+    await page.locator("#fader-value-c0").press("Enter");
+    await page.waitForFunction(
+      async () =>
+        (await (await fetch("/api/config")).json()).channels[0].gain_db === 0,
+    );
+    assert(
+      await page
+        .locator("#mixer .strip")
+        .first()
+        .evaluate((e) => e.getBoundingClientRect().width <= 84),
+    );
     await page.click("#demo");
     await page.waitForFunction(
       () => document.getElementById("status").textContent === "DEMO",
@@ -124,8 +203,14 @@ const path = require("node:path");
           .locator(".insert-slot")
           .nth(slot)
           .click();
-        await page.fill("#path", process.env.MONITOR_VST3_FIXTURE);
-        await page.click("#inspect");
+        await page.waitForFunction(
+          () => document.getElementById("vst-installed").options.length > 0,
+        );
+        await page.fill("#vst-search", "Fixture");
+        await page.selectOption(
+          "#vst-installed",
+          process.env.MONITOR_VST3_FIXTURE,
+        );
         await page.waitForFunction(
           () => document.getElementById("classes").options.length > 0,
         );
@@ -187,7 +272,7 @@ const path = require("node:path");
     await page.screenshot({
       path:
         process.env.MONITOR_SCREENSHOT ||
-        "/workspace/scratch/monitor-mix-0.2.png",
+        "/workspace/scratch/monitor-mix-0.3.png",
       fullPage: true,
     });
     for (const viewport of [
@@ -227,20 +312,18 @@ const path = require("node:path");
       b.fx = b.inserts[0] || null;
       delete b.inserts;
     });
-    await page
-      .locator("#scene")
-      .setInputFiles({
-        name: "legacy-0.1.json",
-        mimeType: "application/json",
-        buffer: Buffer.from(JSON.stringify(legacy)),
-      });
+    await page.locator("#scene").setInputFiles({
+      name: "legacy-0.1.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(JSON.stringify(legacy)),
+    });
     await page.waitForFunction(async () => {
       const c = await (await fetch("/api/config")).json();
       return c.channels[0].generator.signal === "off" && c.pc_monitor === 0;
     });
     assert.deepEqual(errors, []);
     console.log(
-      "PASS: DAW strips, 52 insert slots, independent generators, stereo meters, monitor sends, live VST3 bypass, PC audition selection, emergency silence, legacy scenes, export and responsive layout",
+      "PASS: exact printed and numeric faders, installed VST3 discovery, compact DAW strips, 52 insert slots, independent generators, stereo meters, monitor sends, live VST3 bypass, PC audition selection, emergency silence, legacy scenes, export and responsive layout",
     );
   } finally {
     if (browser) await browser.close();

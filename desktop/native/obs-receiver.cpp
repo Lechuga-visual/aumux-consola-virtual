@@ -43,13 +43,20 @@ struct Receiver {
     void receive() {
         std::array<unsigned char, 2065> bytes{};
         std::array<float, 512> audio{};
-        uint64_t next = 0, last_arrival = 0;
+        uint64_t next = 0, last_arrival = 0, last_ack = 0;
         uint32_t last_rate = 0;
         while (running.load()) {
             fd_set readers; FD_ZERO(&readers); FD_SET(socket, &readers);
             timeval timeout{0, 50000};
             if (select(int(socket + 1), &readers, nullptr, nullptr, &timeout) <= 0) continue;
-            const auto size = recv(socket, reinterpret_cast<char*>(bytes.data()), int(bytes.size()), 0);
+            sockaddr_in sender{};
+#ifdef _WIN32
+            int sender_size = sizeof(sender);
+#else
+            socklen_t sender_size = sizeof(sender);
+#endif
+            const auto size = recvfrom(socket, reinterpret_cast<char*>(bytes.data()), int(bytes.size()), 0,
+                reinterpret_cast<sockaddr*>(&sender), &sender_size);
             if (size < 16 || std::memcmp(bytes.data(), "MMX1", 4) != 0) continue;
             const auto rate = u32(bytes.data() + 8), frames = u32(bytes.data() + 12);
             if ((rate != 44100 && rate != 48000 && rate != 88200 && rate != 96000)
@@ -68,6 +75,13 @@ struct Receiver {
             packet.frames = frames; packet.speakers = SPEAKERS_STEREO;
             packet.format = AUDIO_FORMAT_FLOAT; packet.samples_per_sec = rate; packet.timestamp = next;
             obs_source_output_audio(source, &packet);
+            if (!last_ack || now - last_ack >= 200000000ULL) {
+                unsigned char ack[8]{'M','M','X','A',0,0,0,0};
+                std::memcpy(ack + 4, bytes.data() + 4, 4);
+                sendto(socket, reinterpret_cast<const char*>(ack), sizeof(ack), 0,
+                    reinterpret_cast<sockaddr*>(&sender), sender_size);
+                last_ack = now;
+            }
             next += uint64_t(frames) * 1000000000ULL / rate;
         }
     }
@@ -103,6 +117,7 @@ MODULE_EXPORT bool obs_module_load() {
     info.id = "monitor_mix_receiver"; info.type = OBS_SOURCE_TYPE_INPUT;
     info.output_flags = OBS_SOURCE_AUDIO; info.get_name = name; info.create = create; info.destroy = destroy;
     obs_register_source(&info);
+    blog(LOG_INFO, "[Monitor Mix] Receiver registered: add source Monitor Mix - master local (UDP 127.0.0.1:17840)");
     return true;
 }
 MODULE_EXPORT void obs_module_unload() {

@@ -11,6 +11,10 @@ let queue = Promise.resolve(),
   pendingFx,
   descriptors = [];
 let meterWidgets = [];
+let vstCatalogue = [],
+  vstRoots = [],
+  catalogueLoaded = false;
+const faderTicks = [6, 0, -6, -12, -24, -36, -60];
 const meterStates = new Map(),
   lastSignal = Array(8).fill("white");
 const signalNames = {
@@ -152,6 +156,13 @@ function meter(key) {
     "Peak / RMS estéreo · post-fader · dBFS. Clic para borrar el pico.";
   const clip = el("i", "meter-clip");
   widget.append(clip);
+  const axis = el("div", "meter-axis");
+  for (const value of [0, -6, -12, -24, -36, -48, -60]) {
+    const mark = el("span", "", String(value));
+    mark.style.bottom = meterPercent(value) + "%";
+    axis.append(mark);
+  }
+  widget.append(axis);
   const lanes = [];
   for (let side = 0; side < 2; side++) {
     const track = el("div", "meter-track"),
@@ -186,7 +197,7 @@ function animateMeters(now) {
   for (const s of meterStates.values())
     for (let i = 0; i < 2; i++) {
       s.peak[i] = Math.max(s.target[i], s.peak[i] - dt * 32);
-      s.rms[i] += (s.rmsTarget[i] - s.rms[i]) * (1 - Math.exp(-dt / 0.3));
+      s.rms[i] = s.rmsTarget[i];
       if (s.target[i] >= s.hold[i]) {
         s.hold[i] = s.target[i];
         s.until[i] = now + 1400;
@@ -194,11 +205,11 @@ function animateMeters(now) {
         s.hold[i] = Math.max(s.target[i], s.hold[i] - dt * 14);
       if (s.target[i] >= 0) s.clip = true;
     }
-  const percent = (value) =>
-    Math.max(0, Math.min(100, ((value + 60) / 66) * 100));
+  const percent = meterPercent;
   for (const w of meterWidgets) {
     const s = peakState(w.key);
     w.widget.classList.toggle("clipped", s.clip);
+    w.widget.title = `Post-fader · dBFS\nPeak L/R: ${s.peak.map((v) => db(v)).join(" / ")}\nRMS L/R (300 ms): ${s.rms.map((v) => db(v)).join(" / ")}`;
     w.lanes.forEach((lane, i) => {
       lane.peak.style.clipPath = `inset(${100 - percent(s.peak[i])}% 0 0)`;
       lane.rms.style.height = percent(s.rms[i]) + "%";
@@ -214,6 +225,9 @@ function animateMeters(now) {
     e.style.color = s.clip ? "#ed9294" : "";
   });
   requestAnimationFrame(animateMeters);
+}
+function meterPercent(value) {
+  return Math.max(0, Math.min(100, ((value + 60) / 60) * 100));
 }
 function selectStrip(type, index) {
   selected = { type, index };
@@ -302,24 +316,39 @@ function createFader(type, index) {
     channel = type === "channel";
   const section = el("div", "fader-section"),
     scale = el("div", "fader-scale");
-  for (const value of [6, 0, -6, -12, -24, -36, -60]) {
+  for (const value of faderTicks) {
     const mark = el("span", "", String(value));
     mark.style.top = 100 - faderPosition(value) / 10 + "%";
+    mark.title = `Fijar ${value} dB`;
+    mark.onclick = (e) => {
+      e.stopPropagation();
+      input.value = faderPosition(value);
+      input.dispatchEvent(new Event("input"));
+    };
     scale.append(mark);
   }
   const fader = el("div", "fader");
-  const level = el(
-    "div",
-    "level",
-    db(channel && view >= 0 ? target.sends_db[view] : target.gain_db),
+  const level = el("input", "level");
+  level.type = "text";
+  level.value = db(
+    channel && view >= 0 ? target.sends_db[view] : target.gain_db,
   );
+  level.setAttribute("aria-label", `${target.name}: nivel exacto en dB`);
+  level.title =
+    "Escribe un nivel en dB; Enter para aplicar. Doble clic en el fader: 0 dB.";
   level.id = "fader-value-" + key;
   const current = channel && view >= 0 ? target.sends_db[view] : target.gain_db;
-  const input = slider(faderPosition(current), 0, 1000, 1, (value) => {
-    const gain = faderDb(value);
+  const input = slider(faderPosition(current), 0, 1000, 0.1, (value) => {
+    // Align to the printed marks and make the exact detents easy to hit.
+    const nearest = faderTicks.find(
+      (t) => Math.abs(faderPosition(t) - value) <= 5,
+    );
+    const gain = nearest === undefined ? faderDb(value) : nearest;
+    input.value = faderPosition(gain);
     if (channel && view >= 0) target.sends_db[view] = gain;
     else target.gain_db = gain;
-    level.textContent = db(gain);
+    level.value = db(gain);
+    input.setAttribute("aria-valuetext", db(gain, " dB"));
     publish();
     updateSendLabels();
   });
@@ -327,6 +356,47 @@ function createFader(type, index) {
     "aria-label",
     `${target.name} ${channel && view >= 0 ? "envío Monitor " + (view + 1) : "fader"}`,
   );
+  level.onfocus = () => level.select();
+  level.onchange = () => {
+    const value = Number(level.value.replace("−", "-").replace(",", "."));
+    if (!Number.isFinite(value) || value < -90 || value > 6) {
+      level.value = db(
+        channel && view >= 0 ? target.sends_db[view] : target.gain_db,
+      );
+      return;
+    }
+    // Numeric entry does not snap: arbitrary tenths are retained.
+    const gain = Math.round(value * 10) / 10;
+    if (channel && view >= 0) target.sends_db[view] = gain;
+    else target.gain_db = gain;
+    input.value = faderPosition(gain);
+    input.setAttribute("aria-valuetext", db(gain, " dB"));
+    level.value = db(gain);
+    publish();
+    updateSendLabels();
+  };
+  level.onkeydown = (e) => {
+    if (e.key === "Enter") level.blur();
+  };
+  input.setAttribute("aria-valuetext", db(current, " dB"));
+  input.onkeydown = (e) => {
+    const current =
+      channel && view >= 0 ? target.sends_db[view] : target.gain_db;
+    const delta = e.shiftKey ? 0.1 : 1;
+    const next = {
+      ArrowUp: current + delta,
+      ArrowRight: current + delta,
+      ArrowDown: current - delta,
+      ArrowLeft: current - delta,
+      Home: 6,
+      End: -90,
+    }[e.key];
+    if (next !== undefined) {
+      e.preventDefault();
+      level.value = Math.max(-90, Math.min(6, next)).toFixed(1);
+      level.onchange();
+    }
+  };
   input.ondblclick = () => {
     input.value = faderPosition(0);
     input.dispatchEvent(new Event("input"));
@@ -734,7 +804,7 @@ function renderInspector() {
         if (view === a) {
           const f = $("mixer").children[index].querySelector(".fader input");
           f.value = faderPosition(v);
-          $("fader-value-c" + index).textContent = db(v);
+          $("fader-value-c" + index).value = db(v);
         }
       });
       input.dataset.inspectorSend = a;
@@ -831,9 +901,21 @@ async function poll() {
       });
     update("channel", s.channel_meters, s.channel_rms);
     update("bus", s.meters_stereo, s.rms_stereo);
+    const bridge = $("obs-status");
+    bridge.textContent = !cfg.obs_bridge
+      ? "OBS desactivado"
+      : !running
+        ? "OBS: motor detenido"
+        : s.bridge?.receiver_active
+          ? "● OBS recibe"
+          : "○ OBS sin receptor";
+    bridge.classList.toggle("connected", running && !!s.bridge?.receiver_active);
+    bridge.title = `Enviados: ${s.bridge?.sent || 0} paquetes · Descartados: ${s.bridge_drops}\nLa confirmación verifica recepción en la fuente; revisa también su mute y la escena en OBS.`;
     updateLatency();
   } catch (e) {
     $("status").textContent = "SIN CONEXIÓN";
+    $("obs-status").textContent = "OBS: sin conexión";
+    $("obs-status").classList.remove("connected");
     for (const s of meterStates.values()) {
       s.target = [-90, -90];
       s.rmsTarget = [-90, -90];
@@ -876,6 +958,9 @@ function openFx(type, index, slot) {
   $("fxup").disabled = !fx || slot === 0;
   $("fxdown").disabled = !fx || slot === target.inserts.length - 1;
   $("fx").showModal();
+  if (!catalogueLoaded)
+    scanVst3().catch((e) => ($("vst-scan-status").textContent = e.message));
+  else filterVst3();
 }
 function showParams() {
   const d = descriptors[Number($("classes").value)];
@@ -906,6 +991,37 @@ function showParams() {
     $("params").append(label);
   });
 }
+async function scanVst3() {
+  $("vst-scan-status").textContent = "Buscando bundles VST3…";
+  const result = await api("vst3", { directory: $("vst-directory").value });
+  vstCatalogue = result.plugins.sort((a, b) => a.name.localeCompare(b.name));
+  vstRoots = result.roots;
+  catalogueLoaded = true;
+  filterVst3();
+}
+function filterVst3() {
+  const query = $("vst-search").value.toLocaleLowerCase();
+  const list = $("vst-installed");
+  list.replaceChildren();
+  for (const p of vstCatalogue.filter((p) =>
+    (p.name + " " + p.path).toLocaleLowerCase().includes(query),
+  )) {
+    const option = new Option(p.name, p.path);
+    option.title = p.path;
+    list.append(option);
+  }
+  $("vst-scan-status").textContent =
+    `${vstCatalogue.length} bundles detectados · selecciona uno para leer sus efectos.`;
+  $("vst-scan-status").title = vstRoots.join("\n");
+}
+$("vst-rescan").onclick = () =>
+  scanVst3().catch((e) => ($("vst-scan-status").textContent = e.message));
+$("vst-search").oninput = filterVst3;
+$("vst-installed").onchange = () => {
+  $("path").value = $("vst-installed").value;
+  pendingFx = null;
+  $("inspect").click();
+};
 $("inspect").onclick = async () => {
   try {
     $("fxerror").textContent = "Leyendo VST3…";

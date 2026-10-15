@@ -100,7 +100,7 @@ impl App {
             "meters_stereo":meters_stereo,"rms_stereo":rms_stereo,
             "emergency":self.controls.emergency.load(Relaxed),"failed":self.controls.failed.load(Relaxed),
             "xruns":self.controls.xruns.load(Relaxed),"clipped_blocks":self.controls.clipped.load(Relaxed),
-            "bridge_drops":self.bridge.dropped.load(Relaxed),"latencies":self.latencies,"actual_buffer":actual_buffer})
+            "bridge_drops":self.bridge.dropped.load(Relaxed),"bridge":self.bridge.status(),"latencies":self.latencies,"actual_buffer":actual_buffer})
     }
     fn start(&mut self, mode: &str) -> Result<Value, String> {
         if mode != "demo" && mode != "asio" && mode != "system" {
@@ -186,6 +186,14 @@ impl App {
                     return Err("Stop ASIO before scanning devices".into());
                 }
                 Ok(json!(self.audio.devices()?))
+            }
+            "/api/vst3" => {
+                let v: Value = serde_json::from_str(body).map_err(|e| e.to_string())?;
+                let extra = v["directory"].as_str();
+                if extra.is_some_and(|p| p.len() > 4096) {
+                    return Err("Path too long".into());
+                }
+                Ok(fx::installed(extra))
             }
             "/api/inspect" => {
                 if self.live || self.demo.is_some() {

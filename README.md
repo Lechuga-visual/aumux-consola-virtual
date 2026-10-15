@@ -3,28 +3,30 @@
 Miniapp Windows x64 para mezclar entradas ASIO o probar generadores por la
 salida normal del PC, crear cuatro monitores y enviar el master a OBS.
 
-**Prueba local:** [descargar Windows x64](dist/MonitorMix-0.2.0-Windows-x64.zip)
+**Prueba local:** [descargar Windows x64](dist/MonitorMix-0.3.0-Windows-x64.zip)
 e [instrucciones para Windows](docs/probar-en-windows.md).
 La descarga incluye el ejecutable, el receptor de OBS y el código fuente.
-Su checksum está en [SHA-256](dist/MonitorMix-0.2.0-Windows-x64.zip.sha256).
+Su checksum está en [SHA-256](dist/MonitorMix-0.3.0-Windows-x64.zip.sha256).
 
 ## Funciones actuales
 
 - Ocho canales mono, procesados como estéreo; master y cuatro auxiliares.
-- Faders por mezcla, envíos pre/post fader, panorama y mute.
+- Faders compactos con marcas alineadas y entrada numérica exacta; envíos pre/post, panorama y mute.
 - Pares de salidas físicas independientes y stream dúplex RtAudio/ASIO.
 - Cuatro inserts VST3 visibles por canal, auxiliar y master, con bypass en vivo.
+- Lista de VST3 instalados en carpetas estándar de Windows, con búsqueda y carpeta adicional.
 - Consola estilo DAW, puente y medidores estéreo Peak/RMS por canal y bus.
 - Ruido blanco, rosa y seno independientes por canal, antes de los inserts.
 - AUDIO PC por WASAPI: escucha master o monitores sin ASIO ni MOTU.
 - Modo DEMO sin dispositivo, medidores, silencio total y ajustes JSON.
 - Puente de master por UDP local y receptor para OBS x64 32.1 o posterior.
+- Instalador OBS corregido a ProgramData, diagnóstico y confirmación de recepción.
 
 La miniapp reutiliza **los crates DSP y VST3 de SoundCraft de Artcraft**,
 fijados a una revisión concreta. La interfaz y el ruteo son propios; no es
 un fork de todo el DAW. No requiere controlar CueMix ni instalar REAPER.
 
-![Consola Monitor Mix 0.2](docs/monitor-mix-0.2.png)
+![Consola Monitor Mix 0.3](docs/monitor-mix-0.3.png)
 
 Para probar sin hardware: **AUDIO PC → GEN en un canal → Escucha PC**.
 DEMO procesa sin reproducir. Las escenas 0.1 siguen siendo compatibles.
@@ -54,6 +56,10 @@ Es un prototipo: no hay compensación de latencia, editor nativo VST3 ni
 estado binario de presets; se admiten cuatro inserts por tira. Faltan las pruebas
 de ASIO real, compatibilidad de efectos, sincronía con video y sesiones largas.
 La guía detalla estas limitaciones y la prueba paso a paso.
+
+En 0.3 se corrigió la ruta del receptor: ejecuta el nuevo instalador como
+administrador con OBS cerrado. OBS 32.2.2 x64 es compatible. Consulta
+[el puente y la alternativa ReaStream](docs/puente-obs.md).
 
 ## Componentes anteriores
 

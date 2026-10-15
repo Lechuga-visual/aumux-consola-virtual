@@ -4,6 +4,7 @@ import os
 import re
 import selectors
 import subprocess
+import time
 import urllib.request
 
 
@@ -48,6 +49,15 @@ try:
     config["buses"][0]["gain_db"] = 0
     post("config", config)
     post("start", {"mode": "demo"})
+    # The source returns an acknowledgement only after handing audio to libobs.
+    deadline = time.monotonic() + 3
+    while time.monotonic() < deadline:
+        status = json.load(urllib.request.urlopen(base+"/api/status"))
+        if status["bridge"]["receiver_active"]:
+            break
+        time.sleep(0.02)
+    assert status["bridge"]["receiver_active"], status
+    assert status["bridge"]["sent"] > 0, status
     output = receiver.communicate(timeout=10)[0].decode(errors="replace")
     assert receiver.returncode == 0, output
     assert "PASS: app master reached actual libobs capture callbacks" in output, output

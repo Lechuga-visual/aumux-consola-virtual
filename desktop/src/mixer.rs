@@ -22,13 +22,16 @@ impl Meter {
             std::array::from_fn(|i| f32::from_bits(self.rms[i].load(Relaxed))),
         )
     }
-    fn record(&self, peak: [f32; 2], energy: [f64; 2], frames: usize) {
+    fn record(&self, peak: [f32; 2], energy: [f64; 2], frames: usize, rate: f32) {
         for i in 0..2 {
             self.peak[i].fetch_max(peak[i].to_bits(), Relaxed);
-            self.rms[i].store(
-                ((energy[i] / frames.max(1) as f64).sqrt() as f32).to_bits(),
-                Relaxed,
-            );
+            // Average POWER in the audio clock, independent of UI polling and block size.
+            // 300 ms exponential integration, then convert to RMS amplitude for dBFS.
+            let previous = f32::from_bits(self.rms[i].load(Relaxed));
+            let alpha = 1.0 - (-(frames as f64) / (f64::from(rate) * 0.3)).exp();
+            let power = f64::from(previous).powi(2) * (1.0 - alpha)
+                + energy[i] / frames.max(1) as f64 * alpha;
+            self.rms[i].store((power.sqrt() as f32).to_bits(), Relaxed);
         }
     }
     fn silence(&self) {
@@ -301,7 +304,7 @@ impl Mixer {
                     self.buses[0][side][f] += sample;
                 }
             }
-            self.controls.channel_meters[i].record(channel_peak, channel_energy, frames);
+            self.controls.channel_meters[i].record(channel_peak, channel_energy, frames, self.rate);
             for a in 0..AUXES {
                 let send = if self.controls.mute[i].load(Relaxed) {
                     0.0
@@ -345,8 +348,9 @@ impl Mixer {
                     let sample = channel[f] * g;
                     let sample = if sample.is_finite() { sample } else { 0.0 };
                     peak = peak.max(sample.abs());
-                    stereo_peak[c] = stereo_peak[c].max(sample.abs());
-                    stereo_energy[c] += f64::from(sample).powi(2);
+                    let delivered = sample.clamp(-1.0, 1.0);
+                    stereo_peak[c] = stereo_peak[c].max(delivered.abs());
+                    stereo_energy[c] += f64::from(delivered).powi(2);
                     clipped |= sample.abs() > 1.0;
                     channel[f] = sample.clamp(-1.0, 1.0);
                     if let Some(pair) = self.routes[b] {
@@ -360,7 +364,7 @@ impl Mixer {
                 self.controls.clipped.fetch_add(1, Relaxed);
             }
             self.controls.meters[b].fetch_max(peak.to_bits(), Relaxed);
-            self.controls.bus_meters[b].record(stereo_peak, stereo_energy, frames);
+            self.controls.bus_meters[b].record(stereo_peak, stereo_energy, frames, self.rate);
             self.previous_bus[b] = target;
         }
         true
@@ -388,6 +392,53 @@ mod tests {
         }
         let controls = Controls::new(&c);
         (c, controls)
+    }
+    #[test]
+    fn rms_integrates_power_in_audio_time_and_is_independent_of_block_size() {
+        for frames in [64, 480, 960] {
+            let m = Meter::new();
+            // A constant -20 dBFS signal for exactly 300 ms: 1 - exp(-1) of power.
+            for _ in 0..(14400 / frames) {
+                m.record([0.1; 2], [0.01 * frames as f64; 2], frames, 48000.0);
+            }
+            let (_, rms) = m.read();
+            let expected = 0.1 * (1.0 - (-1.0f32).exp()).sqrt();
+            assert!((rms[0] - expected).abs() < 0.00001);
+        }
+    }
+    #[test]
+    fn marked_fader_gains_and_output_meters_match_delivered_audio() {
+        let (mut c, ctl) = setup();
+        let mut input = vec![0.0; CHANNELS * 480];
+        for f in 0..480 {
+            input[f * CHANNELS] = 0.1;
+        }
+        let mut output = vec![0.0; 480 * 10];
+        for db in [0.0, -6.0, -12.0, -24.0] {
+            c.channels[0].gain_db = db;
+            ctl.update(&c);
+            let mut m = Mixer::new(&c, ctl.clone()).unwrap();
+            for _ in 0..300 {
+                m.process(&input, &mut output, 480, 10);
+            }
+            let expected = 0.1 * 10.0f32.powf(db / 20.0);
+            let (peak, rms) = ctl.bus_meters[0].read();
+            assert!((output[0] - expected).abs() < 0.00001);
+            assert!((peak[0] - expected).abs() < 0.00001);
+            assert!((rms[0] - expected).abs() < 0.00001);
+        }
+        c.channels[0].gain_db = 6.0;
+        ctl.update(&c);
+        let mut m = Mixer::new(&c, ctl.clone()).unwrap();
+        input.fill(1.0);
+        for _ in 0..300 {
+            m.process(&input, &mut output, 480, 10);
+        }
+        let (peak, rms) = ctl.bus_meters[0].read();
+        assert_eq!(output[0], 1.0);
+        assert_eq!(peak[0], 1.0);
+        assert!((rms[0] - 1.0).abs() < 0.0001);
+        assert!(ctl.clipped.load(Relaxed) > 0);
     }
     #[test]
     fn independent_physical_mixes_pre_post_master_and_mute() {
@@ -547,8 +598,9 @@ mod tests {
         let mut m = Mixer::new(&c, ctl.clone()).unwrap();
         let input = vec![0.0; CHANNELS * 480];
         let mut output = vec![0.0; 10 * 480];
-        m.process(&input, &mut output, 480, 10);
-        m.process(&input, &mut output, 480, 10);
+        for _ in 0..300 {
+            m.process(&input, &mut output, 480, 10);
+        }
         let (peak, rms) = ctl.channel_meters[0].read();
         assert!((peak[0] - 0.1).abs() < 0.0001);
         assert!((rms[0] - 0.1 / std::f32::consts::SQRT_2).abs() < 0.0001);

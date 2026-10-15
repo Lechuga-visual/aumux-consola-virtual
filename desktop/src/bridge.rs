@@ -5,7 +5,7 @@ use std::{
         Arc,
         atomic::{AtomicBool, AtomicU64, Ordering::Relaxed},
     },
-    time::Duration,
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 const FRAMES: usize = 256;
@@ -18,15 +18,19 @@ pub struct Bridge {
     queue: ArrayQueue<Packet>,
     pub enabled: AtomicBool,
     pub dropped: AtomicU64,
+    sent: AtomicU64,
+    last_ack: AtomicU64,
 }
 impl Bridge {
     pub fn start() -> Result<Arc<Self>, String> {
         let socket = UdpSocket::bind("127.0.0.1:0").map_err(|e| e.to_string())?;
         socket.set_nonblocking(true).map_err(|e| e.to_string())?;
         let bridge = Arc::new(Self {
-            queue: ArrayQueue::new(128),
+            queue: ArrayQueue::new(8),
             enabled: AtomicBool::new(false),
             dropped: AtomicU64::new(0),
+            sent: AtomicU64::new(0),
+            last_ack: AtomicU64::new(0),
         });
         let weak = Arc::downgrade(&bridge);
         std::thread::spawn(move || {
@@ -56,6 +60,17 @@ impl Bridge {
                         .is_err()
                     {
                         b.dropped.fetch_add(1, Relaxed);
+                    } else {
+                        b.sent.fetch_add(1, Relaxed);
+                    }
+                }
+                let mut ack = [0u8; 16];
+                while let Ok((size, from)) = socket.recv_from(&mut ack) {
+                    if from == "127.0.0.1:17840".parse::<std::net::SocketAddr>().unwrap()
+                        && size == 8
+                        && &ack[..4] == b"MMXA"
+                    {
+                        b.last_ack.store(now_ms(), Relaxed);
                     }
                 }
                 drop(b);
@@ -63,6 +78,12 @@ impl Bridge {
             }
         });
         Ok(bridge)
+    }
+    pub fn status(&self) -> serde_json::Value {
+        let ack = self.last_ack.load(Relaxed);
+        serde_json::json!({"sent": self.sent.load(Relaxed),
+            "receiver_active": self.enabled.load(Relaxed) && ack != 0 && now_ms().saturating_sub(ack) < 1500,
+            "ack_age_ms": if ack == 0 { None } else { Some(now_ms().saturating_sub(ack)) }})
     }
     /// Bounded copying only; no socket operations on the audio callback.
     pub fn push(&self, planar: &[Vec<f32>], frames: usize, rate: u32) {
@@ -79,9 +100,16 @@ impl Bridge {
             for f in 0..n {
                 p.audio[f] = [planar[0][start + f], planar[1][start + f]];
             }
-            if self.queue.push(p).is_err() {
+            if self.queue.force_push(p).is_some() {
                 self.dropped.fetch_add(1, Relaxed);
             }
         }
     }
+}
+
+fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
 }

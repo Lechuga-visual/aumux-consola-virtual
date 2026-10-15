@@ -1,4 +1,4 @@
-# Monitor Mix 0.2 · prueba local en Windows x64
+# Monitor Mix 0.3 · prueba local en Windows x64
 
 Miniapp de mezcla con ocho canales, cuatro monitores y master. Reutiliza DSP
 y host VST3 de SoundCraft de Artcraft, con una superficie y un ruteo propios.
@@ -6,7 +6,7 @@ Es un prototipo para pruebas; todavía no está validado para una sesión en viv
 
 ## Probar sonido sin ASIO ni interfaz externa
 
-1. Extrae **todo** `MonitorMix-0.2.0-Windows-x64.zip` y ejecuta `MonitorMix.exe`.
+1. Extrae **todo** `MonitorMix-0.3.0-Windows-x64.zip` y ejecuta `MonitorMix.exe`.
    Cierra la versión anterior antes de abrir esta.
 2. Pulsa **AUDIO PC**. Usa los parlantes/audífonos predeterminados de Windows
    mediante WASAPI, sin controlador ASIO ni dispositivo MOTU.
@@ -40,10 +40,15 @@ proceso ni el audio.
 - **MAIN** controla los faders principales; **MON 1–4** convierte los faders
   de entrada en controles de envío hacia el monitor seleccionado.
 - Medidores estéreo **post-fader** por canal y salida, más puente de medidores.
-  Muestran Peak/RMS en dBFS, con respuesta visual RMS de unos 300 ms, retención
+  Muestran Peak/RMS en dBFS, con integración de potencia RMS de 300 ms en el motor, retención
   de picos y señal de clipping enclavada. No son VU analógicos calibrados.
 - Clic sobre un medidor o **Restablecer picos** borra su retención visual.
-- Doble clic en un fader lo devuelve a 0 dB.
+- Doble clic en un fader lo devuelve a 0 dB. Las marcas se alinean con el centro
+  de la perilla; puedes pulsar una marca o escribir el nivel bajo el fader
+  (por ejemplo, −6 o −5.3) y pulsar Enter. La edición numérica conserva décimas.
+- La escala de medidores es independiente de la escala del fader: −60 a 0 dBFS.
+  Un seno de pico −20 dBFS tiene RMS −23.01 dBFS. Los medidores de salida
+  miden la señal entregada después del recorte; el contador Clips registra sobrecargas.
 
 El medidor del canal sigue su nivel post-fader principal incluso al editar
 un envío pre-fader. Por eso un monitor pre-fader puede seguir recibiendo señal
@@ -86,9 +91,18 @@ corta todos los envíos del canal. El mute del master no silencia auxiliares.
 
 ## VST3 y escenas
 
-Con el audio detenido, pulsa **＋ VST3**, escribe la ruta al archivo/carpeta
-`.vst3` y pulsa **Leer VST3**. Selecciona el efecto, ajusta sus parámetros y
-aplícalo. Se muestra su nombre real en el insert.
+Con el audio detenido, pulsa **＋ VST3**. Aparece una lista de bundles instalados,
+con búsqueda por nombre/ruta. Selecciona uno: se leen sus efectos y parámetros;
+selecciona la clase si contiene varias, ajusta parámetros y aplica el insert.
+Se muestra su nombre real en la tira.
+
+La lista busca recursivamente en `%COMMONPROGRAMFILES%\VST3` (normalmente
+`C:\Program Files\Common Files\VST3`) y `%LOCALAPPDATA%\Programs\Common\VST3`.
+También admite `VST3_PATH` y **Carpeta adicional → Actualizar lista**.
+La búsqueda enumera archivos sin ejecutar todos los plugins: solo carga el
+seleccionado. El nombre inicial es el del bundle; al leerlo se muestran los
+nombres reales de sus clases. Se mantiene la entrada manual para ubicaciones
+especiales. Los VST2 no aparecen ni se alojan en esta versión.
 
 Hay hasta **cuatro inserts en serie por canal, auxiliar y master**. Los botones
 ↑/↓ del panel cambian el orden. El botón de encendido junto a cada insert
@@ -108,11 +122,23 @@ activa sidechains; la compatibilidad con tus plugins necesita prueba local.
 
 ## Master hacia OBS
 
-1. Cierra OBS y ejecuta `Instalar-receptor-OBS.cmd` del ZIP.
+1. Cierra OBS y ejecuta el nuevo `Instalar-receptor-OBS.cmd` del ZIP **como
+   administrador**. Corrige la ruta de 0.2: instala en
+   `%PROGRAMDATA%\obs-studio\plugins\monitor-mix-receiver\bin\64bit`,
+   verifica la copia y conserva un respaldo si ya existía el receptor.
 2. Abre OBS x64 **32.1 o posterior** y añade **Monitor Mix — master local**.
    Crea una sola fuente y reutilízala en las demás escenas.
 3. Activa **MASTER → OBS** y arranca AUDIO PC, DEMO o ASIO.
-4. Comprueba el medidor en OBS y realiza una grabación corta.
+4. Monitor Mix debe mostrar **OBS recibe** cuando la fuente confirma recepción.
+   Comprueba el medidor en OBS y realiza una grabación corta. Si indica
+   **OBS sin receptor**, ejecuta `Diagnosticar-OBS.cmd`: imprime rutas y las
+   líneas relevantes del último registro sin modificar OBS.
+
+OBS 32.2.2 x64 instalado es compatible. Para OBS portable, usa
+`Instalar-receptor-OBS.cmd -ObsRoot "D:\OBS"`, indicando la carpeta que contiene
+`bin\64bit\obs64.exe`. La instalación portable tiene un destino diferente.
+El instalador verifica archivos; el registro y la confirmación en vivo verifican
+carga y recepción. OBS en modo seguro no carga este plugin.
 
 El puente usa UDP de loopback en el puerto 17840 y audio float32 estéreo.
 No exige que OBS abra ASIO ni instalar un cable de audio virtual. Solo envía
@@ -121,11 +147,15 @@ Con AUDIO PC ya tienes escucha local: mantén desactivado el monitoreo de la
 fuente en OBS para evitar oír la misma señal dos veces.
 
 Para desinstalar el receptor, cierra OBS y elimina únicamente
-`%APPDATA%\obs-studio\plugins\monitor-mix-receiver`.
+`%PROGRAMDATA%\obs-studio\plugins\monitor-mix-receiver`.
+La copia 0.2 en `%APPDATA%` no se utiliza en Windows normal; puedes eliminar
+únicamente esa carpeta `monitor-mix-receiver` antigua con OBS cerrado.
+
+[Cómo funciona el puente, latencia y alternativa ReaStream](puente-obs.md).
 
 ## Validación y diagnóstico
 
-En este entorno se comprobaron nueve pruebas del motor, incluidas medición
+En este entorno se comprobaron once pruebas del motor, incluidas medición
 Peak/RMS de un seno conocido, ruido independiente y su espectro, selección de
 bus para escucha PC, migración de escenas y cadenas/bypass con un VST3 binario
 real de prueba. También se probaron la interfaz en Chromium y el puente desde
@@ -138,8 +168,9 @@ El recorte a ±1 evita valores fuera de escala; no sustituye un limitador.
 
 Si falla AUDIO PC, indica la salida predeterminada de Windows, frecuencia,
 buffer y el error de la app/consola. Si falla ASIO, añade controlador y canales.
-`XRuns` cuenta avisos del driver; no mide latencia. El contador UDP solo cubre
-cola y errores de envío de la app, sin confirmar recepción en OBS.
+`XRuns` cuenta avisos del driver; no mide latencia. El contador UDP cubre cola y errores de envío. **OBS recibe** confirma que
+la fuente recibió paquetes y los entregó a libobs; no verifica su mute, fader,
+selección de pistas o presencia en la escena de grabación.
 
 Prueba de lógica sin hardware desde PowerShell:
 

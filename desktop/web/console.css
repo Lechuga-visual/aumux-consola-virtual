@@ -1183,3 +1183,263 @@ dialog select {
   font-size: 9px;
   padding: 4px;
 }
+
+/* 0.3: compact console geometry; fader marks share the thumb's usable travel. */
+:root {
+  --base: #202123;
+  --panel: #2d2e30;
+  --teal: #69b7aa;
+}
+.app {
+  grid-template-rows: 43px 38px 104px minmax(0, 1fr) 25px;
+}
+.titlebar {
+  background: #202123;
+}
+.brand strong {
+  font-size: 14px;
+}
+.console {
+  grid-template-columns: 172px minmax(0, 1fr);
+}
+.meter-bridge {
+  grid-template-columns: 172px minmax(0, 1fr) 420px;
+}
+.desk {
+  grid-template-columns: minmax(0, 1fr) 420px;
+}
+.inspector {
+  background: #292b2e;
+}
+.strip {
+  min-width: 82px;
+  flex: 0 0 82px;
+  padding: 0 4px 5px;
+  background: #343639;
+  border-left-color: #505154;
+}
+.output-bank .strip {
+  min-width: 78px;
+  flex: 0 0 78px;
+}
+.output-bank .strip.master {
+  min-width: 96px;
+  flex: 0 0 96px;
+  background: #36383b;
+}
+.strip.is-selected {
+  background: #3b4143;
+  box-shadow: inset 0 0 0 1px #8fa6a5;
+}
+.strip .strip-header {
+  margin-left: -4px;
+  margin-right: -4px;
+  padding: 4px 4px 3px;
+  background: #292c2e;
+}
+.strip .strip-id {
+  font-size: 8px;
+}
+.strip .strip-id span:last-child {
+  font-size: 7px;
+  color: #909b9d;
+}
+.strip .name {
+  font-size: 10px;
+}
+.insert-row {
+  height: 19px;
+}
+.insert-rack {
+  gap: 2px;
+  margin-bottom: 6px;
+}
+.insert-slot {
+  border-radius: 1px;
+  background: #23272a;
+  padding: 2px;
+  gap: 2px;
+  font-size: 8px;
+}
+.slot-number {
+  font-size: 7px;
+}
+.bypass {
+  width: 13px;
+  min-width: 13px;
+}
+.strip-buttons button {
+  font-size: 8px;
+  padding: 4px 1px;
+}
+.source-button {
+  font-size: 8px;
+}
+.fader-section {
+  grid-template-columns: 13px minmax(0, 1fr) 28px;
+  gap: 2px;
+}
+.fader-scale {
+  margin: 20px 0;
+  overflow: visible;
+}
+.fader-scale span {
+  cursor: pointer;
+  min-width: 17px;
+  padding: 2px 0;
+  z-index: 2;
+}
+.fader-scale span:hover {
+  color: white;
+}
+.fader input {
+  width: 25px;
+}
+.fader input::-webkit-slider-thumb {
+  width: 23px;
+  margin-left: -9.5px;
+  border-radius: 2px;
+}
+.fader input::-moz-range-thumb {
+  width: 23px;
+  height: 40px;
+}
+.level {
+  width: 100%;
+  min-width: 0;
+  padding: 3px 0;
+  font:
+    11px Consolas,
+    monospace;
+}
+.meter-axis {
+  width: 12px;
+  flex: 0 0 12px;
+  position: relative;
+  order: 3;
+  color: #9ca6a6;
+  font:
+    6px Consolas,
+    monospace;
+}
+.meter-axis span {
+  position: absolute;
+  left: 0;
+  transform: translateY(50%);
+}
+.meter-widget {
+  gap: 1px;
+  padding: 0;
+}
+.meter-track {
+  min-width: 4px;
+}
+.meter-peak {
+  background: linear-gradient(
+    to top,
+    #55ba68 0%,
+    #55ba68 79.9%,
+    #d9cc55 80%,
+    #d9cc55 94.9%,
+    #e96a59 95%,
+    #e96a59 100%
+  );
+}
+.meter-rms {
+  background: #cbf3d0;
+}
+.meterbridge-channels .bridge-cell {
+  flex: 0 0 79px;
+}
+.bridge-cell {
+  padding: 4px;
+  grid-template-columns: 1fr 30px;
+}
+.bridge-cell .bridge-number {
+  font-size: 16px;
+}
+.bridge-cell .meter-axis span:nth-child(even) {
+  display: none;
+}
+.peak-readout {
+  font-size: 8px;
+}
+.strip-footer {
+  font-size: 7px;
+  border-bottom: 3px solid var(--strip-color);
+  padding-bottom: 4px;
+}
+.output-spacer span {
+  font-size: 7px;
+}
+.obs-status {
+  font:
+    9px Consolas,
+    monospace;
+  color: #c6ad78;
+  white-space: nowrap;
+}
+.obs-status.connected {
+  color: #7fdbad;
+}
+#fx {
+  width: 660px;
+  max-height: 94vh;
+  overflow-y: auto;
+}
+.vst-browser {
+  border-bottom: 1px solid #475057;
+  padding-bottom: 8px;
+}
+#vst-installed {
+  height: 130px;
+  background: #171c20;
+}
+#vst-installed option {
+  padding: 3px 6px;
+}
+#vst-search,
+#vst-directory {
+  flex: 1;
+  width: 100%;
+}
+#vst-scan-status {
+  margin: 5px 0;
+}
+#params {
+  max-height: 180px;
+}
+@media (max-width: 1300px) {
+  .meter-bridge {
+    grid-template-columns: 172px minmax(0, 1fr) 420px;
+  }
+  .console {
+    grid-template-columns: 172px minmax(0, 1fr);
+  }
+  .desk {
+    grid-template-columns: minmax(0, 1fr) 420px;
+  }
+  .transport {
+    gap: 2px;
+  }
+  .transport button {
+    padding: 5px;
+  }
+  .technical {
+    display: none;
+  }
+  #pc-monitor {
+    max-width: 140px;
+  }
+}
+@media (max-width: 980px) {
+  .console {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .meter-bridge {
+    grid-template-columns: minmax(0, 1fr) 420px;
+  }
+  .obs-status {
+    display: none;
+  }
+}

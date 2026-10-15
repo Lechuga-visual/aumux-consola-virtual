@@ -13,7 +13,7 @@
         <div class="brand">
           <span class="brand-icon"><i></i><i></i><i></i><i></i></span
           ><strong>MONITOR<span>MIX</span></strong
-          ><span class="version">0.2</span>
+          ><span class="version">0.3</span>
         </div>
         <div class="scene-title">
           CONSOLA DE MONITOREO <span>•</span>
@@ -55,6 +55,7 @@
         >
         <label class="obs-toggle"
           ><input id="bridge" type="checkbox" /> MASTER → OBS</label
+        ><span id="obs-status" class="obs-status">OBS desactivado</span
         ><button id="panic" class="panic">SILENCIO TOTAL</button>
       </nav>
       <section class="meter-bridge">
@@ -152,8 +153,39 @@
         </div>
         <button id="closefx">✕</button>
       </div>
+      <div class="vst-browser">
+        <div class="form-row">
+          <input
+            id="vst-search"
+            type="text"
+            placeholder="Buscar VST3 instalado…"
+            aria-label="Buscar VST3 instalado"
+          /><button id="vst-rescan">Actualizar lista</button>
+        </div>
+        <select
+          id="vst-installed"
+          size="7"
+          aria-label="VST3 instalados"
+        ></select>
+        <p id="vst-scan-status" class="hint"></p>
+        <details>
+          <summary>Carpeta adicional</summary>
+          <div class="form-row">
+            <input
+              id="vst-directory"
+              type="text"
+              placeholder="D:\Audio\VST3"
+              aria-label="Carpeta adicional VST3"
+            />
+          </div>
+          <p class="hint">
+            Actualiza la lista después de cambiar la carpeta. También se admite
+            VST3_PATH.
+          </p>
+        </details>
+      </div>
       <label
-        >Archivo o carpeta .vst3<input
+        >Ruta del VST3 seleccionado (o entrada manual)<input
           id="path"
           type="text"
           spellcheck="false"
@@ -207,8 +239,9 @@
         <li>Activa <b>MASTER → OBS</b> si instalaste el receptor.</li>
       </ol>
       <p>
-        Medición post-fader estéreo: RMS con respuesta visual suave, peak hold y
-        clip enclavado. La escala es dBFS, no un VU analógico calibrado.
+        Medición post-fader estéreo: RMS con integración de potencia de 300 ms,
+        peak hold y clip enclavado. La escala es dBFS, no un VU analógico
+        calibrado.
       </p>
       <p>
         Hasta cuatro VST3 por canal y salida. Las escenas 0.1 siguen siendo
