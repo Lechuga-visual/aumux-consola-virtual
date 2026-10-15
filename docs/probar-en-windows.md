@@ -161,8 +161,8 @@ con VST3 externos y se procesan en serie; el EQ no consume slots. El panel
 ofrece perillas para MDA y un panel propio para FreeVox8. Los parámetros
 nativos se ajustan en vivo. FreeVox8 es un vocoder creativo con
 portadora interna y cuatro modos; no es un compresor vocal. No se exponen
-su motor espectral, sidechain externo o entrada MIDI. Piano, EPiano, DX10 y
-JX10 de MDA son instrumentos MIDI y quedan pendientes.
+su motor espectral, sidechain externo o entrada MIDI. Los instrumentos
+virtuales quedan fuera del alcance del proyecto.
 
 La lista busca recursivamente en `%COMMONPROGRAMFILES%\VST3` (normalmente
 `C:\Program Files\Common Files\VST3`) y `%LOCALAPPDATA%\Programs\Common\VST3`.
@@ -276,7 +276,7 @@ buffer. La conexión ASIO usa ahora una ABI abierta basada en WineASIO, sin SDK
 propietario; compilada para Windows x64, pendiente de prueba con tu driver.
 
 La aplicación combinada desde 0.5 es GPL-3.0-only; fuentes y licencias incluidas.
-Grabación multipista, OSC/Mackie y funciones de instrumentos MIDI pendientes.
+Grabación multipista y OSC/Mackie pendientes.
 
 Si no aparecen **+ Canal**, **+ Aux** y **Canales y auxiliares**, cierra el
 proceso anterior y abre el ejecutable del ZIP nuevo: la marca superior debe

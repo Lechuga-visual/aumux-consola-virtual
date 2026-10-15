@@ -2,7 +2,8 @@
 
 Estado a partir de Monitor Mix 0.7. Todos los caminos de audio seguirán a
 **48 kHz** en esta etapa. Esta lista registra trabajo futuro, no funciones
-ya disponibles ni fechas comprometidas.
+ya disponibles ni fechas comprometidas. Los instrumentos virtuales quedan
+fuera del alcance; el proyecto se centra en mezcla y procesamiento de audio.
 
 ## Dispositivos y subsistemas de Windows
 
@@ -42,7 +43,7 @@ Definir segmentación/RF64 para sesiones largas y recuperación de archivos.
 - OSC y modo controlador sin abrir motor de audio.
 - Salida Mackie Control/Mackie HUI y mapa MOTU/CueMix verificado con documentación.
 - Persistencia de estados binarios VST3 y evaluación de editores nativos.
-- Compensación de latencia de plugins, instrumentos MIDI y pruebas prolongadas
+- Compensación de latencia de plugins y pruebas prolongadas
   de estabilidad/latencia con ASIO y hardware real.
 
 Ver [control remoto](control-remoto.md) para el diseño previo de OSC/Mackie y

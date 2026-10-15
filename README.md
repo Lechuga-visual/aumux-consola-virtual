@@ -103,8 +103,8 @@ Licencias y procedencia: [desktop/THIRD_PARTY.md](desktop/THIRD_PARTY.md).
 
 La integración nativa usa el núcleo de fase mínima de FreeEQ8 y el motor
 filterbank de FreeVox8; no incorpora todas las funciones de esos plugins.
-MDA incluye sus 20 efectos de audio; sus cuatro instrumentos MIDI quedan
-pendientes. La grabación multipista y OSC/Mackie también quedan pendientes.
+MDA incluye sus 20 efectos de audio. Los instrumentos virtuales quedan fuera
+del alcance. La grabación multipista y OSC/Mackie quedan pendientes.
 La aplicación combinada desde 0.5 se distribuye bajo GPL-3.0-only, con fuentes,
 licencias y procedencia en el ZIP.
 
