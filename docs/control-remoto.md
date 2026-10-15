@@ -5,6 +5,10 @@ y, en una etapa posterior, como superficie de control OSC o MIDI Mackie Control 
 Mackie HUI. Esta dirección queda documentada; **la versión 0.4 no implementa esos
 protocolos ni controla CueMix/MOTU**. El trabajo actual es la superficie de mezcla.
 
+El control de mezclas personales por web ya está disponible en 0.8, con acceso
+limitado a un auxiliar por enlace y direcciones LAN/Tailscale/MagicDNS. Consulta
+[la guía web](interfaz-0.8.md). OSC y Mackie siguen pendientes.
+
 ## Modos que se quieren incorporar
 
 | Modo | Motor de Monitor Mix | Destino de los controles |

@@ -324,6 +324,7 @@ mod tests {
             for ch in &mut next.channels {
                 ch.sends_db.resize(auxes, -90.0);
                 ch.pre.resize(auxes, true);
+                ch.send_mute.resize(auxes, false);
             }
             let mixer =
                 Mixer::reconfigure(&next, crate::mixer::Controls::new(&next), &c, &latencies)

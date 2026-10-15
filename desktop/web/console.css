@@ -2557,3 +2557,45 @@ textarea,
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
+
+/* Personal mixes and network administration. */
+#network-dialog {
+  width: min(760px, 94vw);
+  max-height: 90vh;
+  overflow: auto;
+}
+#network-dialog > label,
+.remote-create-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+#network-dialog h3 {
+  border-top: 1px solid #46515e;
+  padding-top: 16px;
+  margin-top: 18px;
+}
+.remote-create-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.remote-link {
+  margin-top: 12px;
+  border: 1px solid #46515e;
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+}
+.remote-link input {
+  width: 100%;
+}
+.inspector .send-row {
+  grid-template-columns: minmax(45px, 1fr) 37px 24px minmax(45px, 1fr);
+}
+@media (max-width: 600px) {
+  .remote-create-grid {
+    grid-template-columns: 1fr;
+  }
+}

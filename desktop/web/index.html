@@ -13,7 +13,7 @@
         <div class="brand">
           <span class="brand-icon"><i></i><i></i><i></i><i></i></span
           ><strong>MONITOR<span>MIX</span></strong
-          ><span class="version">0.7</span>
+          ><span class="version">0.8</span>
         </div>
         <div class="scene-title">
           CONSOLA DE MONITOREO <span>•</span>
@@ -40,7 +40,8 @@
         </div>
       </header>
       <nav class="transport">
-        <button id="network-settings">Escucha LAN</button
+        <button id="remote-settings">Control remoto</button
+        ><button id="network-settings">Escucha LAN</button
         ><button id="settings" class="settings-button">⚙ MOTOR DE AUDIO</button
         ><span class="separator"></span>
         <button
@@ -463,9 +464,22 @@
     </dialog>
     <dialog id="network-dialog">
       <div class="dialog-heading">
-        <h2>Escucha por red local</h2>
+        <h2>Red local y Tailscale</h2>
         <button data-close="network-dialog">✕</button>
       </div>
+      <label
+        >Dirección para compartir (opcional)<input
+          id="network-host"
+          type="text"
+          placeholder="100.x.y.z o equipo.tailnet.ts.net"
+          spellcheck="false"
+      /></label>
+      <button id="network-host-apply">Aplicar dirección a los enlaces</button>
+      <p class="hint">
+        Vacío: IP local sugerida. En Tailscale usa la IP 100.x o nombre MagicDNS
+        del PC; los dispositivos deben tener acceso a él en el tailnet.
+      </p>
+      <h3>Escucha</h3>
       <p>
         Comparte este enlace para escuchar el master o un auxiliar desde otro
         dispositivo de la misma red.
@@ -492,6 +506,50 @@
         ><a id="network-open" target="_blank" rel="noreferrer">Abrir escucha</a>
       </div>
       <p id="network-status" role="status"></p>
+      <section id="remote-admin">
+        <h3>Mezclas personales · control remoto</h3>
+        <div class="form-row">
+          <label
+            >Puerto de control<input
+              id="remote-port"
+              type="number"
+              min="1024"
+              max="65535"
+              value="17842" /></label
+          ><button id="remote-toggle">Iniciar control remoto</button>
+        </div>
+        <div class="remote-create-grid">
+          <label
+            >Participante<input
+              id="remote-label"
+              type="text"
+              maxlength="80"
+              placeholder="Nombre"
+          /></label>
+          <label>Auxiliar<select id="remote-aux"></select></label>
+          <label
+            >Nivel máximo por envío (dB)<input
+              id="remote-max"
+              type="number"
+              min="-60"
+              max="6"
+              step="0.1"
+              value="0"
+          /></label>
+          <label
+            ><input id="remote-pre" type="checkbox" /> Permitir PRE/POST</label
+          >
+        </div>
+        <button id="remote-create">Crear enlace personal</button>
+        <div id="remote-links"></div>
+        <p id="remote-status" role="status"></p>
+        <p class="hint">
+          Cada enlace controla solo sus envíos a un auxiliar. El nivel y mute de
+          salida quedan en manos del operador. Al cargar una escena, cambiar la
+          cantidad de canales/auxiliares o detener el servidor se revocan los
+          enlaces. El control no añade un búfer al audio local.
+        </p>
+      </section>
       <p class="hint">
         Hasta ocho oyentes simultáneos. Cada uno elige su mezcla y volumen
         local. El búfer del navegador añade retardo; esta escucha no reemplaza

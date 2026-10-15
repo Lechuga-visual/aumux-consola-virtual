@@ -92,6 +92,8 @@ pub struct Channel {
     #[serde(default)]
     pub input_right: Option<usize>,
     pub sends_db: Vec<f32>,
+    #[serde(default)]
+    pub send_mute: Vec<bool>,
     pub pre: Vec<bool>,
     pub fx: Option<Fx>,
     #[serde(default)]
@@ -165,6 +167,7 @@ impl Default for Config {
                     input: Some(i),
                     input_right: (i + 1 < 8).then_some(i + 1),
                     sends_db: vec![-90.0; DEFAULT_AUXES],
+                    send_mute: Vec::new(),
                     pre: vec![true; DEFAULT_AUXES],
                     fx: None,
                     inserts: Vec::new(),
@@ -211,6 +214,8 @@ impl Config {
             self.version = 2;
         }
         for c in &mut self.channels {
+            c.send_mute
+                .resize(self.buses.len().saturating_sub(1), false);
             if let Some(fx) = c.fx.take() {
                 c.inserts.insert(0, fx);
             }
@@ -273,6 +278,7 @@ impl Config {
                 || !c.eq.valid()
                 || c.sends_db.len() != self.buses.len() - 1
                 || c.pre.len() != self.buses.len() - 1
+                || (!c.send_mute.is_empty() && c.send_mute.len() != self.buses.len() - 1)
                 || [c.input, c.input_right]
                     .iter()
                     .flatten()

@@ -10,6 +10,7 @@ mod mixer;
 mod native;
 mod native_fx;
 mod presets;
+mod remote;
 #[cfg(test)]
 mod test_support;
 
@@ -26,6 +27,7 @@ use tiny_http::{Header, Method, Request, Response, Server};
 struct App {
     config: Config,
     listen: Arc<listen::Hub>,
+    remote: Arc<remote::Remote>,
     controls: Arc<Controls>,
     audio: native::Audio,
     system_audio: Option<native::Audio>,
@@ -40,12 +42,14 @@ struct App {
 }
 impl App {
     fn new() -> Result<Self, String> {
-        let config = Config::default();
+        let mut config = Config::default();
+        config.normalise();
         let controls = Controls::new(&config);
         let listen = listen::Hub::new()?;
         listen.configure(&config);
         Ok(Self {
             listen,
+            remote: remote::Remote::new(),
             config,
             controls,
             audio: native::Audio::new(false)?,
@@ -115,6 +119,7 @@ impl App {
             "emergency":self.controls.emergency.load(Relaxed),"failed":self.controls.failed.load(Relaxed),
             "xruns":self.controls.xruns.load(Relaxed),"clipped_blocks":self.controls.clipped.load(Relaxed),
             "listen":self.listen.status(),
+            "remote":self.remote.status(),
             "bridge_drops":self.bridge.dropped.load(Relaxed),"bridge":self.bridge.status(),"latencies":self.latencies,"actual_buffer":actual_buffer})
     }
     fn start(&mut self, mode: &str) -> Result<Value, String> {
@@ -176,8 +181,23 @@ impl App {
     fn api(&mut self, path: &str, body: &str) -> Result<Value, String> {
         match path {
             "/api/config" => {
-                let mut c: Config = serde_json::from_str(body).map_err(|e| e.to_string())?;
+                let v: Value = serde_json::from_str(body).map_err(|e| e.to_string())?;
+                let wrapped = v.get("config").is_some();
+                let mut c: Config = serde_json::from_value(if wrapped {
+                    v["config"].clone()
+                } else {
+                    v.clone()
+                })
+                .map_err(|e| e.to_string())?;
                 c.normalise();
+                if wrapped && v["replace_scene"] != true {
+                    let mut base: Config =
+                        serde_json::from_value(v["base"].clone()).map_err(|e| e.to_string())?;
+                    base.normalise();
+                    remote::merge_sends(&mut c, &base, &self.config);
+                }
+                let topology_changed = c.channels.len() != self.config.channels.len()
+                    || c.buses.len() != self.config.buses.len();
                 c.validate()?;
                 let active = self.live || self.demo.is_some();
                 if active && !self.config.same_device(&c) {
@@ -231,8 +251,20 @@ impl App {
                 }
                 self.bridge.enabled.store(c.obs_bridge, Relaxed);
                 self.listen.configure(&c);
+                if topology_changed || !wrapped || v["replace_scene"] == true {
+                    self.remote.invalidate();
+                } else {
+                    self.remote.changed();
+                }
                 self.config = c;
-                Ok(json!({"ok":true}))
+                self.remote.refresh(
+                    &self.config,
+                    &self.controls,
+                    self.live || self.demo.is_some(),
+                );
+                Ok(
+                    json!({"ok":true,"config":self.config,"remote_revision":self.remote.status()["revision"]}),
+                )
             }
             "/api/start" => {
                 let v: Value = serde_json::from_str(body).map_err(|e| e.to_string())?;
@@ -269,6 +301,23 @@ impl App {
                     return Err("Path too long".into());
                 }
                 Ok(fx::installed(extra))
+            }
+            "/api/remote" => {
+                let v: Value = serde_json::from_str(body).map_err(|e| e.to_string())?;
+                let result = self.remote.admin(&v, &self.config)?;
+                self.remote.refresh(
+                    &self.config,
+                    &self.controls,
+                    self.live || self.demo.is_some(),
+                );
+                Ok(result)
+            }
+            "/api/network-host" => {
+                let v: Value = serde_json::from_str(body).map_err(|e| e.to_string())?;
+                let host = listen::share_host(v["host"].as_str().ok_or("Dirección requerida")?)?;
+                self.listen.set_host(&host)?;
+                self.remote.set_host(&host)?;
+                Ok(json!({"listen":self.listen.status(),"remote":self.remote.status()}))
             }
             "/api/listen" => {
                 let v: Value = serde_json::from_str(body).map_err(|e| e.to_string())?;
@@ -323,6 +372,7 @@ impl App {
 impl Drop for App {
     fn drop(&mut self) {
         self.listen.stop();
+        self.remote.stop();
     }
 }
 fn reply(req: Request, status: u16, content_type: &str, body: String) {
@@ -392,8 +442,19 @@ fn run() -> Result<(), String> {
         #[cfg(not(windows))]
         let _ = std::process::Command::new("xdg-open").arg(&url).spawn();
     }
+    let mut next_remote = Instant::now();
     loop {
         app.demo_tick();
+        app.remote.drain(
+            &mut app.config,
+            &app.controls,
+            app.live || app.demo.is_some(),
+        );
+        if Instant::now() >= next_remote {
+            app.remote
+                .refresh(&app.config, &app.controls, app.live || app.demo.is_some());
+            next_remote = Instant::now() + Duration::from_millis(80);
+        }
         let Some(mut req) = server
             .recv_timeout(Duration::from_millis(5))
             .map_err(|e| e.to_string())?
@@ -418,6 +479,7 @@ fn run() -> Result<(), String> {
                 ),
                 "/workspace-ui.js" => reply(req,200,"text/javascript; charset=utf-8",include_str!("../web/workspace-ui.js").into()),
                 "/effects-ui.js" => reply(req,200,"text/javascript; charset=utf-8",include_str!("../web/effects-ui.js").into()),
+                "/api/mix-state" => reply(req,200,"application/json",json!({"revision":app.remote.status()["revision"],"channels":app.config.channels.iter().map(|ch|json!({"sends_db":ch.sends_db,"send_mute":ch.send_mute,"pre":ch.pre})).collect::<Vec<_>>()}).to_string()),
                 "/api/config" => reply(
                     req,
                     200,

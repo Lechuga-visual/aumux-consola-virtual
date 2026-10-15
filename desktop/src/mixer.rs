@@ -7,12 +7,14 @@ use std::sync::{
 
 pub struct Meter {
     peak: [AtomicU32; 2],
+    last_peak: [AtomicU32; 2],
     rms: [AtomicU32; 2],
 }
 impl Meter {
     fn new() -> Self {
         Self {
             peak: std::array::from_fn(|_| AtomicU32::new(0)),
+            last_peak: std::array::from_fn(|_| AtomicU32::new(0)),
             rms: std::array::from_fn(|_| AtomicU32::new(0)),
         }
     }
@@ -22,9 +24,16 @@ impl Meter {
             std::array::from_fn(|i| f32::from_bits(self.rms[i].load(Relaxed))),
         )
     }
+    pub fn snapshot(&self) -> ([f32; 2], [f32; 2]) {
+        (
+            std::array::from_fn(|i| f32::from_bits(self.last_peak[i].load(Relaxed))),
+            std::array::from_fn(|i| f32::from_bits(self.rms[i].load(Relaxed))),
+        )
+    }
     fn record(&self, peak: [f32; 2], energy: [f64; 2], frames: usize, rate: f32) {
         for i in 0..2 {
             self.peak[i].fetch_max(peak[i].to_bits(), Relaxed);
+            self.last_peak[i].store(peak[i].to_bits(), Relaxed);
             // Average POWER in the audio clock, independent of UI polling and block size.
             // 300 ms exponential integration, then convert to RMS amplitude for dBFS.
             let previous = f32::from_bits(self.rms[i].load(Relaxed));
@@ -37,10 +46,14 @@ impl Meter {
     fn inherit(&self, old: &Self) {
         for i in 0..2 {
             self.peak[i].store(old.peak[i].load(Relaxed), Relaxed);
+            self.last_peak[i].store(old.last_peak[i].load(Relaxed), Relaxed);
             self.rms[i].store(old.rms[i].load(Relaxed), Relaxed);
         }
     }
     fn silence(&self) {
+        for p in &self.last_peak {
+            p.store(0, Relaxed);
+        }
         for x in &self.rms {
             x.store(0, Relaxed);
         }
@@ -188,6 +201,10 @@ impl Controls {
             plugin.set_param(p.id, f32::from_bits(p.value.load(Relaxed)));
         }
     }
+    pub fn set_send(&self, channel: usize, aux: usize, db: f32, pre: bool, muted: bool) {
+        self.sends[channel][aux].store(gain(if muted { -90.0 } else { db }).to_bits(), Relaxed);
+        self.pre[channel][aux].store(pre, Relaxed);
+    }
     pub fn update(&self, c: &Config) {
         self.pc_monitor.store(c.pc_monitor as u32, Relaxed);
         for (i, ch) in c.channels.iter().enumerate() {
@@ -211,8 +228,13 @@ impl Controls {
                 self.update_native(i, slot, fx);
             }
             for a in 0..c.buses.len() - 1 {
-                self.sends[i][a].store(gain(ch.sends_db[a]).to_bits(), Relaxed);
-                self.pre[i][a].store(ch.pre[a], Relaxed);
+                self.set_send(
+                    i,
+                    a,
+                    ch.sends_db[a],
+                    ch.pre[a],
+                    ch.send_mute.get(a).copied().unwrap_or(false),
+                );
             }
         }
         for (i, b) in c.buses.iter().enumerate() {

@@ -316,6 +316,7 @@ async function duplicateStrip(type, index) {
     candidate.buses.push(original);
     candidate.channels.forEach((c) => {
       c.sends_db.push(-90);
+      c.send_mute.push(false);
       c.pre.push(true);
     });
   }
@@ -342,6 +343,7 @@ async function removeStrip(type, index) {
     candidate.buses.splice(index, 1);
     candidate.channels.forEach((c) => {
       c.sends_db.splice(index - 1, 1);
+      c.send_mute.splice(index - 1, 1);
       c.pre.splice(index - 1, 1);
     });
     if (candidate.pc_monitor === index) candidate.pc_monitor = 0;
@@ -463,6 +465,7 @@ function updateWorkspaceStatus(s) {
     $("comp-gr-fill").style.height = Math.min(100, (gr / 30) * 100) + "%";
   }
   if ($("network-dialog").open) {
+    updateRemoteAdmin(s.remote);
     const n = s.listen;
     $("network-toggle").textContent = n.enabled
       ? "Detener escucha LAN"
@@ -477,6 +480,8 @@ function updateWorkspaceStatus(s) {
 }
 $("network-settings").onclick = () => {
   $("network-dialog").showModal();
+  $("network-host").value =
+    lastStatus?.remote?.host || lastStatus?.listen?.host || "";
   if (lastStatus) updateWorkspaceStatus(lastStatus);
 };
 $("network-toggle").onclick = async () => {
@@ -503,4 +508,177 @@ $("network-copy").onclick = () => {
   try {
     document.execCommand("copy");
   } catch {}
+};
+
+let remoteSyncBusy = false,
+  remotePointerDown = false,
+  remoteListSignature = "",
+  remoteAuxSignature = "";
+document.addEventListener("pointerdown", () => (remotePointerDown = true));
+document.addEventListener("pointerup", () => (remotePointerDown = false));
+document.addEventListener("pointercancel", () => (remotePointerDown = false));
+window.addEventListener("blur", () => (remotePointerDown = false));
+async function syncRemoteMix(s) {
+  if (
+    remoteNeedsRender &&
+    !configRequests &&
+    !structureBusy &&
+    !remotePointerDown
+  ) {
+    remoteNeedsRender = false;
+    render();
+    if ($("routing-dialog").open) renderRouting();
+  }
+  if (
+    !s.remote?.enabled ||
+    s.remote.revision === syncedRemoteRevision ||
+    remoteSyncBusy ||
+    configRequests ||
+    structureBusy ||
+    remotePointerDown
+  )
+    return;
+  remoteSyncBusy = true;
+  try {
+    const r = await fetch("/api/mix-state");
+    if (!r.ok) return;
+    const incoming = await r.json();
+    if (configRequests || structureBusy || remotePointerDown || !serverConfig)
+      return;
+    if (incoming.channels.length !== cfg.channels.length) return;
+    const changed = reconcileSends(incoming, serverConfig);
+    incoming.channels.forEach((ch, i) => {
+      for (const field of ["sends_db", "pre", "send_mute"])
+        serverConfig.channels[i][field] = structuredClone(ch[field]);
+    });
+    syncedRemoteRevision = incoming.revision;
+    if (changed) {
+      render();
+      if ($("routing-dialog").open) renderRouting();
+    }
+  } catch (e) {
+    error(e);
+  } finally {
+    remoteSyncBusy = false;
+  }
+}
+function updateRemoteAdmin(n) {
+  if (!n) return;
+  $("remote-toggle").textContent = n.enabled
+    ? "Detener control remoto"
+    : "Iniciar control remoto";
+  $("remote-port").disabled = n.enabled;
+  $("remote-create").disabled = !n.enabled || cfg.buses.length <= 1;
+  $("remote-status").textContent = n.enabled
+    ? `${n.sessions.length} / 32 enlaces personales activos`
+    : "Control remoto detenido";
+  const auxSignature = JSON.stringify(cfg.buses.map((b) => b.name));
+  if (auxSignature !== remoteAuxSignature) {
+    const old = $("remote-aux").value;
+    $("remote-aux").replaceChildren(
+      ...cfg.buses
+        .slice(1)
+        .map((b, i) => new Option(`AUX ${i + 1} · ${b.name}`, i + 1)),
+    );
+    if ([...$("remote-aux").options].some((o) => o.value === old))
+      $("remote-aux").value = old;
+    remoteAuxSignature = auxSignature;
+  }
+  const signature = JSON.stringify(n.sessions);
+  if (signature === remoteListSignature) return;
+  remoteListSignature = signature;
+  $("remote-links").replaceChildren(
+    ...n.sessions.map((s) => {
+      const row = el("div", "remote-link"),
+        title = el(
+          "strong",
+          "",
+          `${s.label} · AUX ${s.aux} · máximo ${s.max_db} dB`,
+        ),
+        link = el("input");
+      link.type = "text";
+      link.readOnly = true;
+      link.value = s.url;
+      link.setAttribute("aria-label", `Enlace de ${s.label}`);
+      const copy = el("button", "", "Copiar");
+      copy.onclick = () => {
+        link.focus();
+        link.select();
+        document.execCommand("copy");
+      };
+      const open = el("a", "", "Abrir");
+      open.href = s.url;
+      open.target = "_blank";
+      open.rel = "noreferrer";
+      const revoke = el("button", "", "Revocar");
+      revoke.onclick = async () => {
+        try {
+          const n = await api("remote", { action: "revoke", id: s.id });
+          lastStatus.remote = n;
+          updateRemoteAdmin(n);
+        } catch (e) {
+          error(e);
+        }
+      };
+      const actions = el("div", "form-row");
+      actions.append(copy, open, revoke);
+      row.append(title, link, actions);
+      return row;
+    }),
+  );
+}
+$("remote-settings").onclick = () => {
+  $("network-settings").click();
+  $("remote-admin").scrollIntoView({ block: "nearest" });
+};
+$("network-host-apply").onclick = async () => {
+  try {
+    const v = await api("network-host", { host: $("network-host").value });
+    lastStatus.listen = v.listen;
+    lastStatus.remote = v.remote;
+    updateWorkspaceStatus(lastStatus);
+  } catch (e) {
+    error(e);
+    $("remote-status").textContent = e.message;
+  }
+};
+$("remote-toggle").onclick = async () => {
+  if (!$("remote-port").reportValidity()) return;
+  const button = $("remote-toggle");
+  button.disabled = true;
+  try {
+    const n = await api("remote", {
+      action: lastStatus.remote.enabled ? "stop" : "start",
+      port: Number($("remote-port").value),
+    });
+    lastStatus.remote = n;
+    updateRemoteAdmin(n);
+  } catch (e) {
+    error(e);
+    $("remote-status").textContent = e.message;
+  } finally {
+    button.disabled = false;
+  }
+};
+$("remote-create").onclick = async () => {
+  for (const id of ["remote-label", "remote-max"])
+    if (!$(id).reportValidity()) return;
+  const button = $("remote-create");
+  button.disabled = true;
+  try {
+    const n = await api("remote", {
+      action: "create",
+      label: $("remote-label").value,
+      aux: Number($("remote-aux").value),
+      max_db: Number($("remote-max").value),
+      allow_pre: $("remote-pre").checked,
+    });
+    lastStatus.remote = n;
+    updateRemoteAdmin(n);
+  } catch (e) {
+    error(e);
+    $("remote-status").textContent = e.message;
+  } finally {
+    button.disabled = !lastStatus.remote.enabled;
+  }
 };

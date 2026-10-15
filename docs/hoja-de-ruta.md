@@ -1,8 +1,8 @@
 # Hoja de ruta
 
-Estado a partir de Monitor Mix 0.7. Todos los caminos de audio seguirán a
-**48 kHz** en esta etapa. Esta lista registra trabajo futuro, no funciones
-ya disponibles ni fechas comprometidas. Los instrumentos virtuales quedan
+Estado a partir de Monitor Mix 0.8. Todos los caminos de audio seguirán a
+**48 kHz** en esta etapa. Esta lista registra tareas pendientes y avances,
+sin fechas comprometidas. Los instrumentos virtuales quedan
 fuera del alcance; el proyecto se centra en mezcla y procesamiento de audio.
 
 ## Prioridad transversal: tiempo real y mínima latencia
@@ -50,20 +50,17 @@ tratamiento de relojes independientes antes de habilitar rutas combinadas.
 
 La agregación de varios dispositivos ASIO queda **fuera del alcance acordado**.
 
-## Mezclas personales remotas por web
+## Mezclas personales remotas por web · base disponible en 0.8
 
-Crear una superficie web con copia de las tiras de entrada y niveles de envío.
-Cada participante tendrá asignado **un auxiliar** y podrá ajustar su propia
-mezcla, sin acceso al main ni a los auxiliares de otras personas. Prever niveles,
-mutes de envío y estado PRE/POST según permisos del operador; definir qué
-controles se comparten entre clientes y cómo se resuelven cambios simultáneos.
+Ya implementado: superficie por auxiliar con faders y mute de envío, permiso
+PRE/POST, límite de nivel, enlaces revocables, sincronización con la consola y
+reconexión sin reproducir cambios antiguos. Enlaces con IP Tailscale/MagicDNS
+para control y escucha. Ver [guía 0.8](interfaz-0.8.md).
 
-La asignación, revocación y permisos de cada enlace se validarán en el servidor.
-Prever reconexión, estado sincronizado, límites de nivel y autorización para
-estéreo/pan de envío. El audio de escucha debe cumplir el objetivo de mínima
-latencia con un transporte revisado y medido; la escucha LAN de 0.7 es un punto
-de partida que requiere optimización. Medir por separado la respuesta del
-control remoto y el retardo de reproducción. La API local de administración no se expondrá directamente.
+Pendiente: optimizar y medir transporte de escucha para monitoreo de mínima
+latencia, validar sesiones largas y varios dispositivos reales en LAN/tailnet,
+y diseñar paneo independiente por envío estéreo. El control web y su respuesta
+se miden separados del retardo del audio; la API de administración sigue local.
 
 ## Grabación multipista
 
@@ -81,4 +78,4 @@ Definir segmentación/RF64 para sesiones largas y recuperación de archivos.
   de estabilidad/latencia con ASIO y hardware real.
 
 Ver [control remoto](control-remoto.md) para el diseño previo de OSC/Mackie y
-[la versión actual](interfaz-0.7.md) para lo ya implementado.
+[la versión actual](interfaz-0.8.md) para lo ya implementado.

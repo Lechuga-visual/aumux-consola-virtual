@@ -1,6 +1,11 @@
 "use strict";
 const $ = (id) => document.getElementById(id);
 const token = document.querySelector('meta[name="monitor-token"]').content;
+let remoteNeedsRender = false;
+let serverConfig,
+  syncedRemoteRevision = -1,
+  configRequests = 0,
+  replaceScene = false;
 let cfg,
   view = -1,
   selected = { type: "channel", index: 0 },
@@ -58,6 +63,10 @@ function normalise(c) {
     ch.fx = null;
     ch.generator ||= { signal: "off", level_db: -30, frequency: 1000 };
     ch.eq ||= defaultEq();
+    ch.send_mute = Array.from(
+      { length: c.buses.length - 1 },
+      (_, a) => ch.send_mute?.[a] ?? false,
+    );
     ch.compressor ||= defaultCompressor();
     ch.pin ||= "none";
     if (legacy) {
@@ -82,19 +91,61 @@ function error(e) {
   $("error").textContent = e.message || e;
   $("error").title = $("error").textContent;
 }
-async function api(route, body = {}) {
-  const r = await fetch("/api/" + route, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Monitor-Token": token },
-    body: JSON.stringify(body),
+async function api(route, body = {}, options = {}) {
+  const configCall = route === "config";
+  if (configCall) configRequests++;
+  const payload = configCall
+    ? {
+        config: body,
+        base: options.base || serverConfig || cfg,
+        replace_scene: replaceScene,
+      }
+    : body;
+  try {
+    const r = await fetch("/api/" + route, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Monitor-Token": token },
+      body: JSON.stringify(payload),
+    });
+    const v = await r.json();
+    if (!r.ok) throw Error(v.error || r.statusText);
+    if (configCall && v.config) {
+      remoteNeedsRender = reconcileSends(v.config, body) || remoteNeedsRender;
+      serverConfig = structuredClone(v.config);
+      syncedRemoteRevision = v.remote_revision;
+    }
+    return v;
+  } finally {
+    if (configCall) configRequests--;
+  }
+}
+function reconcileSends(incoming, base) {
+  if (
+    !cfg ||
+    cfg.channels.length !== incoming.channels.length ||
+    base.channels.length !== cfg.channels.length
+  )
+    return false;
+  let changed = false;
+  cfg.channels.forEach((ch, i) => {
+    for (const field of ["sends_db", "pre", "send_mute"]) {
+      incoming.channels[i][field]?.forEach((v, a) => {
+        if (
+          ch[field]?.[a] === base.channels[i][field]?.[a] &&
+          ch[field][a] !== v
+        ) {
+          ch[field][a] = v;
+          changed = true;
+        }
+      });
+    }
   });
-  const v = await r.json();
-  if (!r.ok) throw Error(v.error || r.statusText);
-  return v;
+  return changed;
 }
 function publish() {
-  const snapshot = structuredClone(cfg);
-  const task = queue.then(() => api("config", snapshot));
+  const snapshot = structuredClone(cfg),
+    base = structuredClone(serverConfig || cfg);
+  const task = queue.then(() => api("config", snapshot, { base }));
   queue = task.catch(() => {});
   task.catch(error);
   return task;
@@ -758,7 +809,7 @@ function updateSendLabels() {
   document.querySelectorAll("[data-send]").forEach((e) => {
     const [i, a] = e.dataset.send.split(":").map(Number);
     const value = cfg.channels[i].sends_db[a];
-    e.textContent = `A${a + 1} ${value <= -90 ? "−∞" : value.toFixed(0)}`;
+    e.textContent = `A${a + 1} ${cfg.channels[i].send_mute[a] ? "M" : value <= -90 ? "−∞" : value.toFixed(0)}`;
     e.classList.toggle("has-send", value > -90);
     e.classList.toggle("selected-send", view === a);
   });
@@ -995,7 +1046,21 @@ function renderInspector() {
       input.dataset.inspectorSend = a;
       input.title = db(value, " dB");
       input.setAttribute("aria-label", `Envío a ${cfg.buses[a + 1].name}`);
-      row.append(title, pre, input);
+      const sendMute = el(
+        "button",
+        "mini-toggle" + (target.send_mute[a] ? " on" : ""),
+        "M",
+      );
+      sendMute.setAttribute(
+        "aria-label",
+        `Silenciar envío a ${cfg.buses[a + 1].name}`,
+      );
+      sendMute.onclick = () => {
+        target.send_mute[a] = !target.send_mute[a];
+        sendMute.classList.toggle("on", target.send_mute[a]);
+        publish();
+      };
+      row.append(title, pre, sendMute, input);
       sends.append(row);
     });
     inspector.append(sends);
@@ -1116,6 +1181,7 @@ async function poll() {
     bridge.title = `Enviados: ${s.bridge?.sent || 0} paquetes · Descartados: ${s.bridge_drops}\nLa confirmación verifica recepción en la fuente; revisa también su mute y la escena en OBS.`;
     updateLatency();
     updateWorkspaceStatus(s);
+    syncRemoteMix(s);
   } catch (e) {
     $("status").textContent = "SIN CONEXIÓN";
     $("listen-status").textContent = "Sin conexión";
@@ -1296,14 +1362,23 @@ $("fullscreen").onclick = () => {
   if (document.fullscreenElement) document.exitFullscreen();
   else document.documentElement.requestFullscreen().catch(error);
 };
-$("save").onclick = () => {
-  const a = el("a");
-  a.href = URL.createObjectURL(
-    new Blob([JSON.stringify(cfg, null, 2)], { type: "application/json" }),
-  );
-  a.download = "monitor-mix.json";
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+$("save").onclick = async () => {
+  try {
+    await queue;
+    const r = await fetch("/api/mix-state");
+    if (!r.ok) throw Error("No se pudo sincronizar la mezcla para guardar");
+    remoteNeedsRender =
+      reconcileSends(await r.json(), serverConfig) || remoteNeedsRender;
+    const a = el("a");
+    a.href = URL.createObjectURL(
+      new Blob([JSON.stringify(cfg, null, 2)], { type: "application/json" }),
+    );
+    a.download = "monitor-mix.json";
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  } catch (e) {
+    error(e);
+  }
 };
 $("load").onclick = () => $("scene").click();
 $("scene").onchange = async () => {
@@ -1312,7 +1387,12 @@ $("scene").onchange = async () => {
     if (!file) return;
     const candidate = normalise(JSON.parse(await file.text()));
     await queue;
-    await api("config", candidate);
+    replaceScene = true;
+    try {
+      await api("config", candidate);
+    } finally {
+      replaceScene = false;
+    }
     cfg = candidate;
     $("scene-name").textContent = file.name.replace(/\.json$/i, "");
     render();
@@ -2199,6 +2279,7 @@ async function resizeStructure(
         pan: 0,
         mute: false,
         sends_db: [],
+        send_mute: [],
         pre: [],
         inserts: [],
         fx: null,
@@ -2223,6 +2304,8 @@ async function resizeStructure(
       });
     for (const ch of candidate.channels) {
       ch.sends_db = ch.sends_db.slice(0, auxes);
+      ch.send_mute = ch.send_mute.slice(0, auxes);
+      while (ch.send_mute.length < auxes) ch.send_mute.push(false);
       ch.pre = ch.pre.slice(0, auxes);
       while (ch.sends_db.length < auxes) ch.sends_db.push(-90);
       while (ch.pre.length < auxes) ch.pre.push(true);
@@ -2290,6 +2373,7 @@ document.addEventListener("DOMContentLoaded", () => {
       $("aux-count").max = l.auxes;
       $("inputs").max = l.inputs;
       cfg = normalise(c);
+      serverConfig = structuredClone(cfg);
       render();
       poll();
       requestAnimationFrame(animateMeters);

@@ -734,7 +734,19 @@ function renderRouting() {
       mode = el("select"),
       remove = el("button", "", "Quitar");
     row.dataset.aux = a;
+    const mute = el(
+      "button",
+      "mini-toggle" + (c.send_mute[a] ? " on" : ""),
+      "M",
+    );
+    mute.setAttribute("aria-label", `Silenciar envío ${a + 1}`);
+    mute.onclick = () => {
+      c.send_mute[a] = !c.send_mute[a];
+      mute.classList.toggle("on", c.send_mute[a]);
+      routingChanged();
+    };
     destination.append(
+      mute,
       el("strong", "", cfg.buses[a + 1].name),
       el(
         "span",

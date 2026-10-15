@@ -38,6 +38,7 @@ pub struct Hub {
     running: AtomicBool,
     port: AtomicU16,
     key: String,
+    public_host: Mutex<String>,
     slots: Vec<Slot>,
     names: Mutex<Vec<(String, String)>>,
     runtime: Mutex<Option<Runtime>>,
@@ -75,6 +76,7 @@ impl Hub {
             running: AtomicBool::new(false),
             port: AtomicU16::new(0),
             key,
+            public_host: Mutex::new(String::new()),
             slots,
             names: Mutex::new(vec![]),
             runtime: Mutex::new(None),
@@ -158,10 +160,20 @@ impl Hub {
         });
         Ok(self.status())
     }
+    pub fn set_host(&self, host: &str) -> Result<(), String> {
+        *self.public_host.lock().unwrap() = share_host(host)?;
+        Ok(())
+    }
     pub fn status(&self) -> Value {
-        let ip = local_ip();
+        let host = self.public_host.lock().unwrap();
+        let ip = if host.is_empty() {
+            local_ip()
+        } else {
+            host.clone()
+        };
+        let ip = url_host(&ip);
         let port = self.port.load(Relaxed);
-        json!({"enabled":self.enabled.load(Acquire),"port":port,"url":format!("http://{ip}:{port}/?key={}",self.key),"clients":self.slots.iter().filter(|s|s.active.load(Relaxed)).count(),"dropped":self.slots.iter().map(|s|s.dropped.load(Relaxed)).sum::<u64>()})
+        json!({"enabled":self.enabled.load(Acquire),"port":port,"host":*host,"url":format!("http://{ip}:{port}/?key={}",self.key),"clients":self.slots.iter().filter(|s|s.active.load(Relaxed)).count(),"dropped":self.slots.iter().map(|s|s.dropped.load(Relaxed)).sum::<u64>()})
     }
     pub fn publish(&self, buses: &[Vec<Vec<f32>>], frames: usize) {
         if !self.enabled.load(Acquire) {
@@ -335,7 +347,7 @@ fn response(s: &mut TcpStream, status: u16, kind: &str, body: &[u8]) -> std::io:
     )?;
     s.write_all(body)
 }
-fn local_ip() -> String {
+pub fn local_ip() -> String {
     if let Ok(host) = std::env::var("MONITOR_LISTEN_HOST") {
         if host != "0.0.0.0" {
             return host;
@@ -382,5 +394,41 @@ mod tests {
         }
         assert!(hub.slots[0].dropped.load(Relaxed) > 0);
         assert_eq!(hub.slots[0].ready.len(), 32);
+    }
+}
+
+/// Address to advertise in links. Binding stays on local network interfaces, including Tailscale.
+pub fn share_host(value: &str) -> Result<String, String> {
+    let host = value.trim();
+    if host.is_empty() {
+        return Ok(String::new());
+    }
+    let plain = host
+        .strip_prefix('[')
+        .and_then(|v| v.strip_suffix(']'))
+        .unwrap_or(host);
+    if let Ok(ip) = plain.parse::<std::net::IpAddr>() {
+        return Ok(ip.to_string());
+    }
+    if host.len() <= 253
+        && host.split('.').all(|label| {
+            !label.is_empty()
+                && label.len() <= 63
+                && !label.starts_with('-')
+                && !label.ends_with('-')
+                && label
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'-')
+        })
+    {
+        return Ok(host.into());
+    }
+    Err("Usa solo una IP o nombre DNS, sin protocolo, puerto ni ruta".into())
+}
+pub fn url_host(host: &str) -> String {
+    if host.contains(':') {
+        format!("[{host}]")
+    } else {
+        host.into()
     }
 }
