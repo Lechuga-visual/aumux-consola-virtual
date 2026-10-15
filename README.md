@@ -5,18 +5,23 @@ salida normal del PC, crear mezclas auxiliares y enviar el master a OBS.
 
 **Prioridad del proyecto:** mezcla y monitoreo en tiempo real con la menor
 latencia estable de extremo a extremo, también hacia OBS y por red. La escucha
-web todavía usa unos 120 ms de búfer más el retardo de red y reproducción;
+web permite objetivos de búfer de 40/80/120/200 ms (80 ms inicialmente), más el retardo de red y reproducción;
 su optimización y medición son prioritarias en la
 [hoja de ruta](docs/hoja-de-ruta.md).
 
-**Prueba local:** [descargar Windows x64](dist/MonitorMix-0.9.0-Windows-x64.zip)
+**Prueba local:** [descargar Windows x64](dist/MonitorMix-0.10.0-Windows-x64.zip)
 e [instrucciones para Windows](docs/probar-en-windows.md).
 La descarga incluye el ejecutable, el receptor de OBS y el código fuente.
-Su checksum está en [SHA-256](dist/MonitorMix-0.9.0-Windows-x64.zip.sha256).
+Su checksum está en [SHA-256](dist/MonitorMix-0.10.0-Windows-x64.zip.sha256).
 
 ## Funciones actuales
 
-- Modo touch automático o manual en Herramientas; faders sin scroll vertical y vistas móvil/tablet/escritorio.
+- Preferencias por categoría: consola remota, auxiliares, escucha y redes/servidores.
+- Bandeja de Windows sin terminal; abrir consola, salir y detección de segunda instancia normal.
+- Lectura HTTP por bloques, reconexión de escucha y selección del objetivo de búfer de red.
+- Preparación de firma Authenticode y [opciones gratuitas para código abierto](docs/firma-windows.md).
+
+- Modo touch de activación manual en Herramientas; faders sin scroll vertical y vistas móvil/tablet/escritorio.
 - Enlace único de mezcla con contraseña compartida o abierto, con selector de auxiliar; se conservan enlaces personales.
 - Consola principal remota independiente, con contraseña opcional y opción de deshabilitarla.
 - Escucha con clave, contraseña o enlace abierto; selector de direcciones locales/Tailscale por tarjeta.
@@ -56,7 +61,7 @@ La miniapp reutiliza **los crates DSP y VST3 de SoundCraft de Artcraft**,
 fijados a una revisión concreta. La interfaz y el ruteo son propios; no es
 un fork de todo el DAW. No requiere controlar CueMix ni instalar REAPER.
 
-![Consola Monitor Mix touch 0.9](docs/monitor-mix-0.9-main-touch.png)
+![Consola Monitor Mix touch 0.10](docs/monitor-mix-0.10-main-touch.png)
 
 Para probar sin hardware: **AUDIO PC → G en un canal → Control Room → Input**.
 DEMO procesa sin reproducir. Las escenas 0.1 siguen siendo compatibles.
@@ -127,3 +132,5 @@ licencias y procedencia en el ZIP.
 
 [Hoja de ruta](docs/hoja-de-ruta.md): otros dispositivos y subsistemas Windows,
 optimización de escucha de baja latencia, grabación multipista y control OSC/Mackie.
+
+[Preferencias, bandeja de Windows, touch manual y red 0.10](docs/interfaz-0.10.md).

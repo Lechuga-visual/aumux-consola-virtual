@@ -1,4 +1,11 @@
 "use strict";
+function webFetch(url, options = {}) {
+  return fetch(url, {
+    ...options,
+    signal: options.signal || AbortSignal.timeout(6000),
+  });
+}
+let failedStatusPolls = 0;
 const $ = (id) => document.getElementById(id);
 const token = document.querySelector('meta[name="monitor-token"]').content;
 let remoteNeedsRender = false;
@@ -102,7 +109,7 @@ async function api(route, body = {}, options = {}) {
       }
     : body;
   try {
-    const r = await fetch("/api/" + route, {
+    const r = await webFetch("/api/" + route, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Monitor-Token": token },
       body: JSON.stringify(payload),
@@ -1207,7 +1214,7 @@ function updateLatency() {
 async function poll() {
   try {
     const statusStarted = performance.now();
-    const r = await fetch("/api/status");
+    const r = await webFetch("/api/status");
     if (r.status === 403 && location.pathname.startsWith("/console")) {
       location.reload();
       return;
@@ -1215,6 +1222,7 @@ async function poll() {
     if (!r.ok) throw Error("status");
     const s = await r.json();
     s.control_rtt_ms = performance.now() - statusStarted;
+    failedStatusPolls = 0;
     lastStatus = s;
     const was = running;
     running = s.mode !== "DETENIDO";
@@ -1268,7 +1276,8 @@ async function poll() {
     updateLatencyTools(s);
     syncRemoteMix(s);
   } catch (e) {
-    $("status").textContent = "SIN CONEXIÓN";
+    failedStatusPolls++;
+    $("status").textContent = "RECONECTANDO…";
     $("listen-status").textContent = "Sin conexión";
     $("obs-status").textContent = "OBS: sin conexión";
     $("obs-status").classList.remove("connected");
@@ -1277,7 +1286,12 @@ async function poll() {
       s.rmsTarget = [-90, -90];
     }
   } finally {
-    setTimeout(poll, 80);
+    setTimeout(
+      poll,
+      failedStatusPolls
+        ? Math.min(4000, 250 * 2 ** Math.min(failedStatusPolls - 1, 4))
+        : 80,
+    );
   }
 }
 async function scan() {
@@ -1450,7 +1464,7 @@ $("fullscreen").onclick = () => {
 $("save").onclick = async () => {
   try {
     await queue;
-    const r = await fetch("/api/sync-state");
+    const r = await webFetch("/api/sync-state");
     if (!r.ok) throw Error("No se pudo sincronizar la mezcla para guardar");
     remoteNeedsRender =
       reconcileConfig((await r.json()).config, serverConfig) ||
@@ -2351,7 +2365,7 @@ async function resizeStructure(
   render();
   try {
     await queue;
-    const freshResponse = await fetch("/api/config");
+    const freshResponse = await webFetch("/api/config");
     if (!freshResponse.ok)
       throw Error("No se pudo sincronizar antes de cambiar la estructura");
     const fresh = await freshResponse.json();
@@ -2456,8 +2470,8 @@ $("apply-counts").onclick = async () => {
 };
 document.addEventListener("DOMContentLoaded", () => {
   Promise.all([
-    fetch("/api/config").then((r) => r.json()),
-    fetch("/api/limits").then((r) => r.json()),
+    webFetch("/api/config").then((r) => r.json()),
+    webFetch("/api/limits").then((r) => r.json()),
   ])
     .then(([c, l]) => {
       limits = l;

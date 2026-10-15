@@ -1,6 +1,6 @@
 # Hoja de ruta
 
-Estado a partir de Monitor Mix 0.9. Todos los caminos de audio seguirán a
+Estado a partir de Monitor Mix 0.10. Todos los caminos de audio seguirán a
 **48 kHz** en esta etapa. Esta lista registra tareas pendientes y avances,
 sin fechas comprometidas. Los instrumentos virtuales quedan
 fuera del alcance; el proyecto se centra en mezcla y procesamiento de audio.
@@ -28,8 +28,8 @@ parte del criterio de aceptación.
   mover un fader por web no debe agregar un buffer al audio local.
 
 **Siguiente trabajo prioritario de audio:** revisar el transporte y la reproducción
-LAN antes de considerarlos aptos para monitoreo de participantes. La versión 0.7
-programa unos 120 ms de búfer en el navegador, además de red y dispositivo;
+LAN antes de considerarlos aptos para monitoreo de participantes. La versión 0.10
+permite objetivos de búfer de 40/80/120/200 ms en el navegador (80 ms inicialmente), además de red y dispositivo;
 es una implementación inicial de escucha y todavía no cumple ese objetivo.
 Evaluar transporte, paquetes y búfer adaptativo para evitar acumulación de
 retraso; comparar alternativas como WebRTC y, si el navegador no permite el
@@ -87,4 +87,4 @@ estas funciones; no se simulan mediciones ni se ejecuta análisis pendiente.
   de estabilidad/latencia con ASIO y hardware real.
 
 Ver [control remoto](control-remoto.md) para el diseño previo de OSC/Mackie y
-[la versión actual](interfaz-0.9.md) para lo ya implementado.
+[la versión actual](interfaz-0.10.md) para lo ya implementado.

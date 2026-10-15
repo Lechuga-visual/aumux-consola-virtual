@@ -14,6 +14,7 @@ fn main() {
     if windows {
         if std::env::var("CARGO_CFG_TARGET_ENV").unwrap() == "msvc" {
             build.flag("/EHsc");
+            build.flag("/utf-8");
         }
         if std::env::var("CARGO_CFG_TARGET_ENV").unwrap() == "gnu" {
             build.cpp_link_stdlib_static(true);
@@ -21,6 +22,7 @@ fn main() {
         build.define("__WINDOWS_ASIO__", None);
         build.define("__WINDOWS_WASAPI__", None);
         build.file("native/asio_abi.cpp");
+        build.file("native/tray.cpp");
     } else {
         build.define("__LINUX_ALSA__", None);
     }
@@ -28,6 +30,8 @@ fn main() {
     if windows {
         for lib in [
             "ole32",
+            "shell32",
+            "user32",
             "winmm",
             "advapi32",
             "uuid",

@@ -118,7 +118,7 @@ impl Hub {
         self.stop();
         let host = std::env::var("MONITOR_LISTEN_HOST").unwrap_or_else(|_| "0.0.0.0".into());
         let server = TcpListener::bind((host.as_str(), port))
-            .map_err(|e| format!("No se pudo abrir la escucha web: {e}"))?;
+            .map_err(|e| crate::web_http::bind_error("la escucha web", &host, port, e))?;
         server.set_nonblocking(true).map_err(|e| e.to_string())?;
         self.port.store(
             server.local_addr().map_err(|e| e.to_string())?.port(),
@@ -219,20 +219,12 @@ impl Hub {
         mut stream: TcpStream,
         alive: Arc<AtomicBool>,
     ) -> std::io::Result<()> {
-        stream.set_read_timeout(Some(Duration::from_secs(2)))?;
         stream.set_write_timeout(Some(Duration::from_secs(2)))?;
         stream.set_nodelay(true)?;
-        let mut request = Vec::with_capacity(1024);
-        let mut byte = [0];
-        while request.len() < 8192 {
-            if stream.read(&mut byte)? == 0 {
-                return Ok(());
-            }
-            request.push(byte[0]);
-            if request.ends_with(b"\r\n\r\n") {
-                break;
-            }
-        }
+        let request = match crate::web_http::headers(&mut stream) {
+            Ok(v) => v,
+            Err(e) => return crate::web_http::request_error(&mut stream, e),
+        };
         let text = String::from_utf8_lossy(&request);
         let mut line = text.lines().next().unwrap_or("").split_whitespace();
         let method = line.next();
@@ -276,7 +268,9 @@ impl Hub {
                 );
             }
             let mut body = vec![0; n.unwrap()];
-            stream.read_exact(&mut body)?;
+            if let Err(error) = stream.read_exact(&mut body) {
+                return crate::web_http::request_error(&mut stream, error);
+            }
             return crate::access::login_http(&self.gate, &mut stream, "listen", &body);
         }
         if method != Some("GET") {

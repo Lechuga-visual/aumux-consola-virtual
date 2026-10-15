@@ -67,6 +67,18 @@ const assert = require("node:assert/strict");
       await operator.locator("#network-host").inputValue(),
       "127.0.0.1",
     );
+    await operator.screenshot({
+      path: "docs/monitor-mix-0.10-preferences-network.png",
+    });
+    await operator.locator("#pref-tab-console").click();
+    assert(await operator.locator("#pref-console").isVisible());
+    assert(!(await operator.locator("#pref-mix").isVisible()));
+    await operator.locator("#pref-tab-console").press("ArrowDown");
+    assert(
+      await operator.locator("#pref-mix").isVisible(),
+      "keyboard changes preference categories",
+    );
+    await operator.locator("#pref-tab-mix").click();
     await operator.locator("#mix-access-mode").selectOption("open");
     await operator.locator("#mix-access-save").click();
     await operator.waitForFunction(() =>
@@ -77,6 +89,9 @@ const assert = require("node:assert/strict");
     await operator.waitForFunction(() =>
       document.querySelector("#mix-generic-url").value.startsWith("http"),
     );
+    await operator.screenshot({
+      path: "docs/monitor-mix-0.10-preferences-aux.png",
+    });
     const shared = await operator.locator("#mix-generic-url").inputValue();
     assert(shared.endsWith("/") && !shared.includes("key="));
     await operator.locator("[data-close=network-dialog]").click();
@@ -167,7 +182,7 @@ const assert = require("node:assert/strict");
     await mix.waitForFunction(() =>
       document.querySelector("#remote-latency").textContent.includes("RTT"),
     );
-    await mix.screenshot({ path: "docs/monitor-mix-0.9-mobile-mix.png" });
+    await mix.screenshot({ path: "docs/monitor-mix-0.10-mobile-mix.png" });
     await mix.locator("footer summary").click();
     // Password replaces open access; the page must request authentication, not silently keep controls.
     await operator.evaluate(async () => {
@@ -204,11 +219,46 @@ const assert = require("node:assert/strict");
     await full.locator("#password").fill("operador");
     await full.getByRole("button", { name: "Entrar", exact: true }).click();
     await full.waitForSelector("#mixer .strip");
-    assert(
+    assert.equal(
       await full
         .locator("body")
         .evaluate((e) => e.classList.contains("touch-mode")),
+      false,
+      "touch must be explicitly enabled even on a tablet",
     );
+    await full.locator("#tools-menu summary").click();
+    await full.locator("#touch-mode").selectOption("on");
+    await full.waitForFunction(() =>
+      document.body.classList.contains("touch-mode"),
+    );
+    await full.waitForTimeout(100);
+    const menuPlacement = await full.evaluate(() => {
+      const button = document
+        .querySelector("#tools-menu summary")
+        .getBoundingClientRect();
+      const panel = document
+        .querySelector(".tools-dropdown")
+        .getBoundingClientRect();
+      return {
+        button: { left: button.left, bottom: button.bottom },
+        panel: {
+          left: panel.left,
+          top: panel.top,
+          right: panel.right,
+          bottom: panel.bottom,
+        },
+      };
+    });
+    assert(
+      Math.abs(menuPlacement.panel.top - menuPlacement.button.bottom) < 8,
+      "touch menu anchored to its button",
+    );
+    assert(
+      menuPlacement.panel.right <= 1100 && menuPlacement.panel.bottom <= 820,
+      "touch menu fits viewport",
+    );
+    await full.screenshot({ path: "docs/monitor-mix-0.10-touch-tools.png" });
+    await full.locator("#tools-menu summary").click();
     let configPosts = 0;
     await full.route("**/api/config", async (route) => {
       if (route.request().method() === "POST") {
@@ -248,7 +298,7 @@ const assert = require("node:assert/strict");
       (await full.locator("#calc-result").innerText()).includes("20.67 ms"),
     );
     assert.equal(await operator.evaluate(() => cfg.buffer), 256);
-    await full.screenshot({ path: "docs/monitor-mix-0.9-calculator.png" });
+    await full.screenshot({ path: "docs/monitor-mix-0.10-calculator.png" });
     await full.locator("[data-close=calculator-dialog]").click();
     await full.locator("#tools-menu summary").click();
     await full.locator("#open-diagnostics").click();
@@ -263,12 +313,12 @@ const assert = require("node:assert/strict");
         "IEM baterista",
       ),
     );
-    await full.screenshot({ path: "docs/monitor-mix-0.9-latency.png" });
+    await full.screenshot({ path: "docs/monitor-mix-0.10-latency.png" });
     await full.locator("[data-close=latency-dialog]").click();
     await full.locator("#toggle-inspector").click();
     assert(await full.locator(".sidebar").isVisible());
     await full.locator("#toggle-inspector").click();
-    await full.screenshot({ path: "docs/monitor-mix-0.9-main-touch.png" });
+    await full.screenshot({ path: "docs/monitor-mix-0.10-main-touch.png" });
     // The local console's explicit Touch switch also works with a mouse-only desktop.
     await operator.locator("#tools-menu summary").click();
     await operator.locator("#touch-mode").selectOption("on");
@@ -295,8 +345,26 @@ const assert = require("node:assert/strict");
       () => document.querySelector("#bus").options.length === 5,
     );
     await listen.locator("#bus").selectOption("2");
+    assert.equal(await listen.locator("#buffer").inputValue(), "80");
+    await listen.locator("#buffer").selectOption("40");
     await listen.locator("#play").click();
     await listen.waitForFunction(() => sources.size > 0);
+    const originalContext = await listen.evaluate(() => {
+      window.firstContext = context;
+      return playing;
+    });
+    assert(originalContext);
+    await listen.evaluate(() => abort.abort());
+    await listen.waitForFunction(() => retries > 0);
+    await listen.waitForFunction(
+      () => retries === 0 && sources.size > 0,
+      null,
+      { timeout: 10000 },
+    );
+    assert(
+      await listen.evaluate(() => context === window.firstContext),
+      "reconnect preserves user-activated AudioContext",
+    );
     await listen.locator("details summary").click();
     await listen.waitForFunction(() =>
       document
@@ -309,7 +377,9 @@ const assert = require("node:assert/strict");
       ),
     );
     await listen.waitForTimeout(200);
-    await listen.screenshot({ path: "docs/monitor-mix-0.9-mobile-listen.png" });
+    await listen.screenshot({
+      path: "docs/monitor-mix-0.10-mobile-listen.png",
+    });
     await listen.locator("#stop").click();
     await mix.setViewportSize({ width: 844, height: 390 });
     await mix.waitForTimeout(150);

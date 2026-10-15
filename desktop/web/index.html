@@ -13,7 +13,7 @@
         <div class="brand">
           <span class="brand-icon"><i></i><i></i><i></i><i></i></span
           ><strong>MONITOR<span>MIX</span></strong
-          ><span class="version">0.9</span>
+          ><span class="version">0.10</span>
         </div>
         <div class="scene-title">
           CONSOLA DE MONITOREO <span>•</span>
@@ -27,9 +27,8 @@
               ><button id="open-diagnostics">Latencia y diagnóstico</button>
               <label
                 >Interfaz touch<select id="touch-mode">
-                  <option value="auto">Automática</option>
-                  <option value="on">Activada</option>
                   <option value="off">Desactivada</option>
+                  <option value="on">Activada</option>
                 </select></label
               >
               <button disabled>Detector de acoples · pendiente</button
@@ -58,7 +57,7 @@
       </header>
       <nav class="transport">
         <button id="remote-settings">Control remoto</button
-        ><button id="network-settings">Escucha LAN</button
+        ><button id="network-settings">Preferencias</button
         ><button id="settings" class="settings-button">⚙ MOTOR DE AUDIO</button
         ><span class="separator"></span>
         <button
@@ -481,178 +480,306 @@
       </p>
       <span id="comp-status" role="status">Cambios en vivo</span>
     </dialog>
-    <dialog id="network-dialog">
+    <dialog id="network-dialog" aria-labelledby="preferences-title">
       <div class="dialog-heading">
-        <h2>Red local y Tailscale</h2>
-        <button data-close="network-dialog">✕</button>
+        <h2 id="preferences-title">Preferencias</h2>
+        <button data-close="network-dialog" aria-label="Cerrar preferencias">
+          ✕
+        </button>
       </div>
-      <label
-        >Interfaz / dirección del sistema<select id="network-interface">
-          <option value="">Manual / MagicDNS</option>
-        </select></label
-      >
-      <label
-        >Dirección para compartir (opcional)<input
-          id="network-host"
-          type="text"
-          placeholder="100.x.y.z o equipo.tailnet.ts.net"
-          spellcheck="false"
-      /></label>
-      <button id="network-host-apply">Aplicar dirección a los enlaces</button>
-      <p class="hint">
-        Vacío: IP local sugerida. En Tailscale usa la IP 100.x o nombre MagicDNS
-        del PC; los dispositivos deben tener acceso a él en el tailnet.
-      </p>
-      <h3>Escucha</h3>
-      <p>
-        Comparte este enlace para escuchar el master o un auxiliar desde otro
-        dispositivo de la misma red.
-      </p>
-      <div class="form-row">
-        <label
-          >Puerto<input
-            id="network-port"
-            type="number"
-            min="1024"
-            max="65535"
-            value="17841" /></label
-        ><button id="network-toggle">Iniciar escucha LAN</button>
-      </div>
-      <label
-        >Enlace de escucha<input
-          id="network-url"
-          type="text"
-          readonly
-          spellcheck="false"
-      /></label>
-      <div class="form-row">
-        <button id="network-copy">Copiar enlace</button
-        ><a id="network-open" target="_blank" rel="noreferrer">Abrir escucha</a>
-      </div>
-      <p id="network-status" role="status"></p>
-      <div class="access-card">
-        <h3>Acceso a escucha</h3>
-        <label
-          >Enlace<select id="listen-access-mode">
-            <option value="disabled">Enlace con clave</option>
-            <option value="password">Enlace único con contraseña</option>
-            <option value="open">Enlace abierto sin contraseña</option>
-          </select></label
-        ><label
-          >Contraseña nueva<input
-            id="listen-password"
-            type="password"
-            autocomplete="new-password" /></label
-        ><button id="listen-access-save">Aplicar acceso de escucha</button>
-      </div>
-      <div class="access-card">
-        <h3>Enlace único de mezclas auxiliares</h3>
-        <label
-          >Acceso<select id="mix-access-mode">
-            <option value="disabled">Solo enlaces personales</option>
-            <option value="password">Contraseña compartida</option>
-            <option value="open">Abierto sin contraseña</option>
-          </select></label
-        ><label
-          >Contraseña nueva<input
-            id="mix-password"
-            type="password"
-            autocomplete="new-password" /></label
-        ><label
-          >Máximo de los envíos (dB)<input
-            id="mix-access-max"
-            type="number"
-            min="-60"
-            max="6"
-            step="0.1"
-            value="0" /></label
-        ><label
-          ><input id="mix-access-pre" type="checkbox" /> Permitir
-          PRE/POST</label
-        ><button id="mix-access-save">Aplicar acceso de mezclas</button
-        ><label
-          >Enlace único<input id="mix-generic-url" type="text" readonly
-        /></label>
-        <p class="hint">
-          En el enlace único se puede elegir cualquier auxiliar. Los enlaces
-          personales siguen limitados a su auxiliar.
-        </p>
-      </div>
-      <div class="access-card">
-        <h3>Consola principal remota · acceso de operador</h3>
-        <label
-          >Acceso<select id="console-access-mode">
-            <option value="disabled">Deshabilitado</option>
-            <option value="password">Con contraseña</option>
-            <option value="open">Abierto sin contraseña</option>
-          </select></label
-        ><label
-          >Contraseña nueva<input
-            id="console-password"
-            type="password"
-            autocomplete="new-password" /></label
-        ><button id="console-access-save">Aplicar acceso de consola</button
-        ><label
-          >Enlace de consola<input id="console-remote-url" type="text" readonly
-        /></label>
-        <p class="hint">
-          Da control de toda la consola, incluidos main, efectos, motor y
-          configuración. Usa el servidor de control; es independiente del
-          permiso para auxiliares.
-        </p>
-      </div>
-      <p id="access-status" role="status"></p>
-      <section id="remote-admin">
-        <h3>Mezclas personales · control remoto</h3>
-        <div class="form-row">
-          <label
-            >Puerto de control<input
-              id="remote-port"
-              type="number"
-              min="1024"
-              max="65535"
-              value="17842" /></label
-          ><button id="remote-toggle">Iniciar control remoto</button>
-        </div>
-        <div class="remote-create-grid">
-          <label
-            >Participante<input
-              id="remote-label"
-              type="text"
-              maxlength="80"
-              placeholder="Nombre"
-          /></label>
-          <label>Auxiliar<select id="remote-aux"></select></label>
-          <label
-            >Nivel máximo por envío (dB)<input
-              id="remote-max"
-              type="number"
-              min="-60"
-              max="6"
-              step="0.1"
-              value="0"
-          /></label>
-          <label
-            ><input id="remote-pre" type="checkbox" /> Permitir PRE/POST</label
+      <div class="preferences-layout">
+        <nav
+          class="preferences-nav"
+          role="tablist"
+          aria-label="Categorías de preferencias"
+          aria-orientation="vertical"
+        >
+          <button
+            id="pref-tab-console"
+            role="tab"
+            data-preference="console"
+            aria-controls="pref-console"
+            aria-selected="false"
+            tabindex="-1"
           >
+            Consola remota
+          </button>
+          <button
+            id="pref-tab-mix"
+            role="tab"
+            data-preference="mix"
+            aria-controls="pref-mix"
+            aria-selected="false"
+            tabindex="-1"
+          >
+            Control de auxiliares
+          </button>
+          <button
+            id="pref-tab-listen"
+            role="tab"
+            data-preference="listen"
+            aria-controls="pref-listen"
+            aria-selected="false"
+            tabindex="-1"
+          >
+            Escucha
+          </button>
+          <button
+            id="pref-tab-network"
+            role="tab"
+            data-preference="network"
+            aria-controls="pref-network"
+            aria-selected="true"
+          >
+            Redes y servidores
+          </button>
+        </nav>
+        <div class="preferences-content">
+          <section
+            id="pref-console"
+            role="tabpanel"
+            aria-labelledby="pref-tab-console"
+            hidden
+          >
+            <div class="access-card">
+              <h3>Consola principal remota · acceso de operador</h3>
+              <label
+                >Acceso<select id="console-access-mode">
+                  <option value="disabled">Deshabilitado</option>
+                  <option value="password">Con contraseña</option>
+                  <option value="open">Abierto sin contraseña</option>
+                </select></label
+              ><label
+                >Contraseña nueva<input
+                  id="console-password"
+                  type="password"
+                  autocomplete="new-password" /></label
+              ><button id="console-access-save">
+                Aplicar acceso de consola</button
+              ><label
+                >Enlace de consola<input
+                  id="console-remote-url"
+                  type="text"
+                  readonly
+              /></label>
+              <p class="hint">
+                Da control de toda la consola, incluidos main, efectos, motor y
+                configuración. Usa el servidor de control; es independiente del
+                permiso para auxiliares.
+              </p>
+            </div>
+            <p class="hint">
+              El servidor de control atiende consola y auxiliares.
+              <button type="button" data-preference="network">
+                Configurar servidores y puertos
+              </button>
+            </p>
+          </section>
+          <section
+            id="pref-mix"
+            role="tabpanel"
+            aria-labelledby="pref-tab-mix"
+            hidden
+          >
+            <div class="access-card">
+              <h3>Enlace único de mezclas auxiliares</h3>
+              <label
+                >Acceso<select id="mix-access-mode">
+                  <option value="disabled">Solo enlaces personales</option>
+                  <option value="password">Contraseña compartida</option>
+                  <option value="open">Abierto sin contraseña</option>
+                </select></label
+              ><label
+                >Contraseña nueva<input
+                  id="mix-password"
+                  type="password"
+                  autocomplete="new-password" /></label
+              ><label
+                >Máximo de los envíos (dB)<input
+                  id="mix-access-max"
+                  type="number"
+                  min="-60"
+                  max="6"
+                  step="0.1"
+                  value="0" /></label
+              ><label
+                ><input id="mix-access-pre" type="checkbox" /> Permitir
+                PRE/POST</label
+              ><button id="mix-access-save">Aplicar acceso de mezclas</button
+              ><label
+                >Enlace único<input id="mix-generic-url" type="text" readonly
+              /></label>
+              <p class="hint">
+                En el enlace único se puede elegir cualquier auxiliar. Los
+                enlaces personales siguen limitados a su auxiliar.
+              </p>
+            </div>
+            <section id="remote-admin">
+              <h3>Mezclas personales · control remoto</h3>
+              <div class="remote-create-grid">
+                <label
+                  >Participante<input
+                    id="remote-label"
+                    type="text"
+                    maxlength="80"
+                    placeholder="Nombre"
+                /></label>
+                <label>Auxiliar<select id="remote-aux"></select></label>
+                <label
+                  >Nivel máximo por envío (dB)<input
+                    id="remote-max"
+                    type="number"
+                    min="-60"
+                    max="6"
+                    step="0.1"
+                    value="0"
+                /></label>
+                <label
+                  ><input id="remote-pre" type="checkbox" /> Permitir
+                  PRE/POST</label
+                >
+              </div>
+              <button id="remote-create">Crear enlace personal</button>
+              <div id="remote-links"></div>
+              <p id="remote-status" role="status"></p>
+              <p class="hint">
+                Cada enlace controla solo sus envíos a un auxiliar. El nivel y
+                mute de salida quedan en manos del operador. Al cargar una
+                escena, cambiar la cantidad de canales/auxiliares o detener el
+                servidor se revocan los enlaces. El control no añade un búfer al
+                audio local.
+              </p>
+            </section>
+            <p class="hint">
+              El servidor de control atiende consola y auxiliares.
+              <button type="button" data-preference="network">
+                Configurar servidores y puertos
+              </button>
+            </p>
+          </section>
+          <section
+            id="pref-listen"
+            role="tabpanel"
+            aria-labelledby="pref-tab-listen"
+            hidden
+          >
+            <h3>Escucha</h3>
+            <p>
+              Comparte este enlace para escuchar el master o un auxiliar desde
+              otro dispositivo de la misma red.
+            </p>
+            <label
+              >Enlace de escucha<input
+                id="network-url"
+                type="text"
+                readonly
+                spellcheck="false"
+            /></label>
+            <div class="form-row">
+              <button id="network-copy">Copiar enlace</button
+              ><a id="network-open" target="_blank" rel="noreferrer"
+                >Abrir escucha</a
+              >
+            </div>
+            <p id="network-status" role="status"></p>
+            <div class="access-card">
+              <h3>Acceso a escucha</h3>
+              <label
+                >Enlace<select id="listen-access-mode">
+                  <option value="disabled">Enlace con clave</option>
+                  <option value="password">Enlace único con contraseña</option>
+                  <option value="open">Enlace abierto sin contraseña</option>
+                </select></label
+              ><label
+                >Contraseña nueva<input
+                  id="listen-password"
+                  type="password"
+                  autocomplete="new-password" /></label
+              ><button id="listen-access-save">
+                Aplicar acceso de escucha
+              </button>
+            </div>
+            <p class="hint">
+              Hasta ocho oyentes simultáneos. Cada uno elige su mezcla y volumen
+              local. El búfer del navegador añade retardo; esta escucha es de
+              referencia.
+            </p>
+            <p class="hint">
+              El servidor de control atiende consola y auxiliares.
+              <button type="button" data-preference="network">
+                Configurar servidores y puertos
+              </button>
+            </p>
+          </section>
+          <section
+            id="pref-network"
+            role="tabpanel"
+            aria-labelledby="pref-tab-network"
+          >
+            <h3>Red local y Tailscale</h3>
+            <label
+              >Interfaz / dirección del sistema<select id="network-interface">
+                <option value="">Manual / MagicDNS</option>
+              </select></label
+            >
+            <label
+              >Dirección para compartir (opcional)<input
+                id="network-host"
+                type="text"
+                placeholder="100.x.y.z o equipo.tailnet.ts.net"
+                spellcheck="false"
+            /></label>
+            <button id="network-host-apply">
+              Aplicar dirección a los enlaces
+            </button>
+            <p class="hint">
+              Vacío: IP local sugerida. En Tailscale usa la IP 100.x o nombre
+              MagicDNS del PC; los dispositivos deben tener acceso a él en el
+              tailnet.
+            </p>
+            <div class="server-grid">
+              <div class="access-card">
+                <h3>Servidor de control</h3>
+                <p>Consola principal y auxiliares comparten este puerto.</p>
+                <div class="form-row">
+                  <label
+                    >Puerto de control<input
+                      id="remote-port"
+                      type="number"
+                      min="1024"
+                      max="65535"
+                      value="17842" /></label
+                  ><button id="remote-toggle">Iniciar control remoto</button>
+                </div>
+              </div>
+              <div class="access-card">
+                <h3>Servidor de escucha</h3>
+                <p>Audio de main y auxiliares, con un puerto independiente.</p>
+                <div class="form-row">
+                  <label
+                    >Puerto<input
+                      id="network-port"
+                      type="number"
+                      min="1024"
+                      max="65535"
+                      value="17841" /></label
+                  ><button id="network-toggle">Iniciar escucha LAN</button>
+                </div>
+              </div>
+            </div>
+            <p class="hint">
+              Una sola instancia por puerto. Si abres otra copia de Monitor Mix,
+              usa puertos diferentes. Permite ambos puertos en el firewall de
+              Windows para la red utilizada. En Tailscale todos los
+              participantes necesitan acceso al PC en el tailnet.
+            </p>
+          </section>
         </div>
-        <button id="remote-create">Crear enlace personal</button>
-        <div id="remote-links"></div>
-        <p id="remote-status" role="status"></p>
-        <p class="hint">
-          Cada enlace controla solo sus envíos a un auxiliar. El nivel y mute de
-          salida quedan en manos del operador. Al cargar una escena, cambiar la
-          cantidad de canales/auxiliares o detener el servidor se revocan los
-          enlaces. El control no añade un búfer al audio local.
-        </p>
-      </section>
-      <p class="hint">
-        Hasta ocho oyentes simultáneos. Cada uno elige su mezcla y volumen
-        local. El búfer del navegador añade retardo; esta escucha no reemplaza
-        el monitoreo de escenario. Permite el puerto de Monitor Mix en el
-        firewall de la red privada si Windows lo solicita. Si hay varias redes,
-        usa la IP del PC accesible por los oyentes.
-      </p>
+      </div>
+      <footer class="preferences-footer">
+        <span id="preferences-services"></span>
+        <p id="access-status" role="status"></p>
+      </footer>
     </dialog>
     <dialog id="latency-dialog">
       <div class="dialog-heading">
@@ -776,7 +903,7 @@
       </p>
       <p class="hint">
         Cerrar la ventana de la consola no detiene el audio. Usa DETENER o
-        cierra el proceso Monitor Mix. Los índices de conectores físicos
+        elige Salir desde el icono de Monitor Mix en la bandeja de Windows. Los índices de conectores físicos
         dependen del controlador.
       </p>
     </dialog>

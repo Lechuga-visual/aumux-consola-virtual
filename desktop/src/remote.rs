@@ -126,7 +126,7 @@ impl Remote {
         self.stop();
         let host = std::env::var("MONITOR_REMOTE_BIND").unwrap_or_else(|_| "0.0.0.0".into());
         let server = TcpListener::bind((host.as_str(), port))
-            .map_err(|e| format!("No se pudo abrir control remoto: {e}"))?;
+            .map_err(|e| crate::web_http::bind_error("control remoto", &host, port, e))?;
         server.set_nonblocking(true).map_err(|e| e.to_string())?;
         self.port.store(
             server.local_addr().map_err(|e| e.to_string())?.port(),
@@ -399,24 +399,12 @@ impl Remote {
         self.rpc.pop()
     }
     fn serve(&self, mut stream: TcpStream, alive: Arc<AtomicBool>) -> std::io::Result<()> {
-        stream.set_read_timeout(Some(Duration::from_secs(2)))?;
-        stream.set_write_timeout(Some(Duration::from_secs(2)))?;
+        stream.set_write_timeout(Some(Duration::from_secs(5)))?;
         stream.set_nodelay(true)?;
-        let until = Instant::now() + Duration::from_secs(2);
-        let mut raw = Vec::new();
-        let mut byte = [0];
-        while raw.len() < 8192 && Instant::now() < until {
-            if stream.read(&mut byte)? == 0 {
-                return Ok(());
-            }
-            raw.push(byte[0]);
-            if raw.ends_with(b"\r\n\r\n") {
-                break;
-            }
-        }
-        if !raw.ends_with(b"\r\n\r\n") {
-            return send(&mut stream, 413, "text/plain", "Invalid headers");
-        }
+        let raw = match crate::web_http::headers(&mut stream) {
+            Ok(v) => v,
+            Err(e) => return crate::web_http::request_error(&mut stream, e),
+        };
         let head = String::from_utf8_lossy(&raw);
         let mut lines = head.lines();
         let mut first = lines.next().unwrap_or("").split_whitespace();
@@ -921,16 +909,22 @@ fn read_body(
     transfer: Option<&str>,
     max: usize,
 ) -> std::io::Result<Vec<u8>> {
-    if kind != Some("application/json") || transfer.is_some() {
-        return Err(std::io::Error::other("JSON required"));
+    let result = (|| {
+        if kind != Some("application/json") || transfer.is_some() {
+            return Err(std::io::Error::other("JSON required"));
+        }
+        let n = length
+            .and_then(|v| v.parse::<usize>().ok())
+            .filter(|v| *v <= max)
+            .ok_or_else(|| std::io::Error::other("Invalid body length"))?;
+        let mut body = vec![0; n];
+        s.read_exact(&mut body)?;
+        Ok(body)
+    })();
+    if let Err(ref error) = result {
+        crate::web_http::request_error(s, std::io::Error::new(error.kind(), error.to_string()))?;
     }
-    let n = length
-        .and_then(|v| v.parse::<usize>().ok())
-        .filter(|v| *v <= max)
-        .ok_or_else(|| std::io::Error::other("Invalid body length"))?;
-    let mut body = vec![0; n];
-    s.read_exact(&mut body)?;
-    Ok(body)
+    result
 }
 
 /// Three-way merge for simultaneous operator consoles: untouched fields follow the current server.

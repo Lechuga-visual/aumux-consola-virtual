@@ -33,3 +33,9 @@ Artcraft. Los efectos comerciales del usuario no se incluyen en la descarga.
 
 La aplicación combinada 0.5 se distribuye bajo GPL-3.0-only, con fuente
 completa del DSP y scripts de compilación en el ZIP. Ver `COPYING.GPL-3.0`.
+
+## tiny_http 0.12.0
+
+MIT OR Apache-2.0. Vendored from the published crate with a worker-reservation
+fix for simultaneous keep-alive connections. See `vendor/tiny-http/ORIGIN.md`
+and the retained upstream licenses.

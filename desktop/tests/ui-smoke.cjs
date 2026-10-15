@@ -51,7 +51,25 @@ const path = require("node:path");
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
     await fetch(url, { signal: AbortSignal.timeout(5000) });
-    await page.goto(url, { waitUntil: "domcontentloaded" });
+    const pendingRequests = new Set();
+    page.on("request", (r) => pendingRequests.add(r.url()));
+    page.on("requestfinished", (r) => pendingRequests.delete(r.url()));
+    page.on("requestfailed", (r) => pendingRequests.delete(r.url()));
+    try {
+      await page.goto(url, { waitUntil: "domcontentloaded" });
+    } catch (error) {
+      console.error("Navigation diagnostic", {
+        pending: [...pendingRequests],
+        errors,
+        state: await page
+          .evaluate(() => ({
+            ready: document.readyState,
+            title: document.title,
+          }))
+          .catch(() => null),
+      });
+      throw error;
+    }
     await page.waitForSelector("#mixer .strip");
     assert.equal(await page.locator("#mixer .strip").count(), 8);
     assert.equal(await page.locator("#buses .strip").count(), 5);

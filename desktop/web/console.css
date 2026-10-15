@@ -2955,3 +2955,193 @@ body.touch-mode {
   min-height: 32px;
   font-size: 11px;
 }
+
+/* Preferences: category navigation inspired by desktop audio tools. */
+#network-dialog {
+  width: min(1000px, 96vw);
+  height: min(760px, 92dvh);
+  max-height: 92dvh;
+  overflow: hidden;
+  padding: 0;
+}
+#network-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+#network-dialog .dialog-heading {
+  margin: 0;
+  padding: 14px 18px;
+  border-bottom: 1px solid #46515e;
+  flex-shrink: 0;
+}
+.preferences-layout {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+}
+.preferences-nav {
+  display: flex;
+  flex-direction: column;
+  padding: 12px 8px;
+  gap: 4px;
+  background: #1a2028;
+  border-right: 1px solid #46515e;
+  overflow: auto;
+}
+.preferences-nav button {
+  text-align: left;
+  padding: 12px;
+  white-space: normal;
+}
+.preferences-nav [aria-selected="true"] {
+  background: #315264;
+  border-color: #74bdd4;
+  color: #fff;
+}
+.preferences-content {
+  overflow: auto;
+  min-width: 0;
+  padding: 0 20px 18px;
+  overscroll-behavior: contain;
+}
+.preferences-content [hidden] {
+  display: none;
+}
+.preferences-content label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 0;
+}
+.preferences-content label:has(input[type="checkbox"]) {
+  flex-direction: row;
+  align-items: center;
+}
+.preferences-content input:not([type="checkbox"]),
+.preferences-content select {
+  width: 100%;
+  min-width: 0;
+}
+#network-dialog .access-card {
+  margin-top: 14px;
+}
+#network-dialog .access-card h3 {
+  margin-top: 0;
+  padding-top: 0;
+  border: 0;
+}
+.server-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.server-grid .form-row {
+  flex-wrap: wrap;
+}
+.preferences-footer {
+  border-top: 1px solid #46515e;
+  padding: 10px 18px;
+  min-height: 42px;
+  flex-shrink: 0;
+  color: #a9c4ce;
+}
+.preferences-footer p:empty {
+  display: none;
+}
+.preferences-footer p {
+  margin: 6px 0 0;
+}
+#access-status[data-error="true"] {
+  color: #ffb0a6;
+}
+.tools-dropdown[popover] {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  right: auto;
+  overflow: auto;
+  box-sizing: border-box;
+  max-height: calc(100dvh - 16px);
+}
+.tools-dropdown[popover]:not(:popover-open) {
+  display: none;
+}
+.touch-mode .tools-dropdown[popover] {
+  right: auto;
+}
+@media (max-width: 650px) {
+  .preferences-layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .preferences-nav {
+    flex-direction: row;
+    border-right: 0;
+    border-bottom: 1px solid #46515e;
+    padding: 6px;
+  }
+  .preferences-nav button {
+    flex: 0 0 auto;
+    padding: 10px;
+  }
+  .preferences-content {
+    padding: 0 12px 12px;
+  }
+  .server-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+/* Compact aligned preference rows and framed groups, as in desktop mixers. */
+#network-dialog .access-card {
+  display: block;
+  border: 1px solid #12171d;
+  background: #20262f;
+  padding: 16px;
+  margin: 16px 0;
+}
+#network-dialog .access-card > h3 {
+  margin-bottom: 16px;
+}
+.preferences-content label {
+  display: grid;
+  grid-template-columns: minmax(140px, 0.8fr) minmax(0, 1.4fr);
+  align-items: center;
+  gap: 12px;
+  margin: 10px 0;
+}
+.preferences-content input[type="password"] {
+  background: #171c24;
+  border: 1px solid #39434e;
+  color: #e3e8ed;
+  padding: 6px;
+}
+.preferences-content .form-row label,
+.preferences-content .remote-create-grid label {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+.preferences-content label:has(input[type="checkbox"]) {
+  display: flex;
+  flex-direction: row;
+}
+.preferences-content label[hidden] {
+  display: none;
+}
+#network-dialog .access-card > button {
+  display: block;
+  margin: 12px 0 12px auto;
+}
+#network-dialog .access-card > p {
+  margin: 12px 0;
+  line-height: 1.5;
+}
+@media (max-width: 650px) {
+  .preferences-content label {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+}

@@ -1,4 +1,4 @@
-# Monitor Mix 0.9 · prueba local en Windows x64
+# Monitor Mix 0.10 · prueba local en Windows x64
 
 Miniapp de mezcla con canales y auxiliares configurables y master estéreo, a 48 kHz. Reutiliza DSP
 y host VST3 de SoundCraft de Artcraft, con una superficie y un ruteo propios.
@@ -6,7 +6,7 @@ Es un prototipo para pruebas; todavía no está validado para una sesión en viv
 
 ## Probar sonido sin ASIO ni interfaz externa
 
-1. Extrae **todo** `MonitorMix-0.9.0-Windows-x64.zip` y ejecuta `MonitorMix.exe`.
+1. Extrae **todo** `MonitorMix-0.10.0-Windows-x64.zip` y ejecuta `MonitorMix.exe`.
    Cierra la versión anterior antes de abrir esta.
 2. Pulsa **AUDIO PC**. Usa los parlantes/audífonos predeterminados de Windows
    mediante WASAPI, sin controlador ASIO ni dispositivo MOTU.
@@ -33,17 +33,19 @@ con una entrada gradual de un bloque. **DETENER** libera el dispositivo. Cerrar 
 de Monitor Mix termina la app; cerrar solo su ventana gráfica no detiene el
 proceso ni el audio.
 
-## Novedades 0.9
+## Novedades 0.10
 
-- **Herramientas → Interfaz touch**: automática/activada/desactivada; faders sin
-  desplazar verticalmente la página y acciones de tira mediante ⋮.
-- **Control remoto**: enlace único con contraseña o abierto y selector de auxiliar;
-  consola principal remota con permiso independiente; escucha genérica/protegida.
-- Selector de interfaz/IP local o Tailscale para los enlaces.
-- Indicadores de componentes de latencia y calculadora en Herramientas.
+- **Preferencias** agrupa consola remota, auxiliares, escucha y redes en categorías.
+  Inicia los servidores y elige IP/puertos en **Redes y servidores**.
+- **Herramientas → Interfaz touch** se activa manualmente y se recuerda por navegador.
+  El menú queda anclado al botón, también en touch.
+- Escucha con objetivo de búfer 40/80/120/200 ms y reconexión automática.
+- Inicio normal sin terminal, con icono de bandeja para abrir la consola o salir.
+  Una segunda ejecución abre la instancia existente. Cerrar la consola deja audio
+  y servidores activos; usa **Salir** desde el icono para detenerlos.
+- El paquete aún no tiene firma Authenticode: [opciones de firma](firma-windows.md).
 
-Consulta [la guía 0.9](interfaz-0.9.md) para configurar accesos y distinguir
-latencias calculadas, declaradas y no medidas. La marca superior debe indicar 0.9.
+Consulta [la guía 0.10](interfaz-0.10.md). La marca superior debe indicar 0.10.
 
 ## Control remoto web 0.8
 
@@ -52,7 +54,7 @@ El participante ajusta solo sus envíos. Puedes permitir PRE/POST y limitar nive
 Para Tailscale, usa la IP 100.x o MagicDNS en **Dirección para compartir** y aplica.
 Control usa TCP 17842 y escucha TCP 17841; la escucha sigue teniendo búfer.
 Consulta [la guía de control remoto y Tailscale](interfaz-0.8.md) para pasos,
-permisos, reconexión y límites. La consola debe indicar 0.8.
+permisos, reconexión y límites. Los permisos y enlaces siguen siendo compatibles; consulta la organización actual en la guía 0.10.
 
 ## Novedades 0.7
 
@@ -301,7 +303,7 @@ Grabación multipista y OSC/Mackie pendientes.
 
 Si no aparecen **+ Canal**, **+ Aux** y **Canales y auxiliares**, cierra el
 proceso anterior y abre el ejecutable del ZIP nuevo: la marca superior debe
-mostrar **0.9**. Se prueba en Windows extrayendo todo el ZIP; no mezcles
+mostrar **0.10**. Se prueba en Windows extrayendo todo el ZIP; no mezcles
 archivos de varias versiones.
 
 Las novedades de dinámica, superficie adaptativa y escucha LAN se describen en

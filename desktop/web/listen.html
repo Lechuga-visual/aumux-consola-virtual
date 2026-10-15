@@ -135,6 +135,14 @@
         step="0.01"
         value="0.5"
     /></label>
+    <label
+      >Objetivo del búfer de escucha<select id="buffer">
+        <option value="40">40 ms · red estable</option>
+        <option value="80" selected>80 ms · equilibrado</option>
+        <option value="120">120 ms · más tolerancia</option>
+        <option value="200">200 ms · red variable</option>
+      </select></label
+    >
     <p id="state" role="status">Preparado</p>
     <details>
       <summary id="listen-latency-summary">Latencia de esta escucha</summary>
@@ -153,23 +161,40 @@
     let latencyData = null,
       statusRtt = 0,
       senderQueue = 0;
-    let session = 0;
-    let context,
+    let session = 0,
+      context,
       gain,
       abort,
       sources = new Set(),
       playing = false,
       next = 0;
-    function stop() {
-      session++;
-      playing = false;
-      abort?.abort();
-      for (const s of sources) {
+    let statusTimer,
+      statusBusy = false,
+      statusFailures = 0,
+      retries = 0,
+      retryTimer;
+    const buffer = document.querySelector("#buffer");
+    try {
+      const saved = localStorage.getItem("mm-listen-buffer");
+      buffer.value = ["40", "80", "120", "200"].includes(saved) ? saved : "80";
+    } catch {}
+    const targetSeconds = () => Number(buffer.value) / 1000;
+    function clearAudio() {
+      for (const source of sources) {
         try {
-          s.stop();
+          source.stop();
         } catch {}
       }
       sources.clear();
+      next = 0;
+    }
+    function stop() {
+      session++;
+      playing = false;
+      retries = 0;
+      clearTimeout(retryTimer);
+      abort?.abort();
+      clearAudio();
       context?.close();
       context = null;
       state.textContent = "Detenido";
@@ -178,53 +203,93 @@
     }
     async function play() {
       stop();
-      const sessionId = session;
+      const ownSession = session;
       playing = true;
       document.querySelector("#play").disabled = true;
       try {
-        context = new AudioContext({ sampleRate: 48000 });
+        context = new AudioContext({
+          sampleRate: 48000,
+          latencyHint: "interactive",
+        });
         gain = context.createGain();
         gain.gain.value = Number(document.querySelector("#volume").value);
         gain.connect(context.destination);
         await context.resume();
-        if (sessionId !== session) return;
-        abort = new AbortController();
-        const own = abort,
-          ctx = context;
+        if (ownSession === session) connectStream(ownSession);
+      } catch (e) {
+        if (ownSession === session) {
+          stop();
+          state.textContent = e.message;
+        }
+      }
+    }
+    async function connectStream(ownSession) {
+      if (!playing || ownSession !== session) return;
+      abort?.abort();
+      clearAudio();
+      const own = new AbortController(),
+        ctx = context;
+      abort = own;
+      // A stalled header/read must not leave the player hanging indefinitely.
+      let watchdog;
+      const arm = () => {
+        clearTimeout(watchdog);
+        watchdog = setTimeout(() => own.abort(), 6000);
+      };
+      state.textContent = retries
+        ? "Reconectando escucha…"
+        : "Conectando escucha…";
+      try {
+        arm();
         const result = await fetch("/stream?key=" + key + "&bus=" + bus.value, {
           signal: own.signal,
+          cache: "no-store",
         });
-        if (sessionId !== session) {
+        if (ownSession !== session || abort !== own) {
           await result.body?.cancel();
           return;
         }
-        if (!result.ok) throw Error(await result.text());
+        if (!result.ok) {
+          const message = await result.text();
+          if (result.status === 403 || result.status === 400) {
+            stop();
+            state.textContent =
+              "Acceso o mezcla no disponible. Vuelve a abrir el enlace.";
+            return;
+          }
+          throw Error(message);
+        }
         const reader = result.body.getReader();
         let tail = new Uint8Array(0);
-        next = ctx.currentTime + 0.12;
-        state.textContent =
-          "Escuchando · " + bus.options[bus.selectedIndex].text;
-        while (playing && !own.signal.aborted) {
+        next = ctx.currentTime + targetSeconds();
+        while (playing && ownSession === session && abort === own) {
+          arm();
           const { value, done } = await reader.read();
-          if (done || own.signal.aborted || sessionId !== session) break;
+          if (done) throw Error("El servidor cerró la escucha");
+          if (own.signal.aborted || ownSession !== session || abort !== own)
+            break;
+          retries = 0;
+          state.textContent =
+            "Escuchando · " + bus.options[bus.selectedIndex].text;
           const bytes = new Uint8Array(tail.length + value.length);
           bytes.set(tail);
           bytes.set(value, tail.length);
-          const frames = Math.floor(bytes.length / 8);
+          let frames = Math.floor(bytes.length / 8);
           tail = bytes.slice(frames * 8);
           if (!frames) continue;
-          if (next > ctx.currentTime + 0.4) {
-            for (const s of sources) {
-              try {
-                s.stop();
-              } catch {}
-            }
-            sources.clear();
-            next = ctx.currentTime + 0.12;
+          // Discard old sound after a stall instead of replaying seconds of backlog.
+          const target = targetSeconds(),
+            maxQueue = Math.max(0.16, target * 2);
+          if (next > ctx.currentTime + maxQueue) {
+            clearAudio();
+            next = ctx.currentTime + target;
           }
-          next = Math.max(next, ctx.currentTime + 0.06);
+          const frameLimit = Math.max(480, Math.floor(target * 48000));
+          const offset = Math.max(0, frames - frameLimit) * 8;
+          frames = Math.min(frames, frameLimit);
+          next = Math.max(next, ctx.currentTime + target / 2);
           const audio = ctx.createBuffer(2, frames, 48000),
-            view = new DataView(bytes.buffer);
+            view = new DataView(bytes.buffer, offset);
           for (let side = 0; side < 2; side++) {
             const lane = audio.getChannelData(side);
             for (let f = 0; f < frames; f++)
@@ -239,15 +304,19 @@
           next += frames / 48000;
           if (sources.size === 1) renderLatency();
         }
-        if (playing && abort === own) {
-          stop();
-          state.textContent = "Conexión finalizada";
-        }
       } catch (e) {
-        if (e.name !== "AbortError" && sessionId === session) {
-          stop();
-          state.textContent = e.message;
+        if (playing && ownSession === session && abort === own) {
+          own.abort();
+          clearAudio();
+          retries++;
+          state.textContent = "Conexión interrumpida · reconectando escucha…";
+          retryTimer = setTimeout(
+            () => connectStream(ownSession),
+            Math.min(4000, 250 * 2 ** Math.min(retries - 1, 4)),
+          );
         }
+      } finally {
+        clearTimeout(watchdog);
       }
     }
     document.querySelector("#play").onclick = play;
@@ -255,17 +324,44 @@
     document.querySelector("#volume").oninput = (e) => {
       if (gain) gain.gain.value = Number(e.target.value);
     };
+    function switchStream() {
+      if (!playing) return;
+      session++;
+      clearTimeout(retryTimer);
+      retries = 0;
+      connectStream(session);
+    }
     bus.onchange = () => {
       renderLatency();
-      if (playing) play();
+      switchStream();
+    };
+    buffer.onchange = () => {
+      try {
+        localStorage.setItem("mm-listen-buffer", buffer.value);
+      } catch {}
+      switchStream();
     };
     async function update() {
+      if (statusBusy) return;
+      clearTimeout(statusTimer);
+      statusBusy = true;
       try {
         const started = performance.now();
-        const r = await fetch("/status?key=" + key);
-        if (!r.ok) throw Error("Enlace de escucha no válido");
+        const r = await fetch("/status?key=" + key, {
+          signal: AbortSignal.timeout(6000),
+          cache: "no-store",
+        });
+        if (r.status === 403) {
+          if (playing) stop();
+          throw Object.assign(
+            Error("Enlace de escucha no válido; vuelve a abrirlo"),
+            { accessDenied: true },
+          );
+        }
+        if (!r.ok) throw Error("Servidor de escucha ocupado");
         const s = await r.json(),
           value = bus.value;
+        statusFailures = 0;
         latencyData = s.latency;
         statusRtt = performance.now() - started;
         senderQueue = s.queue_ms_upper_bound || 0;
@@ -289,9 +385,28 @@
             ? "Preparado · motor activo"
             : "Motor detenido · la escucha entregará silencio";
       } catch (e) {
-        state.textContent = e.message;
+        statusFailures++;
+        if (!playing)
+          state.textContent = e.accessDenied
+            ? e.message
+            : "Sin conexión · comprobando el servidor…";
+      } finally {
+        statusBusy = false;
+        statusTimer = setTimeout(
+          update,
+          statusFailures
+            ? Math.min(6000, 500 * 2 ** Math.min(statusFailures - 1, 4))
+            : 1500,
+        );
       }
     }
+    window.addEventListener("online", update);
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) {
+        update();
+        if (playing) context?.resume().catch(() => {});
+      }
+    });
     function renderLatency() {
       const l = latencyData;
       if (!l?.block_ms) return;
@@ -317,6 +432,5 @@
     deviceLayout();
     update();
     setInterval(renderLatency, 500);
-    setInterval(update, 1500);
   </script>
 </html>

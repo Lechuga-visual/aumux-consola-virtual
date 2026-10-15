@@ -36,7 +36,8 @@ const fs = require("node:fs/promises");
         viewport: { width: 1500, height: 960 },
       });
     operator.on("pageerror", (e) => errors.push(e.message));
-    await operator.goto(url);
+    await fetch(url);
+    await operator.goto(url, { waitUntil: "domcontentloaded" });
     await operator.waitForSelector("#mixer .strip");
     await operator.evaluate(async () => {
       cfg.channels[0].generator = {
@@ -59,6 +60,7 @@ const fs = require("node:fs/promises");
       lastStatus.remote = await api("remote", { action: "start", port: 0 });
       updateRemoteAdmin(lastStatus.remote);
     });
+    await operator.locator("#pref-tab-network").click();
     await operator
       .locator("#network-host")
       .fill("studio.example-tailnet.ts.net");
@@ -66,6 +68,7 @@ const fs = require("node:fs/promises");
     await operator.waitForFunction(
       () => lastStatus.remote.host === "studio.example-tailnet.ts.net",
     );
+    await operator.locator("#pref-tab-mix").click();
     await operator.locator("#remote-label").fill("Voz principal");
     await operator.locator("#remote-aux").selectOption("1");
     await operator.locator("#remote-create").click();
@@ -75,11 +78,13 @@ const fs = require("node:fs/promises");
         await operator.locator(".remote-link input").first().inputValue()
       ).includes("studio.example-tailnet.ts.net"),
     );
+    await operator.locator("#pref-tab-network").click();
     await operator.locator("#network-host").fill("127.0.0.1");
     await operator.locator("#network-host-apply").click();
     await operator.waitForFunction(
       () => lastStatus.remote.host === "127.0.0.1",
     );
+    await operator.locator("#pref-tab-mix").click();
     await operator.locator("#remote-label").fill("Baterista");
     await operator.locator("#remote-aux").selectOption("2");
     await operator.locator("#remote-max").fill("-6");

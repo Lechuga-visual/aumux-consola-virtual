@@ -467,11 +467,14 @@ function updateWorkspaceStatus(s) {
   if ($("network-dialog").open) {
     updateRemoteAdmin(s.remote);
     updateAccessUI(s);
+    $("preferences-services").textContent =
+      `Control: ${s.remote.enabled ? "activo · " + s.remote.port : "detenido"} · Escucha: ${s.listen.enabled ? "activa · " + s.listen.port : "detenida"}`;
     const n = s.listen;
     $("network-toggle").textContent = n.enabled
       ? "Detener escucha LAN"
       : "Iniciar escucha LAN";
     $("network-port").disabled = n.enabled;
+    if (n.enabled) $("network-port").value = n.port;
     $("network-url").value = n.enabled ? n.url : "";
     $("network-open").href = n.enabled ? n.url : "#";
     $("network-status").textContent = n.enabled
@@ -481,6 +484,7 @@ function updateWorkspaceStatus(s) {
 }
 $("network-settings").onclick = () => {
   $("network-dialog").showModal();
+  showPreference("network");
   $("network-host").value =
     lastStatus?.remote?.host || lastStatus?.listen?.host || "";
   if (lastStatus) updateWorkspaceStatus(lastStatus);
@@ -498,6 +502,8 @@ $("network-toggle").onclick = async () => {
     updateWorkspaceStatus(lastStatus);
   } catch (e) {
     $("network-status").textContent = e.message;
+    $("access-status").textContent = e.message;
+    $("access-status").dataset.error = "true";
   } finally {
     button.disabled = false;
   }
@@ -541,7 +547,7 @@ async function syncRemoteMix(s) {
     return;
   remoteSyncBusy = true;
   try {
-    const r = await fetch("/api/sync-state");
+    const r = await webFetch("/api/sync-state");
     if (!r.ok) return;
     const incoming = await r.json();
     if (configRequests || structureBusy || remotePointerDown || !serverConfig)
@@ -587,6 +593,7 @@ function updateRemoteAdmin(n) {
     ? "Detener control remoto"
     : "Iniciar control remoto";
   $("remote-port").disabled = n.enabled;
+  if (n.enabled) $("remote-port").value = n.port;
   $("remote-create").disabled = !n.enabled || cfg.buses.length <= 1;
   $("remote-status").textContent = n.enabled
     ? `${n.sessions.length} / 32 enlaces personales activos`
@@ -648,7 +655,7 @@ function updateRemoteAdmin(n) {
 }
 $("remote-settings").onclick = () => {
   $("network-settings").click();
-  $("remote-admin").scrollIntoView({ block: "nearest" });
+  showPreference("mix");
 };
 $("network-host-apply").onclick = async () => {
   try {
@@ -675,6 +682,8 @@ $("remote-toggle").onclick = async () => {
   } catch (e) {
     error(e);
     $("remote-status").textContent = e.message;
+    $("access-status").textContent = e.message;
+    $("access-status").dataset.error = "true";
   } finally {
     button.disabled = false;
   }

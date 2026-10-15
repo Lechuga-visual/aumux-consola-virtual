@@ -488,7 +488,8 @@
       let selectedAux = null,
         mixGeneration = 0,
         authRequired = false,
-        controlRtt = 0;
+        controlRtt = 0,
+        networkFailures = 0;
       let pollTimer,
         pollBusy = false;
       let state,
@@ -535,6 +536,7 @@
           {
             method: change ? "POST" : "GET",
             cache: "no-store",
+            signal: AbortSignal.timeout(6000),
             headers: {
               "X-Mix-Key": key,
               ...(change ? { "Content-Type": "application/json" } : {}),
@@ -555,9 +557,13 @@
       }
       function disconnected(e) {
         connected = false;
+        networkFailures++;
         pending.clear();
         $("#status").textContent = revoked ? "Enlace revocado" : "Sin conexión";
-        $("#notice").textContent = e.message || "Reconectando…";
+        $("#notice").textContent =
+          revoked || authRequired
+            ? e.message
+            : "Conexión interrumpida; reconectando automáticamente. No se repetirán cambios pendientes.";
         $("#reconnect").style.display = "block";
         for (const w of widgets.values())
           for (const i of w.root.querySelectorAll("input,button"))
@@ -700,6 +706,7 @@
       }
       function accept(s) {
         if (!s) return;
+        networkFailures = 0;
         if (state && s.epoch === state.epoch && s.revision < state.revision)
           return;
         if (
@@ -791,16 +798,26 @@
           const s = await request();
           if (generation === mixGeneration) accept(s);
         } catch (e) {
-          disconnected(e);
+          if (generation === mixGeneration) disconnected(e);
         } finally {
           pollBusy = false;
-          if (!revoked && !authRequired) pollTimer = setTimeout(poll, 100);
+          if (!revoked && !authRequired)
+            pollTimer = setTimeout(
+              poll,
+              networkFailures
+                ? Math.min(4000, 250 * 2 ** Math.min(networkFailures - 1, 4))
+                : 100,
+            );
         }
       }
       $("#reconnect").onclick = () => {
         if (revoked) location.reload();
         else poll();
       };
+      window.addEventListener("online", () => poll());
+      document.addEventListener("visibilitychange", () => {
+        if (!document.hidden) poll();
+      });
       document.addEventListener("contextmenu", (e) => {
         if (!e.target.closest("input,textarea")) e.preventDefault();
       });
@@ -822,6 +839,7 @@
         e.preventDefault();
         try {
           const r = await fetch("/login/mix", {
+            signal: AbortSignal.timeout(6000),
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ password: $("#mix-login-password").value }),

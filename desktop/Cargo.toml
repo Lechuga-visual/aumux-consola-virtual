@@ -1,6 +1,6 @@
 [package]
 name = "monitor-mix"
-version = "0.9.0"
+version = "0.10.0"
 edition = "2024"
 rust-version = "1.95"
 license = "GPL-3.0-only"
@@ -24,3 +24,7 @@ cc = "1"
 [profile.release]
 opt-level = 2
 codegen-units = 8
+
+[patch.crates-io]
+# Keep-alive worker reservation fix; see vendor/tiny-http/ORIGIN.md.
+tiny_http = { path = "vendor/tiny-http" }

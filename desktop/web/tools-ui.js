@@ -1,10 +1,7 @@
 "use strict";
 function applyTouchMode() {
   const mode = $("touch-mode").value;
-  const active =
-    mode === "on" ||
-    (mode === "auto" &&
-      (matchMedia("(any-pointer: coarse)").matches || innerWidth < 850));
+  const active = mode === "on";
   document.body.classList.toggle("touch-mode", active);
   document
     .querySelector(".app")
@@ -18,13 +15,14 @@ function applyTouchMode() {
     localStorage.setItem("mm-touch-mode", mode);
   } catch {}
   layoutStrips();
+  positionTools();
 }
 try {
-  $("touch-mode").value = localStorage.getItem("mm-touch-mode") || "auto";
+  $("touch-mode").value =
+    localStorage.getItem("mm-touch-mode") === "on" ? "on" : "off";
 } catch {}
 $("touch-mode").onchange = applyTouchMode;
 window.addEventListener("resize", applyTouchMode);
-matchMedia("(any-pointer: coarse)").addEventListener("change", applyTouchMode);
 applyTouchMode();
 $("open-calculator").onclick = () => {
   $("tools-menu").open = false;
@@ -137,6 +135,7 @@ function updateAccessUI(s) {
     $("mix-access-max").value = s.remote.shared_max_db ?? 0;
     $("mix-access-pre").checked = s.remote.shared_allow_pre ?? false;
     accessInitialized = true;
+    updateAccessFields();
   }
   $("mix-generic-url").value =
     s.remote.enabled && s.remote.mix_access.mode !== "disabled"
@@ -170,10 +169,12 @@ for (const scope of ["mix", "console", "listen"])
         });
       $(scope + "-password").value = "";
       updateWorkspaceStatus(lastStatus);
+      $("access-status").dataset.error = "false";
       $("access-status").textContent =
         "Acceso actualizado; las sesiones por contraseña anteriores se cerraron.";
     } catch (e) {
       $("access-status").textContent = e.message;
+      $("access-status").dataset.error = "true";
     } finally {
       button.disabled = false;
     }
@@ -182,7 +183,7 @@ $("network-settings").addEventListener("click", async () => {
   accessInitialized = false;
   if (lastStatus) updateAccessUI(lastStatus);
   try {
-    const r = await fetch("/api/addresses");
+    const r = await webFetch("/api/addresses");
     const data = await r.json();
     const current = $("network-host").value;
     $("network-interface").replaceChildren(
@@ -217,3 +218,79 @@ $("toggle-inspector").onclick = () => {
 };
 
 $("mixer-layout").addEventListener("change", applyTouchMode);
+
+function positionTools() {
+  const menu = $("tools-menu"),
+    panel = menu.querySelector(".tools-dropdown");
+  if (!menu.open) return;
+  const rect = menu.querySelector("summary").getBoundingClientRect();
+  panel.style.width = Math.min(320, innerWidth - 16) + "px";
+  panel.style.maxHeight = Math.max(80, innerHeight - 16) + "px";
+  const height = panel.getBoundingClientRect().height;
+  const below = innerHeight - rect.bottom - 8;
+  const top =
+    below >= height || below >= rect.top - 8
+      ? rect.bottom + 4
+      : rect.top - height - 4;
+  panel.style.left =
+    Math.max(
+      8,
+      Math.min(rect.left, innerWidth - panel.getBoundingClientRect().width - 8),
+    ) + "px";
+  panel.style.top = Math.max(8, Math.min(top, innerHeight - height - 8)) + "px";
+}
+const toolsPanel = $("tools-menu").querySelector(".tools-dropdown");
+toolsPanel.setAttribute("popover", "manual");
+$("tools-menu").addEventListener("toggle", () => {
+  if ($("tools-menu").open) {
+    toolsPanel.showPopover();
+    positionTools();
+  } else toolsPanel.hidePopover();
+});
+window.addEventListener("resize", positionTools);
+window.addEventListener("scroll", positionTools, true);
+document.addEventListener("pointerdown", (e) => {
+  if (!$("tools-menu").contains(e.target)) $("tools-menu").open = false;
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") $("tools-menu").open = false;
+});
+function showPreference(name) {
+  for (const button of document.querySelectorAll(
+    '.preferences-nav [role="tab"]',
+  )) {
+    const active = button.dataset.preference === name;
+    button.setAttribute("aria-selected", active);
+    button.tabIndex = active ? 0 : -1;
+    $("pref-" + button.dataset.preference).hidden = !active;
+  }
+  $("network-dialog").dataset.category = name;
+  $("network-dialog").querySelector(".preferences-content").scrollTop = 0;
+}
+for (const button of document.querySelectorAll("[data-preference]"))
+  button.addEventListener("click", () =>
+    showPreference(button.dataset.preference),
+  );
+document.querySelector(".preferences-nav").addEventListener("keydown", (e) => {
+  const tabs = [...document.querySelectorAll('.preferences-nav [role="tab"]')];
+  let index = tabs.indexOf(document.activeElement);
+  if (index < 0) return;
+  if (["ArrowDown", "ArrowRight"].includes(e.key))
+    index = (index + 1) % tabs.length;
+  else if (["ArrowUp", "ArrowLeft"].includes(e.key))
+    index = (index + tabs.length - 1) % tabs.length;
+  else if (e.key === "Home") index = 0;
+  else if (e.key === "End") index = tabs.length - 1;
+  else return;
+  e.preventDefault();
+  tabs[index].focus();
+  tabs[index].click();
+});
+
+function updateAccessFields() {
+  for (const scope of ["mix", "console", "listen"])
+    $(scope + "-password").closest("label").hidden =
+      $(scope + "-access-mode").value !== "password";
+}
+for (const scope of ["mix", "console", "listen"])
+  $(scope + "-access-mode").addEventListener("change", updateAccessFields);

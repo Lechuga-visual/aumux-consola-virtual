@@ -1,3 +1,4 @@
+#![cfg_attr(windows, windows_subsystem = "windows")]
 mod access;
 mod bridge;
 mod compressor;
@@ -16,6 +17,8 @@ mod presets;
 mod remote;
 #[cfg(test)]
 mod test_support;
+mod tray;
+mod web_http;
 
 use config::*;
 use mixer::{Controls, Mixer};
@@ -494,6 +497,15 @@ fn run() -> Result<(), String> {
     if args.iter().any(|a| a == "--self-test") {
         return self_test();
     }
+    #[cfg(windows)]
+    let tray = if args.iter().any(|a| a == "--no-browser") {
+        None
+    } else {
+        let Some(tray) = tray::Tray::claim()? else {
+            return Ok(());
+        };
+        Some(tray)
+    };
     let server = Server::http("127.0.0.1:0").map_err(|e| e.to_string())?;
     let url = format!("http://{}", server.server_addr());
     let mut random = [0u8; 32];
@@ -511,8 +523,25 @@ fn run() -> Result<(), String> {
         #[cfg(not(windows))]
         let _ = std::process::Command::new("xdg-open").arg(&url).spawn();
     }
+    #[cfg(windows)]
+    if let Some(tray) = &tray {
+        tray.start()?;
+    }
     let mut next_remote = Instant::now();
     loop {
+        #[cfg(windows)]
+        if let Some(tray) = &tray {
+            let actions = tray.poll();
+            if actions & 2 != 0 {
+                app.stop();
+                app.listen.stop();
+                app.remote.stop();
+                return Ok(());
+            }
+            if actions & 1 != 0 {
+                open_app_window(&url);
+            }
+        }
         for _ in 0..4 {
             let Some(rpc) = app.remote.take_rpc() else {
                 break;
@@ -655,13 +684,15 @@ fn open_app_window(url: &str) {
             return;
         }
     }
-    let _ = std::process::Command::new("cmd")
-        .args(["/C", "start", "", url])
-        .spawn();
+    tray::open_url(url);
 }
 fn main() {
     if let Err(e) = run() {
         eprintln!("Monitor Mix: {e}");
+        #[cfg(windows)]
+        if !std::env::args().any(|arg| arg == "--no-browser" || arg == "--self-test") {
+            tray::error(&e);
+        }
         std::process::exit(1);
     }
 }
