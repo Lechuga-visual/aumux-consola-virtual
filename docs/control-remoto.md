@@ -6,8 +6,9 @@ Mackie HUI. Esta dirección queda documentada; **la versión 0.4 no implementa e
 protocolos ni controla CueMix/MOTU**. El trabajo actual es la superficie de mezcla.
 
 El control de mezclas personales por web ya está disponible en 0.8, con acceso
-limitado a un auxiliar por enlace y direcciones LAN/Tailscale/MagicDNS. Consulta
-[la guía web](interfaz-0.8.md). OSC y Mackie siguen pendientes.
+limitado a un auxiliar por enlace y direcciones LAN/Tailscale/MagicDNS. En 0.9 se
+añaden enlaces compartidos con selección de auxiliar y consola completa con
+autorización independiente. Consulta [la guía web](interfaz-0.9.md). OSC y Mackie siguen pendientes.
 
 ## Modos que se quieren incorporar
 

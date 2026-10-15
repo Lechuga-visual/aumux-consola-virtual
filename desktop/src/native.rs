@@ -38,6 +38,7 @@ unsafe extern "C" {
         callback: Callback,
         user: *mut c_void,
     ) -> i32;
+    fn mm_stream_latency(handle: *mut c_void) -> i64;
     fn mm_start(handle: *mut c_void) -> i32;
     fn mm_open_system(
         handle: *mut c_void,
@@ -107,6 +108,10 @@ impl Audio {
             }
         }
         Ok(out)
+    }
+    pub fn latency_frames(&self) -> Option<u64> {
+        let n = unsafe { mm_stream_latency(self.handle.as_ptr()) };
+        (n > 0).then_some(n as u64)
     }
     pub fn stop(&mut self) {
         // RtAudio stops and joins callbacks before we drop their state on this control thread.

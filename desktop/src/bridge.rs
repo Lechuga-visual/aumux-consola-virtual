@@ -79,6 +79,9 @@ impl Bridge {
         });
         Ok(bridge)
     }
+    pub fn queue_depth(&self) -> usize {
+        self.queue.len()
+    }
     pub fn status(&self) -> serde_json::Value {
         let ack = self.last_ack.load(Relaxed);
         serde_json::json!({"sent": self.sent.load(Relaxed),

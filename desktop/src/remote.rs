@@ -33,11 +33,15 @@ struct State {
     snapshot: Value,
     epoch: u64,
     revision: u64,
+    shared_max: f32,
+    shared_pre: bool,
 }
 #[derive(Deserialize, Debug)]
 #[serde(deny_unknown_fields)]
 pub struct Change {
     epoch: u64,
+    #[serde(default)]
+    aux: Option<usize>,
     channel: usize,
     level_db: Option<f32>,
     mute: Option<bool>,
@@ -45,6 +49,7 @@ pub struct Change {
 }
 struct Pending {
     key: String,
+    cookie: Option<String>,
     change: Change,
     deadline: Instant,
     reply: mpsc::SyncSender<Result<Value, String>>,
@@ -52,6 +57,13 @@ struct Pending {
 struct Runtime {
     alive: Arc<AtomicBool>,
     task: thread::JoinHandle<()>,
+}
+pub struct Rpc {
+    pub path: String,
+    pub body: Option<String>,
+    pub reply: mpsc::SyncSender<Result<Value, String>>,
+    pub deadline: Instant,
+    pub cookie: String,
 }
 pub struct Remote {
     state: Mutex<State>,
@@ -61,6 +73,10 @@ pub struct Remote {
     port: AtomicU16,
     host: Mutex<String>,
     connections: AtomicUsize,
+    pub mix_gate: crate::access::Gate,
+    pub console_gate: crate::access::Gate,
+    rpc: ArrayQueue<Rpc>,
+    latency: Mutex<Value>,
 }
 fn secret() -> Result<String, String> {
     let mut bytes = [0; 16];
@@ -77,6 +93,10 @@ impl Remote {
             port: AtomicU16::new(17842),
             host: Mutex::new(String::new()),
             connections: AtomicUsize::new(0),
+            mix_gate: crate::access::Gate::new(),
+            console_gate: crate::access::Gate::new(),
+            rpc: ArrayQueue::new(32),
+            latency: Mutex::new(Value::Null),
         })
     }
     pub fn set_host(&self, host: &str) -> Result<(), String> {
@@ -85,6 +105,8 @@ impl Remote {
     }
     pub fn stop(&self) {
         self.enabled.store(false, Release);
+        self.mix_gate.revoke();
+        self.console_gate.revoke();
         self.invalidate();
         if let Some(r) = self.runtime.lock().unwrap().take() {
             r.alive.store(false, Release);
@@ -161,7 +183,7 @@ impl Remote {
             crate::listen::url_host(&address),
             self.port.load(Relaxed)
         );
-        json!({"enabled":self.enabled.load(Acquire),"port":self.port.load(Relaxed),"revision":s.revision,"host":*host,"sessions":s.sessions.iter().map(|p|json!({"id":p.id,"label":p.label,"aux":p.aux,"max_db":p.max_db,"allow_pre":p.allow_pre,"url":format!("{origin}/#key={}",p.key)})).collect::<Vec<_>>()})
+        json!({"enabled":self.enabled.load(Acquire),"port":self.port.load(Relaxed),"revision":s.revision,"host":*host,"mix_access":self.mix_gate.status(),"shared_max_db":s.shared_max,"shared_allow_pre":s.shared_pre,"console_access":self.console_gate.status(),"generic_url":format!("{origin}/"),"console_url":format!("{origin}/console/"),"sessions":s.sessions.iter().map(|p|json!({"id":p.id,"label":p.label,"aux":p.aux,"max_db":p.max_db,"allow_pre":p.allow_pre,"url":format!("{origin}/#key={}",p.key)})).collect::<Vec<_>>()})
     }
     pub fn admin(self: &Arc<Self>, v: &Value, c: &Config) -> Result<Value, String> {
         match v["action"].as_str().unwrap_or("") {
@@ -206,6 +228,24 @@ impl Remote {
                 let id = v["id"].as_str().ok_or("Enlace requerido")?;
                 self.state.lock().unwrap().sessions.retain(|s| s.id != id);
             }
+            "access" => {
+                let mode = v["mode"].as_str().ok_or("Modo requerido")?;
+                match v["scope"].as_str().unwrap_or("") {
+                    "mix" => {
+                        let max = v["max_db"].as_f64().unwrap_or(0.0) as f32;
+                        if !max.is_finite() || !(-60.0..=6.0).contains(&max) {
+                            return Err("Límite inválido".into());
+                        }
+                        self.mix_gate.configure(mode, v["password"].as_str())?;
+                        let mut s = self.state.lock().unwrap();
+                        s.shared_max = max;
+                        s.shared_pre = v["allow_pre"].as_bool().unwrap_or(false);
+                        s.revision += 1;
+                    }
+                    "console" => self.console_gate.configure(mode, v["password"].as_str())?,
+                    _ => return Err("Ámbito inválido".into()),
+                }
+            }
             "revoke_all" => self.invalidate(),
             _ => return Err("Acción desconocida".into()),
         }
@@ -216,18 +256,57 @@ impl Remote {
             return;
         }
         let mut s = self.state.lock().unwrap();
-        if s.sessions.is_empty() {
+        if s.sessions.is_empty() && self.mix_gate.status()["mode"] == "disabled" {
             return;
         }
         s.snapshot = json!({"epoch":s.epoch,"revision":s.revision,"running":running,"emergency":ctl.emergency.load(Relaxed),"failed":ctl.failed.load(Relaxed),"channels":c.channels.iter().enumerate().map(|(i,ch)|{let(p,r)=ctl.channel_meters[i].snapshot();json!({"index":i,"name":ch.name,"format":ch.format,"levels":ch.sends_db,"mutes":ch.send_mute,"pre":ch.pre,"channel_mute":ch.mute,"peak":p,"rms":r})}).collect::<Vec<_>>(),"buses":c.buses.iter().enumerate().map(|(i,b)|{let(p,r)=ctl.bus_meters[i].snapshot();json!({"index":i,"name":b.name,"format":b.format,"gain_db":b.gain_db,"mute":b.mute,"peak":p,"rms":r})}).collect::<Vec<_>>()});
     }
+    fn resolve(
+        &self,
+        s: &State,
+        key: &str,
+        aux: Option<usize>,
+        cookie: Option<&str>,
+    ) -> Result<Session, String> {
+        if !key.is_empty() {
+            let p = s
+                .sessions
+                .iter()
+                .find(|p| p.key == key)
+                .ok_or("Enlace revocado o inválido")?;
+            if aux.is_some_and(|a| a != p.aux) {
+                return Err("Enlace limitado a su auxiliar".into());
+            }
+            return Ok(p.clone());
+        }
+        if !self.mix_gate.authorized(cookie.unwrap_or("")) {
+            return Err("Autenticación requerida".into());
+        }
+        let aux = aux.unwrap_or(1);
+        if aux == 0 || aux >= s.snapshot["buses"].as_array().map_or(0, Vec::len) {
+            return Err("Selecciona un auxiliar existente".into());
+        }
+        Ok(Session {
+            id: String::new(),
+            key: String::new(),
+            label: "Mi mezcla".into(),
+            aux,
+            max_db: s.shared_max,
+            allow_pre: s.shared_pre,
+        })
+    }
+    #[cfg(test)]
     fn view(&self, key: &str) -> Result<Value, String> {
+        self.view_for(key, None, None)
+    }
+    fn view_for(
+        &self,
+        key: &str,
+        aux: Option<usize>,
+        cookie: Option<&str>,
+    ) -> Result<Value, String> {
         let s = self.state.lock().unwrap();
-        let p = s
-            .sessions
-            .iter()
-            .find(|p| p.key == key)
-            .ok_or("Enlace revocado o inválido")?;
+        let p = self.resolve(&s, key, aux, cookie)?;
         if !self.enabled.load(Acquire) {
             return Err("Servidor detenido".into());
         }
@@ -238,16 +317,23 @@ impl Remote {
         let mut bus = snap["buses"][p.aux].clone();
         bus["label"] = json!(p.label);
         Ok(
-            json!({"epoch":snap["epoch"],"revision":snap["revision"],"running":snap["running"],"emergency":snap["emergency"],"failed":snap["failed"],"max_db":p.max_db,"allow_pre":p.allow_pre,"bus":bus,"channels":snap["channels"].as_array().unwrap().iter().map(|ch|json!({"index":ch["index"],"name":ch["name"],"format":ch["format"],"level_db":ch["levels"][p.aux-1],"mute":ch["mutes"][p.aux-1].as_bool().unwrap_or(false),"pre":ch["pre"][p.aux-1],"channel_mute":ch["channel_mute"],"peak":ch["peak"],"rms":ch["rms"]})).collect::<Vec<_>>()}),
+            json!({"epoch":snap["epoch"],"revision":snap["revision"],"running":snap["running"],"emergency":snap["emergency"],"failed":snap["failed"],"max_db":p.max_db,"allow_pre":p.allow_pre,"shared":key.is_empty(),"choices":if key.is_empty(){snap["buses"].as_array().unwrap().iter().skip(1).map(|b|json!({"index":b["index"],"name":b["name"],"format":b["format"]})).collect::<Vec<_>>()}else{vec![]},"latency":*self.latency.lock().unwrap(),"bus":bus,"channels":snap["channels"].as_array().unwrap().iter().map(|ch|json!({"index":ch["index"],"name":ch["name"],"format":ch["format"],"level_db":ch["levels"][p.aux-1],"mute":ch["mutes"][p.aux-1].as_bool().unwrap_or(false),"pre":ch["pre"][p.aux-1],"channel_mute":ch["channel_mute"],"peak":ch["peak"],"rms":ch["rms"]})).collect::<Vec<_>>()}),
         )
     }
+    #[cfg(test)]
     fn apply(&self, key: &str, a: &Change, c: &mut Config, ctl: &Controls) -> Result<(), String> {
+        self.apply_for(key, a, c, ctl, None)
+    }
+    fn apply_for(
+        &self,
+        key: &str,
+        a: &Change,
+        c: &mut Config,
+        ctl: &Controls,
+        cookie: Option<&str>,
+    ) -> Result<(), String> {
         let mut s = self.state.lock().unwrap();
-        let p = s
-            .sessions
-            .iter()
-            .find(|p| p.key == key)
-            .ok_or("Enlace revocado o inválido")?;
+        let p = self.resolve(&s, key, a.aux, cookie)?;
         if !self.enabled.load(Acquire) || a.epoch != s.epoch {
             return Err("La mezcla cambió; vuelve a conectar".into());
         }
@@ -294,20 +380,27 @@ impl Remote {
             let result = if Instant::now() > p.deadline {
                 Err("El cambio caducó; vuelve a intentarlo".into())
             } else {
-                self.apply(&p.key, &p.change, c, ctl)
+                self.apply_for(&p.key, &p.change, c, ctl, p.cookie.as_deref())
             };
-            replies.push((p.key, p.reply, result));
+            replies.push((p.key, p.change.aux, p.cookie, p.reply, result));
         }
         if !replies.is_empty() {
             self.refresh(c, ctl, running)
         }
-        for (key, reply, result) in replies {
-            let _ = reply.try_send(result.and_then(|_| self.view(&key)));
+        for (key, aux, cookie, reply, result) in replies {
+            let _ =
+                reply.try_send(result.and_then(|_| self.view_for(&key, aux, cookie.as_deref())));
         }
     }
+    pub fn set_latency(&self, value: Value) {
+        *self.latency.lock().unwrap() = value;
+    }
+    pub fn take_rpc(&self) -> Option<Rpc> {
+        self.rpc.pop()
+    }
     fn serve(&self, mut stream: TcpStream, alive: Arc<AtomicBool>) -> std::io::Result<()> {
-        stream.set_read_timeout(Some(Duration::from_millis(500)))?;
-        stream.set_write_timeout(Some(Duration::from_millis(500)))?;
+        stream.set_read_timeout(Some(Duration::from_secs(2)))?;
+        stream.set_write_timeout(Some(Duration::from_secs(2)))?;
         stream.set_nodelay(true)?;
         let until = Instant::now() + Duration::from_secs(2);
         let mut raw = Vec::new();
@@ -326,20 +419,63 @@ impl Remote {
         }
         let head = String::from_utf8_lossy(&raw);
         let mut lines = head.lines();
-        let first = lines.next().unwrap_or("");
-        let mut parts = first.split_whitespace();
-        let method = parts.next().unwrap_or("");
-        let path = parts.next().unwrap_or("");
+        let mut first = lines.next().unwrap_or("").split_whitespace();
+        let method = first.next().unwrap_or("");
+        let uri = first.next().unwrap_or("");
+        let (path, query) = uri.split_once('?').unwrap_or((uri, ""));
         let headers: Vec<_> = lines
-            .filter_map(|l| l.split_once(':'))
+            .filter_map(|v| v.split_once(':'))
             .map(|(k, v)| (k.trim(), v.trim()))
             .collect();
-        let header = |key: &str| {
+        let header = |name: &str| {
             headers
                 .iter()
-                .find(|(k, _)| k.eq_ignore_ascii_case(key))
+                .find(|(k, _)| k.eq_ignore_ascii_case(name))
                 .map(|(_, v)| *v)
         };
+        if !alive.load(Acquire) || !self.enabled.load(Acquire) {
+            return send(&mut stream, 503, "text/plain", "Server stopped");
+        }
+        if let Some(origin) = header("Origin") {
+            if Some(origin.strip_prefix("http://").unwrap_or("")) != header("Host") {
+                return send(&mut stream, 403, "text/plain", "Origin denied");
+            }
+        }
+        let cookies = header("Cookie").unwrap_or("");
+        let mix_cookie = crate::access::cookie_value(cookies, "mm_mix");
+        let console_cookie = crate::access::cookie_value(cookies, "mm_console");
+        if method == "POST" && (path == "/login/mix" || path == "/login/console") {
+            let body = read_body(
+                &mut stream,
+                header("Content-Length"),
+                header("Content-Type"),
+                header("Transfer-Encoding"),
+                2048,
+            )?;
+            return crate::access::login_http(
+                if path.ends_with("mix") {
+                    &self.mix_gate
+                } else {
+                    &self.console_gate
+                },
+                &mut stream,
+                if path.ends_with("mix") {
+                    "mix"
+                } else {
+                    "console"
+                },
+                &body,
+            );
+        }
+        if method == "GET" && path == "/access" {
+            return send(
+                &mut stream,
+                200,
+                "application/json",
+                &json!({"mix":self.mix_gate.status(),"console":self.console_gate.status()})
+                    .to_string(),
+            );
+        }
         if method == "GET" && path == "/" {
             return send(
                 &mut stream,
@@ -348,45 +484,126 @@ impl Remote {
                 include_str!("../web/remote.html"),
             );
         }
+        if path == "/console/" || path == "/console" {
+            if self.console_gate.status()["mode"] == "disabled" {
+                return send(
+                    &mut stream,
+                    403,
+                    "text/plain",
+                    "Consola remota deshabilitada",
+                );
+            }
+            if !self.console_gate.authorized(console_cookie) {
+                return send(
+                    &mut stream,
+                    200,
+                    "text/html; charset=utf-8",
+                    &crate::access::login_page("console"),
+                );
+            }
+            return send(
+                &mut stream,
+                200,
+                "text/html; charset=utf-8",
+                &include_str!("../web/index.html").replace("__TOKEN__", "remote-console"),
+            );
+        }
+        if matches!(
+            path,
+            "/console.css" | "/console.js" | "/workspace-ui.js" | "/effects-ui.js" | "/tools-ui.js"
+        ) {
+            if !self.console_gate.authorized(console_cookie) {
+                return send(&mut stream, 403, "text/plain", "Consola protegida");
+            }
+            let (kind, body) = match path {
+                "/console.css" => ("text/css", include_str!("../web/console.css")),
+                "/console.js" => ("text/javascript", include_str!("../web/console.js")),
+                "/workspace-ui.js" => ("text/javascript", include_str!("../web/workspace-ui.js")),
+                "/tools-ui.js" => ("text/javascript", include_str!("../web/tools-ui.js")),
+                _ => ("text/javascript", include_str!("../web/effects-ui.js")),
+            };
+            return send(&mut stream, 200, kind, body);
+        }
+        if path.starts_with("/api/") {
+            if !self.console_gate.authorized(console_cookie) {
+                return send(
+                    &mut stream,
+                    403,
+                    "application/json",
+                    "{\"error\":\"Consola protegida\"}",
+                );
+            }
+            let body = if method == "POST" {
+                Some(
+                    String::from_utf8(read_body(
+                        &mut stream,
+                        header("Content-Length"),
+                        header("Content-Type"),
+                        header("Transfer-Encoding"),
+                        2097152,
+                    )?)
+                    .map_err(|_| std::io::Error::other("Invalid UTF-8"))?,
+                )
+            } else if method == "GET" {
+                None
+            } else {
+                return send(&mut stream, 405, "text/plain", "Method not allowed");
+            };
+            let (tx, rx) = mpsc::sync_channel(1);
+            if self
+                .rpc
+                .push(Rpc {
+                    path: path.into(),
+                    body,
+                    reply: tx,
+                    deadline: Instant::now() + Duration::from_millis(1500),
+                    cookie: console_cookie.into(),
+                })
+                .is_err()
+            {
+                return send(&mut stream, 503, "text/plain", "Control busy");
+            }
+            return match rx.recv_timeout(Duration::from_secs(2)) {
+                Ok(v) => json_response(&mut stream, v),
+                Err(_) => send(
+                    &mut stream,
+                    503,
+                    "application/json",
+                    "{\"error\":\"Consola ocupada\"}",
+                ),
+            };
+        }
         if path != "/mix" {
             return send(&mut stream, 404, "text/plain", "Not found");
         }
-        if !alive.load(Acquire) || !self.enabled.load(Acquire) {
-            return send(&mut stream, 503, "text/plain", "Server stopped");
-        }
         let key = header("X-Mix-Key").unwrap_or("");
-        if self.view(key).is_err() {
+        let aux = query
+            .split('&')
+            .filter_map(|v| v.split_once('='))
+            .find(|(k, _)| *k == "aux")
+            .and_then(|(_, v)| v.parse().ok());
+        let view = self.view_for(key, aux, Some(mix_cookie));
+        if view.is_err() {
             return send(
                 &mut stream,
                 403,
                 "application/json",
-                &json!({"error":"Enlace revocado o inválido"}).to_string(),
+                &json!({"error":view.unwrap_err(),"access":self.mix_gate.status()}).to_string(),
             );
         }
-        if let Some(origin) = header("Origin") {
-            if Some(origin.strip_prefix("http://").unwrap_or("")) != header("Host") {
-                return send(&mut stream, 403, "text/plain", "Origin denied");
-            }
-        }
         if method == "GET" {
-            return json_response(&mut stream, self.view(key));
+            return json_response(&mut stream, view);
         }
         if method != "POST" {
             return send(&mut stream, 405, "text/plain", "Method not allowed");
         }
-        if header("Content-Type") != Some("application/json")
-            || header("Transfer-Encoding").is_some()
-        {
-            return send(&mut stream, 400, "text/plain", "JSON required");
-        }
-        let Some(length) = header("Content-Length")
-            .and_then(|v| v.parse::<usize>().ok())
-            .filter(|v| *v <= 2048)
-        else {
-            return send(&mut stream, 413, "text/plain", "Invalid body length");
-        };
-        let mut body = vec![0; length];
-        stream.read_exact(&mut body)?;
+        let body = read_body(
+            &mut stream,
+            header("Content-Length"),
+            header("Content-Type"),
+            header("Transfer-Encoding"),
+            2048,
+        )?;
         let change: Change = match serde_json::from_slice(&body) {
             Ok(v) => v,
             Err(e) => {
@@ -403,6 +620,7 @@ impl Remote {
             .queue
             .push(Pending {
                 key: key.into(),
+                cookie: Some(mix_cookie.into()),
                 change,
                 deadline: Instant::now() + Duration::from_millis(400),
                 reply: tx,
@@ -412,12 +630,12 @@ impl Remote {
             return send(&mut stream, 503, "text/plain", "Control busy");
         }
         match rx.recv_timeout(Duration::from_millis(500)) {
-            Ok(result) => json_response(&mut stream, result),
+            Ok(v) => json_response(&mut stream, v),
             Err(_) => send(
                 &mut stream,
                 503,
                 "application/json",
-                &json!({"error":"Control ocupado; reconecta para confirmar el estado"}).to_string(),
+                "{\"error\":\"Control ocupado; reconecta\"}",
             ),
         }
     }
@@ -444,6 +662,7 @@ impl Drop for Connection {
 }
 
 /// Preserve concurrent remote sends when the desktop edits unrelated configuration.
+#[cfg(test)]
 pub fn merge_sends(candidate: &mut Config, base: &Config, current: &Config) {
     if candidate.channels.len() != base.channels.len()
         || candidate.buses.len() != base.buses.len()
@@ -507,6 +726,7 @@ mod tests {
     fn personal_permissions_and_mute_only_change_assigned_audio_send() {
         let (r, mut c, ctl, key) = setup();
         let mut a = Change {
+            aux: None,
             epoch: 0,
             channel: 0,
             level_db: Some(-6.0206),
@@ -583,8 +803,10 @@ mod tests {
         let (tx, rx) = mpsc::sync_channel(1);
         r.queue
             .push(Pending {
+                cookie: None,
                 key: key.clone(),
                 change: Change {
+                    aux: None,
                     epoch: 0,
                     channel: 0,
                     level_db: Some(-9.0),
@@ -600,7 +822,7 @@ mod tests {
         assert!(rx.recv().unwrap().is_err());
         assert_eq!(c.channels[0].sends_db[0], 0.0);
         assert!(
-            serde_json::from_value::<Change>(json!({"epoch":0,"channel":0,"aux":0,"level_db":0}))
+            serde_json::from_value::<Change>(json!({"epoch":0,"channel":0,"bus":0,"level_db":0}))
                 .is_err()
         );
         r.invalidate();
@@ -609,6 +831,7 @@ mod tests {
             r.apply(
                 &key,
                 &Change {
+                    aux: None,
                     epoch: 0,
                     channel: 0,
                     level_db: Some(-9.0),
@@ -667,6 +890,7 @@ mod snapshot_version_tests {
         r.apply(
             &key,
             &Change {
+                aux: None,
                 epoch: before["epoch"].as_u64().unwrap(),
                 channel: 0,
                 level_db: Some(-12.0),
@@ -687,5 +911,76 @@ mod snapshot_version_tests {
         let after = r.view(&key).unwrap();
         assert!(after["revision"].as_u64().unwrap() > before["revision"].as_u64().unwrap());
         assert_eq!(after["channels"][0]["level_db"], -12.0);
+    }
+}
+
+fn read_body(
+    s: &mut TcpStream,
+    length: Option<&str>,
+    kind: Option<&str>,
+    transfer: Option<&str>,
+    max: usize,
+) -> std::io::Result<Vec<u8>> {
+    if kind != Some("application/json") || transfer.is_some() {
+        return Err(std::io::Error::other("JSON required"));
+    }
+    let n = length
+        .and_then(|v| v.parse::<usize>().ok())
+        .filter(|v| *v <= max)
+        .ok_or_else(|| std::io::Error::other("Invalid body length"))?;
+    let mut body = vec![0; n];
+    s.read_exact(&mut body)?;
+    Ok(body)
+}
+
+/// Three-way merge for simultaneous operator consoles: untouched fields follow the current server.
+pub fn merge_values(base: &Value, candidate: &Value, current: &Value) -> Value {
+    if candidate == base {
+        return current.clone();
+    }
+    match (base, candidate, current) {
+        (Value::Object(b), Value::Object(n), Value::Object(c)) => Value::Object(
+            n.iter()
+                .map(|(k, v)| {
+                    (
+                        k.clone(),
+                        match (b.get(k), c.get(k)) {
+                            (Some(old), Some(now)) => merge_values(old, v, now),
+                            _ => v.clone(),
+                        },
+                    )
+                })
+                .collect(),
+        ),
+        (Value::Array(b), Value::Array(n), Value::Array(c))
+            if b.len() == n.len() && b.len() == c.len() =>
+        {
+            Value::Array(
+                b.iter()
+                    .zip(n)
+                    .zip(c)
+                    .map(|((old, next), now)| merge_values(old, next, now))
+                    .collect(),
+            )
+        }
+        _ => candidate.clone(),
+    }
+}
+#[cfg(test)]
+mod merge_operator_tests {
+    use super::*;
+    #[test]
+    fn simultaneous_operators_preserve_untouched_names_levels_and_parameters() {
+        let base =
+            json!({"channels":[{"name":"Voz","gain_db":0,"pan":0,"eq":{"q":1}}],"master":-12});
+        let remote = json!({"channels":[{"name":"Voz nueva","gain_db":-6,"pan":0,"eq":{"q":2}}],"master":-12});
+        let local =
+            json!({"channels":[{"name":"Voz","gain_db":0,"pan":0.4,"eq":{"q":1}}],"master":-3});
+        let merged = merge_values(&base, &local, &remote);
+        assert_eq!(
+            merged["channels"][0],
+            json!({"name":"Voz nueva","gain_db":-6,"pan":0.4,"eq":{"q":2}})
+        );
+        assert_eq!(merged["master"], -3);
     }
 }

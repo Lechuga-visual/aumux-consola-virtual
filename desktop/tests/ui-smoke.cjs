@@ -42,7 +42,7 @@ const path = require("node:path");
     browser = await chromium.launch({
       executablePath: process.env.CHROMIUM || "/usr/bin/chromium",
       headless: true,
-      args: ["--no-sandbox", "--disable-dev-shm-usage"],
+      args: ["--no-sandbox", "--no-proxy-server", "--disable-dev-shm-usage"],
     });
     const page = await browser.newPage({
       viewport: { width: 1640, height: 980 },
@@ -50,7 +50,8 @@ const path = require("node:path");
     });
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
-    await page.goto(url);
+    await fetch(url, { signal: AbortSignal.timeout(5000) });
+    await page.goto(url, { waitUntil: "domcontentloaded" });
     await page.waitForSelector("#mixer .strip");
     assert.equal(await page.locator("#mixer .strip").count(), 8);
     assert.equal(await page.locator("#buses .strip").count(), 5);
@@ -116,11 +117,22 @@ const path = require("node:path");
           value.toFixed(1),
         );
         // Click the native track at the same vertical coordinate as the printed mark.
-        const rect = await page
-          .locator("#mixer .fader input")
-          .first()
-          .boundingBox();
-        const tick = await mark.boundingBox();
+        const { rect, tick } = await page.evaluate((value) => {
+          const card = document.querySelector("#mixer .strip"),
+            f = card.querySelector(".fader input"),
+            m = [...card.querySelectorAll(".fader-scale span")].find(
+              (e) => e.textContent === String(value),
+            );
+          const box = (e) => {
+            const r = e.getBoundingClientRect();
+            return { x: r.x, y: r.y, width: r.width, height: r.height };
+          };
+          return { rect: box(f), tick: box(m) };
+        }, value);
+        assert(
+          rect.height > 0 && rect.width > 0,
+          "fader visible for native track click",
+        );
         await page.mouse.click(
           rect.x + rect.width / 2,
           tick.y + tick.height / 2,

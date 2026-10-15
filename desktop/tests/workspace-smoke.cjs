@@ -37,6 +37,7 @@ const fs = require("node:fs/promises");
       headless: true,
       args: [
         "--no-sandbox",
+        "--no-proxy-server",
         "--disable-dev-shm-usage",
         "--autoplay-policy=no-user-gesture-required",
       ],
@@ -119,7 +120,9 @@ const fs = require("node:fs/promises");
       () =>
         parseFloat(document.querySelector("#comp-gr-value").textContent) > 20,
     );
-    await page.screenshot({ path: "/workspace/scratch/monitor-mix-workspace-compressor.png" });
+    await page.screenshot({
+      path: "/workspace/scratch/monitor-mix-workspace-compressor.png",
+    });
     await page.locator("[data-close=compressor-dialog]").click();
     await page.evaluate(async () => {
       await api("stop", {});
@@ -165,7 +168,9 @@ const fs = require("node:fs/promises");
           ) < 2,
       ),
     );
-    await page.screenshot({ path: "/workspace/scratch/monitor-mix-workspace.png" });
+    await page.screenshot({
+      path: "/workspace/scratch/monitor-mix-workspace.png",
+    });
     await page
       .locator(".strip[data-strip=c0] .comp-module")
       .click({ button: "right" });
@@ -206,7 +211,9 @@ const fs = require("node:fs/promises");
         document.querySelector("#state").textContent.includes("Monitor 1") &&
         sources.size > 0,
     );
-    await listener.screenshot({ path: "/workspace/scratch/monitor-mix-workspace-listen.png" });
+    await listener.screenshot({
+      path: "/workspace/scratch/monitor-mix-workspace-listen.png",
+    });
     // Switch while fetch/resume is pending, then stop: old sessions cannot revive playback.
     await listener.evaluate(() => {
       play();

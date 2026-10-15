@@ -107,10 +107,14 @@ async function api(route, body = {}, options = {}) {
       headers: { "Content-Type": "application/json", "X-Monitor-Token": token },
       body: JSON.stringify(payload),
     });
+    if (r.status === 403 && location.pathname.startsWith("/console")) {
+      location.reload();
+      throw Error("Sesión de consola cerrada");
+    }
     const v = await r.json();
     if (!r.ok) throw Error(v.error || r.statusText);
     if (configCall && v.config) {
-      remoteNeedsRender = reconcileSends(v.config, body) || remoteNeedsRender;
+      remoteNeedsRender = reconcileConfig(v.config, body) || remoteNeedsRender;
       serverConfig = structuredClone(v.config);
       syncedRemoteRevision = v.remote_revision;
     }
@@ -118,6 +122,37 @@ async function api(route, body = {}, options = {}) {
   } finally {
     if (configCall) configRequests--;
   }
+}
+function reconcileConfig(incoming, base) {
+  if (!cfg || !incoming || !base) return false;
+  let changed = false;
+  function walk(target, old, next) {
+    for (const key of Object.keys(next)) {
+      const a = target[key],
+        b = old?.[key],
+        n = next[key];
+      if (
+        n &&
+        a &&
+        b &&
+        typeof n === "object" &&
+        typeof a === "object" &&
+        typeof b === "object" &&
+        Array.isArray(a) === Array.isArray(n) &&
+        (!Array.isArray(n) || (a.length === n.length && b.length === n.length))
+      )
+        walk(a, b, n);
+      else if (
+        JSON.stringify(a) === JSON.stringify(b) &&
+        JSON.stringify(a) !== JSON.stringify(n)
+      ) {
+        target[key] = structuredClone(n);
+        changed = true;
+      }
+    }
+  }
+  walk(cfg, base, incoming);
+  return changed;
 }
 function reconcileSends(incoming, base) {
   if (
@@ -142,14 +177,49 @@ function reconcileSends(incoming, base) {
   });
   return changed;
 }
+let pendingPublish,
+  publishRunning = false;
+function startPublishing() {
+  if (publishRunning) return;
+  publishRunning = true;
+  const worker = queue.then(async () => {
+    while (pendingPublish) {
+      const batch = pendingPublish;
+      pendingPublish = undefined;
+      try {
+        const result = await api("config", batch.snapshot, {
+          base: batch.base,
+        });
+        for (const w of batch.waiters) w.resolve(result);
+      } catch (e) {
+        error(e);
+        for (const w of batch.waiters) w.reject(e);
+      }
+    }
+  });
+  queue = worker.catch(error);
+  worker
+    .finally(() => {
+      publishRunning = false;
+      if (pendingPublish) startPublishing();
+    })
+    .catch(error);
+}
 function publish() {
   const snapshot = structuredClone(cfg),
     base = structuredClone(serverConfig || cfg);
-  const task = queue.then(() => api("config", snapshot, { base }));
-  queue = task.catch(() => {});
+  const task = new Promise((resolve, reject) => {
+    if (pendingPublish) {
+      pendingPublish.snapshot = snapshot;
+      pendingPublish.base = base;
+      pendingPublish.waiters.push({ resolve, reject });
+    } else pendingPublish = { snapshot, base, waiters: [{ resolve, reject }] };
+  });
+  startPublishing();
   task.catch(error);
   return task;
 }
+
 function db(v, unit = "") {
   return v <= -89.9
     ? "−∞" + unit
@@ -748,6 +818,14 @@ function arrangeStrip(card, type, index) {
     main.onclick = () => openRouting(index);
   }
   card.tabIndex = 0;
+  const actions = el("button", "touch-strip-menu", "⋮");
+  actions.setAttribute("aria-label", `Acciones ${targetOf(type, index).name}`);
+  actions.onclick = (e) => {
+    e.stopPropagation();
+    const r = card.getBoundingClientRect();
+    openContext(card, r.left, r.top + 24);
+  };
+  header.append(actions);
   nameRow.append(name);
   const format = el(
     "button",
@@ -1128,9 +1206,15 @@ function updateLatency() {
 }
 async function poll() {
   try {
+    const statusStarted = performance.now();
     const r = await fetch("/api/status");
+    if (r.status === 403 && location.pathname.startsWith("/console")) {
+      location.reload();
+      return;
+    }
     if (!r.ok) throw Error("status");
     const s = await r.json();
+    s.control_rtt_ms = performance.now() - statusStarted;
     lastStatus = s;
     const was = running;
     running = s.mode !== "DETENIDO";
@@ -1181,6 +1265,7 @@ async function poll() {
     bridge.title = `Enviados: ${s.bridge?.sent || 0} paquetes · Descartados: ${s.bridge_drops}\nLa confirmación verifica recepción en la fuente; revisa también su mute y la escena en OBS.`;
     updateLatency();
     updateWorkspaceStatus(s);
+    updateLatencyTools(s);
     syncRemoteMix(s);
   } catch (e) {
     $("status").textContent = "SIN CONEXIÓN";
@@ -1365,10 +1450,11 @@ $("fullscreen").onclick = () => {
 $("save").onclick = async () => {
   try {
     await queue;
-    const r = await fetch("/api/mix-state");
+    const r = await fetch("/api/sync-state");
     if (!r.ok) throw Error("No se pudo sincronizar la mezcla para guardar");
     remoteNeedsRender =
-      reconcileSends(await r.json(), serverConfig) || remoteNeedsRender;
+      reconcileConfig((await r.json()).config, serverConfig) ||
+      remoteNeedsRender;
     const a = el("a");
     a.href = URL.createObjectURL(
       new Blob([JSON.stringify(cfg, null, 2)], { type: "application/json" }),
@@ -2265,6 +2351,12 @@ async function resizeStructure(
   render();
   try {
     await queue;
+    const freshResponse = await fetch("/api/config");
+    if (!freshResponse.ok)
+      throw Error("No se pudo sincronizar antes de cambiar la estructura");
+    const fresh = await freshResponse.json();
+    reconcileConfig(fresh, serverConfig);
+    serverConfig = structuredClone(fresh);
     const candidate = structuredClone(cfg);
     candidate.channels = candidate.channels.slice(0, channels);
     candidate.buses = candidate.buses.slice(0, auxes + 1);

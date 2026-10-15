@@ -466,6 +466,7 @@ function updateWorkspaceStatus(s) {
   }
   if ($("network-dialog").open) {
     updateRemoteAdmin(s.remote);
+    updateAccessUI(s);
     const n = s.listen;
     $("network-toggle").textContent = n.enabled
       ? "Detener escucha LAN"
@@ -540,17 +541,35 @@ async function syncRemoteMix(s) {
     return;
   remoteSyncBusy = true;
   try {
-    const r = await fetch("/api/mix-state");
+    const r = await fetch("/api/sync-state");
     if (!r.ok) return;
     const incoming = await r.json();
     if (configRequests || structureBusy || remotePointerDown || !serverConfig)
       return;
-    if (incoming.channels.length !== cfg.channels.length) return;
-    const changed = reconcileSends(incoming, serverConfig);
-    incoming.channels.forEach((ch, i) => {
-      for (const field of ["sends_db", "pre", "send_mute"])
-        serverConfig.channels[i][field] = structuredClone(ch[field]);
-    });
+    const structure =
+      incoming.config.channels.length !== cfg.channels.length ||
+      incoming.config.buses.length !== cfg.buses.length;
+    if (structure) {
+      if (JSON.stringify(cfg) !== JSON.stringify(serverConfig))
+        error(
+          "La estructura cambió desde otra consola; se recuperó el estado del servidor y se descartaron ajustes sin publicar.",
+        );
+      for (const id of [
+        "eq-dialog",
+        "compressor-dialog",
+        "routing-dialog",
+        "fx",
+      ])
+        if ($(id).open) $(id).close();
+      cfg = normalise(incoming.config);
+      selected.index = Math.min(
+        selected.index,
+        (selected.type === "channel" ? cfg.channels.length : cfg.buses.length) -
+          1,
+      );
+    }
+    const changed = structure || reconcileConfig(incoming.config, serverConfig);
+    serverConfig = structuredClone(incoming.config);
     syncedRemoteRevision = incoming.revision;
     if (changed) {
       render();

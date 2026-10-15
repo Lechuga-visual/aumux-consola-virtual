@@ -248,13 +248,216 @@
           height: 240px;
         }
       }
+      html,
+      body {
+        height: 100dvh;
+        overflow: hidden;
+        overscroll-behavior: none;
+      }
+      body {
+        display: grid;
+        grid-template-rows: auto auto minmax(0, 1fr) auto;
+      }
+      header {
+        position: relative;
+        gap: 10px;
+        padding: 10px 14px;
+      }
+      header select {
+        max-width: 280px;
+        min-height: 44px;
+        background: #19222d;
+        border: 1px solid #597186;
+        color: inherit;
+        padding: 8px;
+        font: inherit;
+      }
+      main {
+        min-height: 0;
+        overflow-x: auto;
+        overflow-y: hidden;
+        touch-action: pan-x;
+        padding: 12px;
+        overscroll-behavior: contain;
+      }
+      .strip {
+        height: 100%;
+        gap: 7px;
+        padding: 8px;
+      }
+      .fader-row {
+        height: auto !important;
+        flex: 1;
+        min-height: 80px;
+      }
+      .name {
+        height: 38px;
+        flex-shrink: 0;
+      }
+      .value {
+        min-height: 44px;
+      }
+      .fader {
+        width: 44px;
+        touch-action: none;
+      }
+      .fader::-webkit-slider-thumb {
+        width: 24px;
+        height: 30px;
+      }
+      .fader::-moz-range-thumb {
+        width: 24px;
+        height: 30px;
+      }
+      .scale {
+        margin-block: 15px;
+        height: calc(100% - 30px) !important;
+      }
+      .controls button {
+        min-height: 44px;
+        min-width: 40px;
+        font-size: 13px;
+      }
+      .channel-state {
+        height: 18px;
+        flex-shrink: 0;
+      }
+      footer {
+        padding: 8px 14px;
+        font-size: 12px;
+        max-height: 30dvh;
+        overflow: auto;
+        overscroll-behavior: contain;
+      }
+      footer summary {
+        cursor: pointer;
+        min-height: 28px;
+      }
+      #shared-login {
+        position: fixed;
+        inset: 0;
+        background: #151b24f5;
+        z-index: 10;
+        padding: 25px;
+      }
+      #shared-login[hidden] {
+        display: none;
+      }
+      #shared-login form {
+        max-width: 400px;
+        margin: 10vh auto;
+        display: grid;
+        gap: 12px;
+      }
+      #shared-login input,
+      #shared-login button {
+        min-height: 48px;
+        padding: 10px;
+        font: inherit;
+      }
+      #remote-latency {
+        white-space: pre-line;
+        line-height: 1.7;
+        margin-top: 10px;
+      }
+      @media (max-width: 600px) {
+        header {
+          padding: 8px;
+          gap: 6px;
+        }
+        h1 {
+          font-size: 17px;
+        }
+        header select {
+          max-width: 200px;
+        }
+        .strip {
+          flex-basis: 110px;
+        }
+        .status {
+          font-size: 12px;
+        }
+        #notice {
+          font-size: 12px;
+          padding: 8px;
+          min-height: 0;
+        }
+        .name {
+          font-size: 12px;
+        }
+        .bus-meter {
+          width: 100px;
+        }
+      }
+      @media (max-height: 600px) {
+        header {
+          flex-wrap: nowrap;
+        }
+        header > div:nth-child(2) {
+          display: none;
+        }
+        .status {
+          font-size: 11px;
+        }
+        .name {
+          height: 24px;
+        }
+        .strip {
+          gap: 3px;
+          padding: 4px;
+        }
+        .value {
+          min-height: 30px;
+          height: 30px;
+        }
+        .controls button {
+          min-height: 32px;
+        }
+        .channel-state {
+          display: none;
+        }
+        footer {
+          padding: 3px 10px;
+        }
+        #notice {
+          padding: 4px 10px;
+          font-size: 11px;
+        }
+      }
+      #mix-selector:not([hidden]) {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 6px;
+      }
+      #subtitle {
+        display: block;
+        margin-top: 4px;
+      }
     </style>
   </head>
   <body>
+    <div id="shared-login" hidden>
+      <form>
+        <h1>Monitor Mix · Mezclas</h1>
+        <p>Escribe la contraseña compartida para elegir un auxiliar.</p>
+        <label
+          >Contraseña<input
+            id="mix-login-password"
+            type="password"
+            required
+            autocomplete="current-password" /></label
+        ><button>Entrar</button>
+        <p id="mix-login-error" role="alert"></p>
+      </form>
+    </div>
     <header>
       <div>
         <h1 id="title">Mi mezcla</h1>
-        <small id="subtitle">Conectando…</small>
+        <small id="subtitle">Conectando…</small
+        ><label id="mix-selector" hidden
+          >Auxiliar<select id="mix-select" aria-label="Mezcla auxiliar"></select
+        ></label>
       </div>
       <div>
         <small>Nivel del auxiliar · post-fader</small>
@@ -267,16 +470,25 @@
     <p id="notice">Cargando los canales asignados…</p>
     <main id="channels"></main>
     <footer>
-      Los faders y M controlan únicamente tus envíos al auxiliar asignado. Los
-      medidores de canal muestran señal post-fader del canal; el medidor
-      superior muestra la salida del auxiliar. Escucha por las salidas
-      configuradas por el operador.<br />El control web no añade un búfer al
-      motor de audio. Compatible con red local y direcciones Tailscale/MagicDNS.
+      <details>
+        <summary id="remote-latency-summary">Ayuda y latencia</summary>
+        Los faders y M controlan únicamente tus envíos al auxiliar asignado. Los
+        medidores de canal muestran señal post-fader del canal; el medidor
+        superior muestra la salida del auxiliar. Escucha por las salidas
+        configuradas por el operador.<br />El control web no añade un búfer al
+        motor de audio. Compatible con red local y direcciones
+        Tailscale/MagicDNS.
+        <div id="remote-latency">Esperando datos de latencia…</div>
+      </details>
     </footer>
     <script>
       "use strict";
       const key = new URLSearchParams(location.hash.slice(1)).get("key") || "";
       const $ = (s) => document.querySelector(s);
+      let selectedAux = null,
+        mixGeneration = 0,
+        authRequired = false,
+        controlRtt = 0;
       let pollTimer,
         pollBusy = false;
       let state,
@@ -317,17 +529,27 @@
         return v > 0 ? Math.max(-60, 20 * Math.log10(v)) : -60;
       }
       async function request(change) {
-        const r = await fetch("/mix", {
-          method: change ? "POST" : "GET",
-          cache: "no-store",
-          headers: {
-            "X-Mix-Key": key,
-            ...(change ? { "Content-Type": "application/json" } : {}),
+        const started = performance.now();
+        const r = await fetch(
+          "/mix" + (selectedAux !== null ? "?aux=" + selectedAux : ""),
+          {
+            method: change ? "POST" : "GET",
+            cache: "no-store",
+            headers: {
+              "X-Mix-Key": key,
+              ...(change ? { "Content-Type": "application/json" } : {}),
+            },
+            ...(change ? { body: JSON.stringify(change) } : {}),
           },
-          ...(change ? { body: JSON.stringify(change) } : {}),
-        });
+        );
         const data = await r.json();
-        if (r.status === 403) revoked = true;
+        controlRtt = performance.now() - started;
+        if (r.status === 403 && key) revoked = true;
+        if (r.status === 403 && !key && data.access?.mode === "password") {
+          authRequired = true;
+          $("#shared-login").hidden = false;
+        }
+
         if (!r.ok) throw Error(data.error || "Servidor ocupado");
         return data;
       }
@@ -353,8 +575,11 @@
         }
         if (field === "mute") w.mute.classList.toggle("on", value);
         if (field === "pre") w.pre.textContent = value ? "PRE" : "POST";
-        clearTimeout(timer);
-        timer = setTimeout(flush, 20);
+        if (!timer)
+          timer = setTimeout(() => {
+            timer = null;
+            flush();
+          }, 20);
       }
       async function flush() {
         if (busy || !pending.size || !connected) return;
@@ -364,7 +589,12 @@
         flight = { index, changes };
         try {
           accept(
-            await request({ epoch: state.epoch, channel: index, ...changes }),
+            await request({
+              epoch: state.epoch,
+              ...(state.shared ? { aux: state.bus.index } : {}),
+              channel: index,
+              ...changes,
+            }),
           );
         } catch (e) {
           disconnected(e);
@@ -373,7 +603,11 @@
           flight = null;
           if (connected) {
             accept(state);
-            if (pending.size) flush();
+            if (pending.size && !timer)
+              timer = setTimeout(() => {
+                timer = null;
+                flush();
+              }, 20);
           }
         }
       }
@@ -471,10 +705,33 @@
         if (
           !state ||
           state.epoch !== s.epoch ||
+          state.bus.index !== s.bus.index ||
+          state.max_db !== s.max_db ||
           widgets.size !== s.channels.length
         )
           build(s);
         state = s;
+        $("#mix-selector").hidden = !s.shared;
+        if (s.shared) {
+          selectedAux = s.bus.index;
+          const select = $("#mix-select"),
+            signature = JSON.stringify(s.choices);
+          if (select.dataset.signature !== signature) {
+            select.replaceChildren(
+              ...s.choices.map((b) => new Option(b.name, b.index)),
+            );
+            select.dataset.signature = signature;
+          }
+          select.value = s.bus.index;
+          select.disabled = busy || pending.size > 0;
+        }
+        const l = s.latency;
+        if (l?.block_ms !== undefined)
+          $("#remote-latency-summary").textContent =
+            `Bloque ${l.block_ms.toFixed(2)} ms · control RTT ${controlRtt.toFixed(1)} ms`;
+        if (l?.block_ms !== undefined)
+          $("#remote-latency").textContent =
+            `Bloque del motor: ${l.block_ms.toFixed(2)} ms (calculado)\nDriver: ${typeof l.driver_ms === "number" ? l.driver_ms.toFixed(2) + " ms declarados" : "sin dato"}\nPlugins de este bus: ${l.buses[s.bus.index]?.plugin_ms?.toFixed(2) || "0"} ms declarados\nControl web RTT: ${controlRtt.toFixed(1)} ms medidos\nAudio de red / total real: sin medición`;
         connected = true;
         $("#title").textContent = s.bus.label;
         $("#subtitle").textContent =
@@ -495,7 +752,7 @@
         const peak = s.running && !s.emergency ? Math.max(...s.bus.peak) : 0;
         $("#bus-peak").style.width = ((dbfs(peak) + 60) / 60) * 100 + "%";
         $("#bus-level").textContent =
-          (peak > 0 ? dbfs(peak).toFixed(1) : "−∞") + " dBFS";
+          (peak > 0 ? (20 * Math.log10(peak)).toFixed(1) : "−∞") + " dBFS";
         for (const ch of s.channels) {
           const w = widgets.get(ch.index),
             local = {
@@ -503,12 +760,15 @@
               ...pending.get(ch.index),
             };
           w.name.textContent = ch.name;
+          w.number.setAttribute("aria-label", `Nivel ${ch.name}`);
+          w.fader.setAttribute("aria-label", `Fader ${ch.name}`);
+          w.mute.setAttribute("aria-label", `Silenciar envío ${ch.name}`);
           w.number.disabled = false;
           w.fader.disabled = false;
           w.mute.disabled = false;
           w.pre.disabled = !s.allow_pre;
           if (document.activeElement !== w.number && !("level_db" in local)) {
-            w.number.value = ch.level_db;
+            w.number.value = Math.round(ch.level_db * 10) / 10;
             w.fader.value = toPos(ch.level_db);
           }
           w.mute.classList.toggle("on", local.mute ?? ch.mute);
@@ -526,13 +786,15 @@
         if (pollBusy) return;
         pollBusy = true;
         clearTimeout(pollTimer);
+        const generation = mixGeneration;
         try {
-          accept(await request());
+          const s = await request();
+          if (generation === mixGeneration) accept(s);
         } catch (e) {
           disconnected(e);
         } finally {
           pollBusy = false;
-          if (!revoked) pollTimer = setTimeout(poll, 100);
+          if (!revoked && !authRequired) pollTimer = setTimeout(poll, 100);
         }
       }
       $("#reconnect").onclick = () => {
@@ -542,11 +804,50 @@
       document.addEventListener("contextmenu", (e) => {
         if (!e.target.closest("input,textarea")) e.preventDefault();
       });
-      if (key) poll();
-      else
-        disconnected(
-          Error("Abre el enlace personal entregado por el operador."),
-        );
+      $("#mix-select").onchange = () => {
+        if (busy || pending.size) {
+          $("#mix-select").value = state.bus.index;
+          return;
+        }
+        selectedAux = Number($("#mix-select").value);
+        mixGeneration++;
+        state = null;
+        connected = false;
+        for (const w of widgets.values())
+          for (const e of w.root.querySelectorAll("input,button"))
+            e.disabled = true;
+        poll();
+      };
+      $("#shared-login form").onsubmit = async (e) => {
+        e.preventDefault();
+        try {
+          const r = await fetch("/login/mix", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ password: $("#mix-login-password").value }),
+          });
+          const v = await r.json();
+          if (!r.ok) throw Error(v.error);
+          $("#mix-login-password").value = "";
+          $("#shared-login").hidden = true;
+          authRequired = false;
+          revoked = false;
+          poll();
+        } catch (e) {
+          $("#mix-login-error").textContent = e.message;
+        }
+      };
+      function deviceLayout() {
+        document.body.dataset.device =
+          innerWidth < 600
+            ? "mobile"
+            : innerWidth < 1100
+              ? "tablet"
+              : "desktop";
+      }
+      window.addEventListener("resize", deviceLayout);
+      deviceLayout();
+      poll();
     </script>
   </body>
 </html>

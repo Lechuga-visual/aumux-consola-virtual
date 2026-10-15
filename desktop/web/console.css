@@ -2599,3 +2599,359 @@ textarea,
     grid-template-columns: 1fr;
   }
 }
+/* Tools and touch layout share the same audio controls. */
+.tools-menu {
+  position: relative;
+  z-index: 30;
+}
+.tools-menu summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 7px;
+  background: #252c35;
+  border: 1px solid #47525f;
+}
+.tools-dropdown {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  width: 260px;
+  background: #202832;
+  border: 1px solid #586878;
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+  box-shadow: 0 8px 20px #0008;
+}
+.tools-dropdown button,
+.tools-dropdown select {
+  width: 100%;
+}
+.tools-dropdown label {
+  display: grid;
+  gap: 6px;
+}
+#latency-dialog,
+#calculator-dialog {
+  width: min(760px, 94vw);
+  max-height: 90dvh;
+  overflow: auto;
+}
+.latency-grid,
+.calculator-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.latency-card {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  background: #18202a;
+  border: 1px solid #425163;
+}
+.latency-card small {
+  color: #a7b7c8;
+}
+.latency-paths {
+  grid-column: 1/-1;
+  line-height: 1.8;
+}
+.calculator-grid label {
+  display: grid;
+  gap: 6px;
+}
+#calc-result {
+  display: block;
+  font-size: 18px;
+  padding: 20px 0;
+}
+.access-card {
+  padding: 12px 0;
+  border-top: 1px solid #485a6d;
+  display: grid;
+  gap: 10px;
+}
+.access-card label {
+  display: grid;
+  gap: 6px;
+}
+.fader input,
+input[type="range"],
+.rotary-dial,
+.eq-node {
+  touch-action: none;
+}
+body.touch-mode {
+  overflow: hidden;
+  overscroll-behavior: none;
+  font-size: 13px;
+}
+.touch-mode .app {
+  height: 100dvh;
+  min-height: 0;
+  --strip: 104px;
+  --labels: 0px;
+  --sidebar: 0px;
+  grid-template-rows: 52px 52px 0 minmax(0, 1fr) 24px;
+}
+.touch-mode .meter-bridge,
+.touch-mode .module-labels,
+.touch-mode .sidebar {
+  display: none;
+}
+.touch-mode .titlebar,
+.touch-mode .transport {
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  flex-wrap: nowrap;
+  min-width: 0;
+  touch-action: pan-x;
+  scrollbar-width: none;
+}
+.touch-mode .window-actions {
+  margin-left: 0;
+  flex-shrink: 0;
+}
+.touch-mode .titlebar .scene-title {
+  display: none;
+}
+.touch-mode .transport > * {
+  flex-shrink: 0;
+}
+.touch-mode button,
+.touch-mode summary,
+.touch-mode select {
+  min-height: 44px;
+  font-size: 12px;
+}
+.touch-mode input[type="text"],
+.touch-mode input[type="number"],
+.touch-mode input[type="password"] {
+  min-height: 38px;
+  font-size: 14px;
+}
+.touch-mode .console,
+.touch-mode .desk,
+.touch-mode .mixer-stage {
+  min-height: 0;
+  overflow-y: hidden;
+}
+.touch-mode .console {
+  grid-template-columns: minmax(0, 1fr);
+}
+.touch-mode .desk {
+  grid-template-columns: 0 minmax(0, 1fr);
+  grid-template-rows: 52px minmax(0, 1fr) 20px;
+}
+.touch-mode .mixer-stage {
+  touch-action: pan-x;
+  overscroll-behavior: none;
+}
+.touch-mode .desk-tools {
+  overflow-x: auto;
+  overflow-y: hidden;
+  touch-action: pan-x;
+  gap: 10px;
+}
+.touch-mode .desk-tools .input-bank,
+.touch-mode .desk-tools .output-bank {
+  flex-shrink: 0;
+}
+.touch-mode .strip {
+  width: var(--strip);
+  min-width: var(--strip);
+}
+.touch-mode .app {
+  --module-rows: 22px 36px 84px 32px 32px 44px 40px 36px 32px 44px 28px
+    minmax(100px, 1fr) 16px 18px;
+}
+.touch-mode .strip-header button {
+  min-height: 22px;
+}
+.touch-mode .name-row input {
+  font-size: 12px;
+}
+.touch-mode .channel-buttons button {
+  min-height: 40px;
+  min-width: 36px;
+}
+.touch-mode .fader input {
+  width: 44px;
+  touch-action: none;
+}
+.touch-mode .fader input::-webkit-slider-thumb {
+  width: 26px;
+  height: 26px;
+}
+.touch-mode .fader input::-moz-range-thumb {
+  width: 26px;
+  height: 26px;
+}
+.touch-mode .fader-section {
+  padding-top: 13px;
+  padding-bottom: 13px;
+}
+.touch-mode .level {
+  font-size: 14px;
+  min-height: 28px !important;
+}
+.touch-mode .fader-scale {
+  font-size: 10px;
+}
+.touch-mode .send-grid button {
+  min-height: 20px;
+}
+.touch-mode .eq-module,
+.touch-mode .comp-module {
+  min-height: 30px;
+}
+.touch-mode .touch-compact {
+  --module-rows: 22px 0px 0px 0px 0px 0px 0px 36px 32px 44px 28px
+    minmax(100px, 1fr) 16px 18px;
+}
+.touch-mode .touch-compact .strip > :nth-child(n + 2):nth-child(-n + 7) {
+  display: none;
+}
+.touch-mode .touch-compact .strip > :nth-child(8) {
+  min-height: 32px;
+}
+.touch-mode .desk-footer {
+  font-size: 9px;
+}
+.touch-mode dialog {
+  max-height: 94dvh;
+  overflow: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+.touch-mode #strip-context button {
+  min-height: 44px;
+}
+.touch-mode .bank-bottom > span:last-child {
+  display: none;
+}
+@media (max-width: 600px) {
+  .latency-grid,
+  .calculator-grid,
+  .remote-create-grid {
+    grid-template-columns: 1fr;
+  }
+  .touch-mode .brand {
+    font-size: 9px;
+  }
+  .touch-mode .app {
+    --strip: 96px;
+  }
+  .touch-mode .transport-spacer,
+  .touch-mode .separator {
+    display: none;
+  }
+}
+
+.touch-strip-menu {
+  display: none;
+}
+.touch-mode .touch-strip-menu {
+  display: block;
+  min-width: 30px;
+  min-height: 22px;
+  padding: 0;
+}
+.touch-mode .strip-buttons button {
+  min-height: 40px;
+  min-width: 36px;
+}
+.touch-mode .tools-dropdown {
+  position: fixed;
+  top: 50px;
+  right: 8px;
+  width: min(320px, calc(100vw - 16px));
+  max-height: 80dvh;
+  overflow: auto;
+  z-index: 100;
+}
+.touch-mode.touch-inspector-open .sidebar {
+  display: grid;
+  position: fixed;
+  right: 0;
+  top: 104px;
+  bottom: 24px;
+  width: min(330px, 90vw);
+  z-index: 25;
+  overflow: auto;
+  background: #232b35;
+  border-left: 1px solid #65758a;
+  grid-template-rows: auto 30px minmax(0, 1fr);
+}
+.touch-mode .touch-compact {
+  --module-rows: 22px 0px 0px 0px 0px 0px 0px 44px 40px 44px 28px
+    minmax(100px, 1fr) 16px 18px;
+}
+@media (max-height: 600px) {
+  .touch-mode .app {
+    grid-template-rows: 44px 44px 0 minmax(0, 1fr) 20px;
+  }
+  .touch-mode .desk {
+    grid-template-rows: 44px minmax(0, 1fr) 16px;
+  }
+  .touch-mode .touch-compact {
+    --module-rows: 20px 0px 0px 0px 0px 0px 0px 0px 30px 36px 28px
+      minmax(60px, 1fr) 14px 0px;
+  }
+  .touch-mode .touch-compact .strip > :nth-child(8),
+  .touch-mode .touch-compact .strip > :nth-child(14) {
+    display: none;
+  }
+  .touch-mode .strip-buttons button {
+    min-height: 32px;
+  }
+  .touch-mode .name-row input {
+    min-height: 28px;
+  }
+  .touch-mode .desk-footer {
+    font-size: 8px;
+  }
+}
+/* Explicit placement keeps the console in its audio-workspace row when meters are hidden. */
+.titlebar {
+  grid-row: 1;
+}
+.transport {
+  grid-row: 2;
+}
+.meter-bridge {
+  grid-row: 3;
+}
+.console {
+  grid-row: 4;
+}
+.statusbar {
+  grid-row: 5;
+}
+.touch-mode .fader-section {
+  grid-template-columns: 44px 16px minmax(0, 1fr);
+}
+.touch-mode .fader-scale {
+  margin: 13px 0;
+}
+@media (max-height: 600px) {
+  .touch-mode .fader-section {
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+}
+.touch-mode .app:not(.touch-compact):not(.small-console) {
+  --module-rows: 26px 44px 148px 36px 36px 48px 44px 44px 40px 44px 32px
+    minmax(120px, 1fr) 16px 18px;
+}
+.touch-mode .app:not(.touch-compact) .insert-row {
+  height: 32px;
+  flex: 0 0 32px;
+}
+.touch-mode .app:not(.touch-compact) .insert-row button {
+  height: 32px;
+  min-height: 32px;
+  font-size: 11px;
+}

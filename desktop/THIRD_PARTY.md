@@ -22,6 +22,9 @@
   GPL-2.0-or-later. Los headers de compilación Windows corresponden a
   `5533a277e4400203b50114c993f89878d50a27b9` (32.1.0).
   No se distribuye el runtime de OBS.
+- **PBKDF2 / SHA-2 (RustCrypto)** — MIT OR Apache-2.0; derivación de
+  contraseñas para acceso web, con versiones fijadas en Cargo.lock.
+- **if-addrs 0.13.4** — MIT OR BSD-3-Clause; enumeración de interfaces de red.
 - Las demás dependencias Rust están fijadas en Cargo.lock. El paquete
   portable incluye sus archivos de licencia/NOTICE disponibles en `licenses/`.
 

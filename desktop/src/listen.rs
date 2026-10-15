@@ -34,6 +34,8 @@ struct Runtime {
     thread: thread::JoinHandle<()>,
 }
 pub struct Hub {
+    pub gate: crate::access::Gate,
+    latency: Mutex<Value>,
     enabled: AtomicBool,
     running: AtomicBool,
     port: AtomicU16,
@@ -72,6 +74,8 @@ impl Hub {
             })
             .collect();
         Ok(Arc::new(Self {
+            gate: crate::access::Gate::new(),
+            latency: Mutex::new(Value::Null),
             enabled: AtomicBool::new(false),
             running: AtomicBool::new(false),
             port: AtomicU16::new(0),
@@ -103,6 +107,7 @@ impl Hub {
         self.running.store(value, Release);
     }
     pub fn stop(&self) {
+        self.gate.revoke();
         self.enabled.store(false, Release);
         if let Some(r) = self.runtime.lock().unwrap().take() {
             r.alive.store(false, Release);
@@ -164,6 +169,9 @@ impl Hub {
         *self.public_host.lock().unwrap() = share_host(host)?;
         Ok(())
     }
+    pub fn set_latency(&self, value: Value) {
+        *self.latency.lock().unwrap() = value;
+    }
     pub fn status(&self) -> Value {
         let host = self.public_host.lock().unwrap();
         let ip = if host.is_empty() {
@@ -173,7 +181,7 @@ impl Hub {
         };
         let ip = url_host(&ip);
         let port = self.port.load(Relaxed);
-        json!({"enabled":self.enabled.load(Acquire),"port":port,"host":*host,"url":format!("http://{ip}:{port}/?key={}",self.key),"clients":self.slots.iter().filter(|s|s.active.load(Relaxed)).count(),"dropped":self.slots.iter().map(|s|s.dropped.load(Relaxed)).sum::<u64>()})
+        json!({"enabled":self.enabled.load(Acquire),"port":port,"host":*host,"access":self.gate.status(),"generic_url":format!("http://{ip}:{port}/"),"url":if self.gate.status()["mode"]=="disabled" {format!("http://{ip}:{port}/?key={}",self.key)}else{format!("http://{ip}:{port}/")},"clients":self.slots.iter().filter(|s|s.active.load(Relaxed)).count(),"dropped":self.slots.iter().map(|s|s.dropped.load(Relaxed)).sum::<u64>()})
     }
     pub fn publish(&self, buses: &[Vec<Vec<f32>>], frames: usize) {
         if !self.enabled.load(Acquire) {
@@ -227,18 +235,71 @@ impl Hub {
         }
         let text = String::from_utf8_lossy(&request);
         let mut line = text.lines().next().unwrap_or("").split_whitespace();
-        if line.next() != Some("GET") {
+        let method = line.next();
+        let headers: Vec<_> = text
+            .lines()
+            .skip(1)
+            .filter_map(|l| l.split_once(':'))
+            .map(|(k, v)| (k.trim(), v.trim()))
+            .collect();
+        let header = |name: &str| {
+            headers
+                .iter()
+                .find(|(k, _)| k.eq_ignore_ascii_case(name))
+                .map(|(_, v)| *v)
+        };
+        let cookie = crate::access::cookie_value(header("Cookie").unwrap_or(""), "mm_listen");
+        let uri = line.next().unwrap_or("");
+        if method == Some("POST") && uri == "/login/listen" {
+            if header("Origin")
+                .is_some_and(|o| Some(o.strip_prefix("http://").unwrap_or("")) != header("Host"))
+            {
+                return response(
+                    &mut stream,
+                    403,
+                    "application/json",
+                    b"{\"error\":\"Origin denied\"}",
+                );
+            }
+            let n = header("Content-Length")
+                .and_then(|n| n.parse::<usize>().ok())
+                .filter(|n| *n <= 2048);
+            if header("Content-Type") != Some("application/json")
+                || header("Transfer-Encoding").is_some()
+                || n.is_none()
+            {
+                return response(
+                    &mut stream,
+                    400,
+                    "application/json",
+                    b"{\"error\":\"JSON required\"}",
+                );
+            }
+            let mut body = vec![0; n.unwrap()];
+            stream.read_exact(&mut body)?;
+            return crate::access::login_http(&self.gate, &mut stream, "listen", &body);
+        }
+        if method != Some("GET") {
             return response(&mut stream, 405, "text/plain", b"Read-only monitor");
         }
-        let uri = line.next().unwrap_or("");
         let (path, query) = uri.split_once('?').unwrap_or((uri, ""));
         let query: Vec<_> = query.split('&').filter_map(|p| p.split_once('=')).collect();
-        if !query.iter().any(|(k, v)| *k == "key" && *v == self.key) {
+        let key_access = query.iter().any(|(k, v)| *k == "key" && *v == self.key)
+            && self.gate.status()["mode"] == "disabled";
+        if !key_access && !self.gate.authorized(cookie) {
+            if path == "/" && self.gate.status()["mode"] == "password" {
+                return response(
+                    &mut stream,
+                    200,
+                    "text/html; charset=utf-8",
+                    crate::access::login_page("listen").as_bytes(),
+                );
+            }
             return response(
                 &mut stream,
                 403,
-                "text/plain",
-                b"Use the monitor link from the app",
+                "application/json",
+                b"{\"error\":\"Autenticacion requerida\"}",
             );
         }
         match path {
@@ -247,12 +308,12 @@ impl Hub {
                 200,
                 "text/html; charset=utf-8",
                 include_str!("../web/listen.html")
-                    .replace("__KEY__", &self.key)
+                    .replace("__KEY__", if key_access { &self.key } else { "" })
                     .as_bytes(),
             ),
             "/status" => {
                 let names = self.names.lock().unwrap();
-                let data = json!({"running":self.running.load(Acquire),"buses":names.iter().enumerate().map(|(i,(name,format))|json!({"index":i,"name":name,"format":format})).collect::<Vec<_>>(),"sample_rate":48000});
+                let data = json!({"running":self.running.load(Acquire),"buses":names.iter().enumerate().map(|(i,(name,format))|json!({"index":i,"name":name,"format":format})).collect::<Vec<_>>(),"sample_rate":48000,"latency":*self.latency.lock().unwrap(),"queue_ms_upper_bound":self.slots.iter().filter(|s|s.active.load(Relaxed)).map(|s|s.ready.len() as f64*10.0).fold(0.0_f64,f64::max)});
                 response(
                     &mut stream,
                     200,
@@ -289,7 +350,10 @@ impl Hub {
                 stream.write_all(b"HTTP/1.0 200 OK\r\nContent-Type: application/octet-stream\r\nCache-Control: no-store\r\nConnection: close\r\nX-Sample-Rate: 48000\r\nX-Channels: 2\r\n\r\n")?;
                 let mut bytes = [0u8; FRAMES * 8];
                 let mut last = Instant::now();
-                while alive.load(Acquire) {
+                while alive.load(Acquire)
+                    && ((key_access && self.gate.status()["mode"] == "disabled")
+                        || self.gate.authorized(cookie))
+                {
                     while slot.ready.len() > 12 {
                         if let Some(p) = slot.ready.pop() {
                             recycle(slot, p);

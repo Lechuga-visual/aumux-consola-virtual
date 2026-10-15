@@ -1,3 +1,4 @@
+mod access;
 mod bridge;
 mod compressor;
 mod config;
@@ -5,10 +6,12 @@ mod eq;
 mod fx;
 mod generator;
 mod graph;
+mod latency;
 mod listen;
 mod mixer;
 mod native;
 mod native_fx;
+mod network;
 mod presets;
 mod remote;
 #[cfg(test)]
@@ -120,6 +123,7 @@ impl App {
             "xruns":self.controls.xruns.load(Relaxed),"clipped_blocks":self.controls.clipped.load(Relaxed),
             "listen":self.listen.status(),
             "remote":self.remote.status(),
+            "latency":self.latency(),
             "bridge_drops":self.bridge.dropped.load(Relaxed),"bridge":self.bridge.status(),"latencies":self.latencies,"actual_buffer":actual_buffer})
     }
     fn start(&mut self, mode: &str) -> Result<Value, String> {
@@ -178,6 +182,48 @@ impl App {
             self.next = Instant::now();
         }
     }
+    fn latency(&self) -> Value {
+        latency::report(
+            &self.config,
+            &self.latencies,
+            if self.system_live {
+                self.system_audio.as_ref().map_or(256, |a| a.frames)
+            } else if self.live {
+                self.audio.frames
+            } else {
+                256
+            },
+            if self.system_live {
+                self.system_audio.as_ref().and_then(|a| a.latency_frames())
+            } else if self.live {
+                self.audio.latency_frames()
+            } else {
+                None
+            },
+            self.live || self.demo.is_some(),
+            self.bridge.queue_depth(),
+        )
+    }
+    fn read_api(&mut self, path: &str) -> Result<Value, String> {
+        match path {
+            "/api/config" => Ok(json!(self.config)),
+            "/api/status" => Ok(self.status()),
+            "/api/mix-state" => Ok(
+                json!({"revision":self.remote.status()["revision"],"channels":self.config.channels.iter().map(|ch|json!({"sends_db":ch.sends_db,"send_mute":ch.send_mute,"pre":ch.pre})).collect::<Vec<_>>() }),
+            ),
+            "/api/presets" => presets::load().map(|p| json!(p)),
+            "/api/native" => Ok(json!(native_fx::registry())),
+            "/api/limits" => Ok(
+                json!({"channels":MAX_CHANNELS,"auxes":MAX_AUXES,"inputs":MAX_IO,"outputs":MAX_IO}),
+            ),
+            "/api/sync-state" => {
+                Ok(json!({"revision":self.remote.status()["revision"],"config":self.config}))
+            }
+            "/api/latency" => Ok(self.latency()),
+            "/api/addresses" => Ok(network::addresses()),
+            _ => Err("API no disponible".into()),
+        }
+    }
     fn api(&mut self, path: &str, body: &str) -> Result<Value, String> {
         match path {
             "/api/config" => {
@@ -194,7 +240,22 @@ impl App {
                     let mut base: Config =
                         serde_json::from_value(v["base"].clone()).map_err(|e| e.to_string())?;
                     base.normalise();
-                    remote::merge_sends(&mut c, &base, &self.config);
+                    if base.channels.len() != self.config.channels.len()
+                        || base.buses.len() != self.config.buses.len()
+                    {
+                        return Err("La estructura cambió desde otra consola; espera la sincronización y repite el ajuste".into());
+                    }
+                    let structure = c.channels.len() != base.channels.len()
+                        || c.buses.len() != base.buses.len();
+                    if structure && json!(base) != json!(self.config) {
+                        return Err("La mezcla cambió; espera la sincronización antes de modificar la estructura".into());
+                    }
+                    c = serde_json::from_value(remote::merge_values(
+                        &json!(base),
+                        &json!(c),
+                        &json!(self.config),
+                    ))
+                    .map_err(|e| e.to_string())?;
                 }
                 let topology_changed = c.channels.len() != self.config.channels.len()
                     || c.buses.len() != self.config.buses.len();
@@ -318,6 +379,14 @@ impl App {
                 self.listen.set_host(&host)?;
                 self.remote.set_host(&host)?;
                 Ok(json!({"listen":self.listen.status(),"remote":self.remote.status()}))
+            }
+            "/api/listen-access" => {
+                let v: Value = serde_json::from_str(body).map_err(|e| e.to_string())?;
+                self.listen.gate.configure(
+                    v["mode"].as_str().ok_or("Modo requerido")?,
+                    v["password"].as_str(),
+                )?;
+                Ok(self.listen.status())
             }
             "/api/listen" => {
                 let v: Value = serde_json::from_str(body).map_err(|e| e.to_string())?;
@@ -444,6 +513,23 @@ fn run() -> Result<(), String> {
     }
     let mut next_remote = Instant::now();
     loop {
+        for _ in 0..4 {
+            let Some(rpc) = app.remote.take_rpc() else {
+                break;
+            };
+            let result = if Instant::now() > rpc.deadline
+                || !app.remote.console_gate.authorized(&rpc.cookie)
+                || app.remote.status()["enabled"] != true
+            {
+                Err("El acceso caducó o fue revocado".into())
+            } else {
+                match rpc.body {
+                    Some(body) => app.api(&rpc.path, &body),
+                    None => app.read_api(&rpc.path),
+                }
+            };
+            let _ = rpc.reply.try_send(result);
+        }
         app.demo_tick();
         app.remote.drain(
             &mut app.config,
@@ -451,6 +537,9 @@ fn run() -> Result<(), String> {
             app.live || app.demo.is_some(),
         );
         if Instant::now() >= next_remote {
+            let latency = app.latency();
+            app.remote.set_latency(latency.clone());
+            app.listen.set_latency(latency);
             app.remote
                 .refresh(&app.config, &app.controls, app.live || app.demo.is_some());
             next_remote = Instant::now() + Duration::from_millis(80);
@@ -478,6 +567,10 @@ fn run() -> Result<(), String> {
                     include_str!("../web/console.js").into(),
                 ),
                 "/workspace-ui.js" => reply(req,200,"text/javascript; charset=utf-8",include_str!("../web/workspace-ui.js").into()),
+                "/tools-ui.js" => reply(req,200,"text/javascript; charset=utf-8",include_str!("../web/tools-ui.js").into()),
+                "/api/sync-state" => reply(req,200,"application/json",json!({"revision":app.remote.status()["revision"],"config":app.config}).to_string()),
+                "/api/latency" => reply(req,200,"application/json",app.latency().to_string()),
+                "/api/addresses" => reply(req,200,"application/json",network::addresses().to_string()),
                 "/effects-ui.js" => reply(req,200,"text/javascript; charset=utf-8",include_str!("../web/effects-ui.js").into()),
                 "/api/mix-state" => reply(req,200,"application/json",json!({"revision":app.remote.status()["revision"],"channels":app.config.channels.iter().map(|ch|json!({"sends_db":ch.sends_db,"send_mute":ch.send_mute,"pre":ch.pre})).collect::<Vec<_>>()}).to_string()),
                 "/api/config" => reply(

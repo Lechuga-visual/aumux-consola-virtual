@@ -1,4 +1,4 @@
-# Monitor Mix 0.8 · prueba local en Windows x64
+# Monitor Mix 0.9 · prueba local en Windows x64
 
 Miniapp de mezcla con canales y auxiliares configurables y master estéreo, a 48 kHz. Reutiliza DSP
 y host VST3 de SoundCraft de Artcraft, con una superficie y un ruteo propios.
@@ -6,7 +6,7 @@ Es un prototipo para pruebas; todavía no está validado para una sesión en viv
 
 ## Probar sonido sin ASIO ni interfaz externa
 
-1. Extrae **todo** `MonitorMix-0.8.0-Windows-x64.zip` y ejecuta `MonitorMix.exe`.
+1. Extrae **todo** `MonitorMix-0.9.0-Windows-x64.zip` y ejecuta `MonitorMix.exe`.
    Cierra la versión anterior antes de abrir esta.
 2. Pulsa **AUDIO PC**. Usa los parlantes/audífonos predeterminados de Windows
    mediante WASAPI, sin controlador ASIO ni dispositivo MOTU.
@@ -32,6 +32,18 @@ a **REACTIVAR AUDIO**: púlsalo para recuperar el sonido sin detener el motor,
 con una entrada gradual de un bloque. **DETENER** libera el dispositivo. Cerrar la consola
 de Monitor Mix termina la app; cerrar solo su ventana gráfica no detiene el
 proceso ni el audio.
+
+## Novedades 0.9
+
+- **Herramientas → Interfaz touch**: automática/activada/desactivada; faders sin
+  desplazar verticalmente la página y acciones de tira mediante ⋮.
+- **Control remoto**: enlace único con contraseña o abierto y selector de auxiliar;
+  consola principal remota con permiso independiente; escucha genérica/protegida.
+- Selector de interfaz/IP local o Tailscale para los enlaces.
+- Indicadores de componentes de latencia y calculadora en Herramientas.
+
+Consulta [la guía 0.9](interfaz-0.9.md) para configurar accesos y distinguir
+latencias calculadas, declaradas y no medidas. La marca superior debe indicar 0.9.
 
 ## Control remoto web 0.8
 
@@ -247,7 +259,7 @@ La copia 0.2 en `%APPDATA%` no se utiliza en Windows normal; puedes eliminar
 
 ## Validación y diagnóstico
 
-En este entorno se comprobaron 29 pruebas del motor, incluidas medición
+En este entorno se comprobaron 32 pruebas del motor, incluidas medición
 Peak/RMS de un seno conocido, ruido independiente y su espectro, selección de
 bus para escucha PC, migración de escenas y cadenas/bypass con un VST3 binario
 real de prueba. También se probaron la interfaz en Chromium y el puente desde
@@ -273,7 +285,7 @@ Prueba de lógica sin hardware desde PowerShell:
 ## OSC y superficies Mackie
 
 Se dejó anotada la dirección futura: mezclador independiente o controlador MIDI
-Mackie Control/HUI, además de OSC. No están implementados en 0.8. El mapa para
+Mackie Control/HUI, además de OSC. No están implementados en 0.9. El mapa para
 CueMix/MOTU necesita comprobar documentación y mensajes con el equipo.
 
 Las pruebas de C++ nativo comprueban los 21 inserts y el EQ con ASan/UBSan,
@@ -289,7 +301,7 @@ Grabación multipista y OSC/Mackie pendientes.
 
 Si no aparecen **+ Canal**, **+ Aux** y **Canales y auxiliares**, cierra el
 proceso anterior y abre el ejecutable del ZIP nuevo: la marca superior debe
-mostrar **0.8**. Se prueba en Windows extrayendo todo el ZIP; no mezcles
+mostrar **0.9**. Se prueba en Windows extrayendo todo el ZIP; no mezcles
 archivos de varias versiones.
 
 Las novedades de dinámica, superficie adaptativa y escucha LAN se describen en

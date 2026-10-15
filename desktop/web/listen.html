@@ -56,6 +56,67 @@
     #state {
       color: #81cebb;
     }
+    main {
+      width: calc(100% - 24px);
+      box-sizing: border-box;
+      margin: clamp(12px, 4vh, 36px) auto;
+      padding: 22px;
+    }
+    button,
+    select {
+      min-height: 48px;
+      font-size: 16px;
+    }
+    input[type="range"] {
+      touch-action: none;
+      min-height: 48px;
+      accent-color: #69c6bb;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      width: 30px;
+      height: 30px;
+    }
+    #listen-latency {
+      white-space: pre-line;
+      border-top: 1px solid #46596c;
+      padding-top: 12px;
+    }
+    details summary {
+      min-height: 44px;
+      cursor: pointer;
+    }
+    button {
+      touch-action: manipulation;
+    }
+    html {
+      overscroll-behavior: none;
+    }
+    @media (max-width: 600px) {
+      main {
+        margin: 12px auto;
+        padding: 18px;
+      }
+      h1 {
+        font-size: 22px;
+      }
+      #play,
+      #stop {
+        width: calc(50% - 8px);
+        margin: 0;
+      }
+      label {
+        margin: 14px 0;
+      }
+      #volume {
+        width: 100%;
+      }
+    }
+    @media (min-width: 700px) and (pointer: coarse) {
+      main {
+        max-width: 680px;
+        padding: 30px;
+      }
+    }
   </style>
   <main>
     <h1>MONITOR MIX · Escucha</h1>
@@ -75,6 +136,10 @@
         value="0.5"
     /></label>
     <p id="state" role="status">Preparado</p>
+    <details>
+      <summary id="listen-latency-summary">Latencia de esta escucha</summary>
+      <p id="listen-latency">Esperando datos…</p>
+    </details>
     <p>
       Audio estéreo a 48 kHz. El navegador y la red añaden retardo: esta escucha
       es de referencia y no sustituye el monitoreo de escenario de baja
@@ -85,6 +150,9 @@
     const key = "__KEY__",
       bus = document.querySelector("#bus"),
       state = document.querySelector("#state");
+    let latencyData = null,
+      statusRtt = 0,
+      senderQueue = 0;
     let session = 0;
     let context,
       gain,
@@ -106,6 +174,7 @@
       context = null;
       state.textContent = "Detenido";
       document.querySelector("#play").disabled = false;
+      renderLatency();
     }
     async function play() {
       stop();
@@ -168,6 +237,7 @@
           source.onended = () => sources.delete(source);
           source.start(next);
           next += frames / 48000;
+          if (sources.size === 1) renderLatency();
         }
         if (playing && abort === own) {
           stop();
@@ -186,14 +256,20 @@
       if (gain) gain.gain.value = Number(e.target.value);
     };
     bus.onchange = () => {
+      renderLatency();
       if (playing) play();
     };
     async function update() {
       try {
+        const started = performance.now();
         const r = await fetch("/status?key=" + key);
         if (!r.ok) throw Error("Enlace de escucha no válido");
         const s = await r.json(),
           value = bus.value;
+        latencyData = s.latency;
+        statusRtt = performance.now() - started;
+        senderQueue = s.queue_ms_upper_bound || 0;
+        renderLatency();
         bus.replaceChildren(
           ...s.buses.map(
             (b) =>
@@ -216,7 +292,31 @@
         state.textContent = e.message;
       }
     }
+    function renderLatency() {
+      const l = latencyData;
+      if (!l?.block_ms) return;
+      const ms = (v) =>
+        typeof v === "number" && Number.isFinite(v)
+          ? (v * 1000).toFixed(1) + " ms"
+          : "sin dato";
+      const queued = context
+        ? Math.max(0, next - context.currentTime) * 1000
+        : 0;
+      document.querySelector("#listen-latency-summary").textContent =
+        `Latencia · cola navegador ${queued.toFixed(0)} ms`;
+      const b = l.buses[Number(bus.value)];
+      const paths = b?.paths?.map((p) => p.plugin_ms) || [];
+      document.querySelector("#listen-latency").textContent =
+        `Bloque del motor: ${l.block_ms.toFixed(2)} ms (calculado)\nDriver: ${l.driver_ms === null ? "sin dato" : l.driver_ms.toFixed(2) + " ms declarados"}\nPlugins hacia ${b?.name || "esta mezcla"}: ${paths.length ? Math.min(...paths).toFixed(1) + "–" + Math.max(...paths).toFixed(1) + " ms declarados" : "sin rutas activas"}\nCola emisora: ≤ ${senderQueue.toFixed(1)} ms (cota actual compartida)\nCola programada del navegador: ${queued.toFixed(1)} ms\nAudioContext base: ${ms(context?.baseLatency)} · salida: ${ms(context?.outputLatency)}\nConsulta de estado RTT: ${statusRtt.toFixed(1)} ms medidos\nRed de audio en un sentido / total físico: sin medición. No se suman estos componentes automáticamente.`;
+    }
+    function deviceLayout() {
+      document.body.dataset.device =
+        innerWidth < 600 ? "mobile" : innerWidth < 1100 ? "tablet" : "desktop";
+    }
+    window.addEventListener("resize", deviceLayout);
+    deviceLayout();
     update();
+    setInterval(renderLatency, 500);
     setInterval(update, 1500);
   </script>
 </html>

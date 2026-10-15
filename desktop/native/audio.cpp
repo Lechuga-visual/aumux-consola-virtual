@@ -91,6 +91,11 @@ int mm_open(void* opaque, unsigned device, unsigned inputs, unsigned outputs,
     } catch (const std::exception& e) { h->error = e.what(); return -1; }
     catch (...) { h->error = "Cannot open audio stream"; return -1; }
 }
+long long mm_stream_latency(void* opaque) noexcept {
+    auto* h=static_cast<Handle*>(opaque);
+    try { if(h && h->audio.isStreamOpen()) return static_cast<long long>(h->audio.getStreamLatency()); } catch(...) {}
+    return -1;
+}
 int mm_start(void* opaque) noexcept {
     auto* h = static_cast<Handle*>(opaque);
     try {

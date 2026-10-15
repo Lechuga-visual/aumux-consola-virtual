@@ -9,12 +9,18 @@ web todavía usa unos 120 ms de búfer más el retardo de red y reproducción;
 su optimización y medición son prioritarias en la
 [hoja de ruta](docs/hoja-de-ruta.md).
 
-**Prueba local:** [descargar Windows x64](dist/MonitorMix-0.8.0-Windows-x64.zip)
+**Prueba local:** [descargar Windows x64](dist/MonitorMix-0.9.0-Windows-x64.zip)
 e [instrucciones para Windows](docs/probar-en-windows.md).
 La descarga incluye el ejecutable, el receptor de OBS y el código fuente.
-Su checksum está en [SHA-256](dist/MonitorMix-0.8.0-Windows-x64.zip.sha256).
+Su checksum está en [SHA-256](dist/MonitorMix-0.9.0-Windows-x64.zip.sha256).
 
 ## Funciones actuales
+
+- Modo touch automático o manual en Herramientas; faders sin scroll vertical y vistas móvil/tablet/escritorio.
+- Enlace único de mezcla con contraseña compartida o abierto, con selector de auxiliar; se conservan enlaces personales.
+- Consola principal remota independiente, con contraseña opcional y opción de deshabilitarla.
+- Escucha con clave, contraseña o enlace abierto; selector de direcciones locales/Tailscale por tarjeta.
+- Diagnóstico de latencia por componentes y calculadora a 48 kHz, sin confundir RTT con audio extremo a extremo.
 
 - **Control remoto web por auxiliar:** enlaces personales revocables, faders, mute por envío y PRE/POST con permisos.
 - Dirección IP Tailscale o MagicDNS para compartir control y escucha; puertos separados.
@@ -50,7 +56,7 @@ La miniapp reutiliza **los crates DSP y VST3 de SoundCraft de Artcraft**,
 fijados a una revisión concreta. La interfaz y el ruteo son propios; no es
 un fork de todo el DAW. No requiere controlar CueMix ni instalar REAPER.
 
-![Consola Monitor Mix 0.8](docs/monitor-mix-0.8.png)
+![Consola Monitor Mix touch 0.9](docs/monitor-mix-0.9-main-touch.png)
 
 Para probar sin hardware: **AUDIO PC → G en un canal → Control Room → Input**.
 DEMO procesa sin reproducir. Las escenas 0.1 siguen siendo compatibles.
@@ -99,7 +105,7 @@ administrador con OBS cerrado. OBS 32.2.2 x64 es compatible. Consulta
 [Dirección OSC, Mackie Control y Mackie HUI](docs/control-remoto.md): se prevé
 un modo controlador sin abrir audio, además del mezclador independiente.
 Estos protocolos y el mapa específico MOTU quedan para la siguiente etapa;
-no se implementan en 0.8.
+no se implementan en 0.9.
 
 ## Componentes anteriores
 
@@ -117,7 +123,7 @@ del alcance. La grabación multipista y OSC/Mackie quedan pendientes.
 La aplicación combinada desde 0.5 se distribuye bajo GPL-3.0-only, con fuentes,
 licencias y procedencia en el ZIP.
 
-[Control remoto, Tailscale y guía 0.8](docs/interfaz-0.8.md).
+[Touch, accesos unificados, consola remota y latencia 0.9](docs/interfaz-0.9.md).
 
 [Hoja de ruta](docs/hoja-de-ruta.md): otros dispositivos y subsistemas Windows,
 optimización de escucha de baja latencia, grabación multipista y control OSC/Mackie.

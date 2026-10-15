@@ -1,6 +1,6 @@
 # Hoja de ruta
 
-Estado a partir de Monitor Mix 0.8. Todos los caminos de audio seguirán a
+Estado a partir de Monitor Mix 0.9. Todos los caminos de audio seguirán a
 **48 kHz** en esta etapa. Esta lista registra tareas pendientes y avances,
 sin fechas comprometidas. Los instrumentos virtuales quedan
 fuera del alcance; el proyecto se centra en mezcla y procesamiento de audio.
@@ -50,12 +50,14 @@ tratamiento de relojes independientes antes de habilitar rutas combinadas.
 
 La agregación de varios dispositivos ASIO queda **fuera del alcance acordado**.
 
-## Mezclas personales remotas por web · base disponible en 0.8
+## Mezclas y consola remotas por web · disponibles en 0.9
 
 Ya implementado: superficie por auxiliar con faders y mute de envío, permiso
 PRE/POST, límite de nivel, enlaces revocables, sincronización con la consola y
 reconexión sin reproducir cambios antiguos. Enlaces con IP Tailscale/MagicDNS
-para control y escucha. Ver [guía 0.8](interfaz-0.8.md).
+para control y escucha. Se añaden vistas touch, enlaces unificados con contraseña
+u abiertos, selector de auxiliar, consola principal remota y selección de interfaz
+de red. Ver [guía 0.9](interfaz-0.9.md).
 
 Pendiente: optimizar y medir transporte de escucha para monitoreo de mínima
 latencia, validar sesiones largas y varios dispositivos reales en LAN/tailnet,
@@ -69,6 +71,13 @@ pre/post procesamiento, nombres y selección de pistas. Escritura fuera del
 callback, cola acotada y avisos claros de disco lleno o pérdida de bloques.
 Definir segmentación/RF64 para sesiones largas y recuperación de archivos.
 
+## Herramientas de señal
+
+Disponibles: diagnóstico de componentes de latencia y calculadora a 48 kHz.
+Pendientes: medición física de extremo a extremo/loopback, detector de acoples,
+detector de cancelación de fase y osciloscopio. El menú Herramientas reserva
+estas funciones; no se simulan mediciones ni se ejecuta análisis pendiente.
+
 ## Control y expansión
 
 - OSC y modo controlador sin abrir motor de audio.
@@ -78,4 +87,4 @@ Definir segmentación/RF64 para sesiones largas y recuperación de archivos.
   de estabilidad/latencia con ASIO y hardware real.
 
 Ver [control remoto](control-remoto.md) para el diseño previo de OSC/Mackie y
-[la versión actual](interfaz-0.8.md) para lo ya implementado.
+[la versión actual](interfaz-0.9.md) para lo ya implementado.

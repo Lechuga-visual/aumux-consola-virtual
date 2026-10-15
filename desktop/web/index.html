@@ -13,13 +13,30 @@
         <div class="brand">
           <span class="brand-icon"><i></i><i></i><i></i><i></i></span
           ><strong>MONITOR<span>MIX</span></strong
-          ><span class="version">0.8</span>
+          ><span class="version">0.9</span>
         </div>
         <div class="scene-title">
           CONSOLA DE MONITOREO <span>•</span>
           <span id="scene-name">Sin título</span>
         </div>
         <div class="window-actions">
+          <details id="tools-menu" class="tools-menu">
+            <summary>Herramientas</summary>
+            <div class="tools-dropdown">
+              <button id="open-calculator">Calculadora de latencia</button
+              ><button id="open-diagnostics">Latencia y diagnóstico</button>
+              <label
+                >Interfaz touch<select id="touch-mode">
+                  <option value="auto">Automática</option>
+                  <option value="on">Activada</option>
+                  <option value="off">Desactivada</option>
+                </select></label
+              >
+              <button disabled>Detector de acoples · pendiente</button
+              ><button disabled>Detector de fase · pendiente</button
+              ><button disabled>Osciloscopio · pendiente</button>
+            </div>
+          </details>
           <button id="toggle-meters" aria-pressed="true">Medidores</button>
           <button id="toggle-inspector" aria-pressed="true">Inspector</button>
           <select id="mixer-layout" aria-label="Vista del mezclador">
@@ -58,7 +75,9 @@
         ><button id="stop" title="Detener y liberar el dispositivo">
           ■ DETENER
         </button>
-        <span id="status" class="status">DETENIDO</span
+        <button id="latency-badge" title="Ver componentes de latencia">
+          Latencia · datos</button
+        ><span id="status" class="status">DETENIDO</span
         ><span class="transport-spacer"></span
         ><span id="engine-summary" class="technical"
           >48 kHz · 256 muestras</span
@@ -468,6 +487,11 @@
         <button data-close="network-dialog">✕</button>
       </div>
       <label
+        >Interfaz / dirección del sistema<select id="network-interface">
+          <option value="">Manual / MagicDNS</option>
+        </select></label
+      >
+      <label
         >Dirección para compartir (opcional)<input
           id="network-host"
           type="text"
@@ -506,6 +530,78 @@
         ><a id="network-open" target="_blank" rel="noreferrer">Abrir escucha</a>
       </div>
       <p id="network-status" role="status"></p>
+      <div class="access-card">
+        <h3>Acceso a escucha</h3>
+        <label
+          >Enlace<select id="listen-access-mode">
+            <option value="disabled">Enlace con clave</option>
+            <option value="password">Enlace único con contraseña</option>
+            <option value="open">Enlace abierto sin contraseña</option>
+          </select></label
+        ><label
+          >Contraseña nueva<input
+            id="listen-password"
+            type="password"
+            autocomplete="new-password" /></label
+        ><button id="listen-access-save">Aplicar acceso de escucha</button>
+      </div>
+      <div class="access-card">
+        <h3>Enlace único de mezclas auxiliares</h3>
+        <label
+          >Acceso<select id="mix-access-mode">
+            <option value="disabled">Solo enlaces personales</option>
+            <option value="password">Contraseña compartida</option>
+            <option value="open">Abierto sin contraseña</option>
+          </select></label
+        ><label
+          >Contraseña nueva<input
+            id="mix-password"
+            type="password"
+            autocomplete="new-password" /></label
+        ><label
+          >Máximo de los envíos (dB)<input
+            id="mix-access-max"
+            type="number"
+            min="-60"
+            max="6"
+            step="0.1"
+            value="0" /></label
+        ><label
+          ><input id="mix-access-pre" type="checkbox" /> Permitir
+          PRE/POST</label
+        ><button id="mix-access-save">Aplicar acceso de mezclas</button
+        ><label
+          >Enlace único<input id="mix-generic-url" type="text" readonly
+        /></label>
+        <p class="hint">
+          En el enlace único se puede elegir cualquier auxiliar. Los enlaces
+          personales siguen limitados a su auxiliar.
+        </p>
+      </div>
+      <div class="access-card">
+        <h3>Consola principal remota · acceso de operador</h3>
+        <label
+          >Acceso<select id="console-access-mode">
+            <option value="disabled">Deshabilitado</option>
+            <option value="password">Con contraseña</option>
+            <option value="open">Abierto sin contraseña</option>
+          </select></label
+        ><label
+          >Contraseña nueva<input
+            id="console-password"
+            type="password"
+            autocomplete="new-password" /></label
+        ><button id="console-access-save">Aplicar acceso de consola</button
+        ><label
+          >Enlace de consola<input id="console-remote-url" type="text" readonly
+        /></label>
+        <p class="hint">
+          Da control de toda la consola, incluidos main, efectos, motor y
+          configuración. Usa el servidor de control; es independiente del
+          permiso para auxiliares.
+        </p>
+      </div>
+      <p id="access-status" role="status"></p>
       <section id="remote-admin">
         <h3>Mezclas personales · control remoto</h3>
         <div class="form-row">
@@ -556,6 +652,79 @@
         el monitoreo de escenario. Permite el puerto de Monitor Mix en el
         firewall de la red privada si Windows lo solicita. Si hay varias redes,
         usa la IP del PC accesible por los oyentes.
+      </p>
+    </dialog>
+    <dialog id="latency-dialog">
+      <div class="dialog-heading">
+        <h2>Latencia · componentes actuales</h2>
+        <button data-close="latency-dialog">✕</button>
+      </div>
+      <label>Ruta<select id="latency-route"></select></label>
+      <div id="latency-details" class="latency-grid"></div>
+      <p class="hint">
+        Búfer: cálculo. Driver y plugins: datos declarados, no medición física.
+        RTT: ida y vuelta del control web, no del audio. No se suman
+        automáticamente porque pueden solaparse. El total real extremo a extremo
+        requiere medición con loopback.
+      </p>
+    </dialog>
+    <dialog id="calculator-dialog">
+      <div class="dialog-heading">
+        <h2>Calculadora de latencia</h2>
+        <button data-close="calculator-dialog">✕</button>
+      </div>
+      <div class="calculator-grid">
+        <label
+          >Frecuencia (Hz)<input
+            id="calc-rate"
+            type="number"
+            value="48000"
+            readonly /></label
+        ><label
+          >Muestras por bloque<input
+            id="calc-frames"
+            type="number"
+            min="1"
+            max="65536"
+            value="256" /></label
+        ><label
+          >Número de bloques<input
+            id="calc-blocks"
+            type="number"
+            min="0"
+            max="100"
+            step="0.1"
+            value="2" /></label
+        ><label
+          >Plugins (muestras)<input
+            id="calc-plugins"
+            type="number"
+            min="0"
+            max="4800000"
+            value="0" /></label
+        ><label
+          >Red de audio supuesta (ms)<input
+            id="calc-network"
+            type="number"
+            min="0"
+            max="60000"
+            step="0.1"
+            value="0" /></label
+        ><label
+          >Otros búferes supuestos (ms)<input
+            id="calc-extra"
+            type="number"
+            min="0"
+            max="60000"
+            step="0.1"
+            value="0"
+        /></label>
+      </div>
+      <output id="calc-result"></output>
+      <p class="hint">
+        Estimación según estos supuestos a 48 kHz. No mide hardware, Windows ni
+        Tailscale y no cambia el motor. No añadas dos veces un búfer incluido en
+        otro dato.
       </p>
     </dialog>
     <dialog id="help-dialog">
@@ -614,5 +783,6 @@
     <script src="/console.js"></script>
     <script src="/effects-ui.js"></script>
     <script src="/workspace-ui.js"></script>
+    <script src="/tools-ui.js"></script>
   </body>
 </html>

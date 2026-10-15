@@ -31,7 +31,7 @@ try:
     def view(s):return http(origin+'/mix',headers={'X-Mix-Key':key(s)})
     def change(s,values,expected=200,headers=None):return http(origin+'/mix',{'epoch':view(s)['epoch'],'channel':0,**values},{'X-Mix-Key':key(s),**(headers or {})},expected)
     va=view(a);assert va['bus']['index']==1 and len(va['channels'])==8 and 'buses' not in va and 'sends_db' not in va['channels'][0]
-    http(origin+'/mix',expected=403);http(origin+'/api/config',expected=404)
+    http(origin+'/mix',expected=403);http(origin+'/api/config',expected=403)
     change(a,{'aux':0,'level_db':0},400);change(a,{'gain_db':0},400);change(a,{'channel':999,'mute':True},400);change(a,{'pre':False},400);change(b,{'level_db':0},400);change(a,{'level_db':0},403,{'Origin':'http://unrelated.invalid'})
     change(a,{'level_db':-18});change(b,{'level_db':-24,'pre':False})
     def rms(bus):

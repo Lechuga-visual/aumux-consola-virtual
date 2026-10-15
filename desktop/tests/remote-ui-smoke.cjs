@@ -29,7 +29,7 @@ const fs = require("node:fs/promises");
     browser = await chromium.launch({
       executablePath: "/usr/bin/chromium",
       headless: true,
-      args: ["--no-sandbox", "--disable-dev-shm-usage"],
+      args: ["--no-sandbox", "--no-proxy-server", "--disable-dev-shm-usage"],
     });
     const errors = [],
       operator = await browser.newPage({
@@ -95,7 +95,7 @@ const fs = require("node:fs/promises");
         .locator('[aria-label="Enlace de Baterista"]')
         .inputValue();
     await operator.screenshot({
-      path: "docs/monitor-mix-0.8-remote-admin.png",
+      path: "/workspace/scratch/monitor-mix-personal-remote-admin.png",
     });
     await operator.locator("[data-close=network-dialog]").click();
     const contextA = await browser.newContext({
@@ -174,8 +174,12 @@ const fs = require("node:fs/promises");
     await a.waitForFunction(() => state.channels[0].level_db === 0 && !busy);
     await b.locator(".controls button:nth-child(2)").first().click();
     await b.waitForFunction(() => state.channels[0].pre === false && !busy);
-    await a.screenshot({ path: "docs/monitor-mix-0.8-remote.png" });
-    await b.screenshot({ path: "docs/monitor-mix-0.8-remote-mobile.png" });
+    await a.screenshot({
+      path: "/workspace/scratch/monitor-mix-personal-remote.png",
+    });
+    await b.screenshot({
+      path: "/workspace/scratch/monitor-mix-personal-remote-mobile.png",
+    });
     await contextA.setOffline(true);
     await a.waitForFunction(
       () => document.querySelector("#status").textContent === "Sin conexión",
