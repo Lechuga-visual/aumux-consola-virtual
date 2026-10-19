@@ -18,7 +18,7 @@ el formulario ni los requisitos actuales.
 
 Para preparar la solicitud de AuMux:
 
-1. Identificar al mantenedor y acreditar control de `Lechuga-visual/audio-obs-asio`.
+1. Identificar al mantenedor y acreditar control de `Lechuga-visual/aumux-consola-virtual`.
 2. Presentar el repositorio público, la licencia y los avisos de terceros.
 3. Explicar cómo se construyen EXE, DLL e instaladores desde un commit concreto,
    con dependencias fijadas y sin secretos dentro del repositorio.

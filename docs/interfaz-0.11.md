@@ -118,11 +118,8 @@ Se conservan deliberadamente nombres internos anteriores:
   **Monitor Mix — master local** para conservar la integración y escenas OBS.
 - Las variables de entorno `MONITOR_*` y los formatos de escenas anteriores.
 
-El repositorio conserva la dirección `Lechuga-visual/audio-obs-asio`. Su cambio
-de nombre queda pendiente: GitHub rechazó la operación de renombrado a la integración
-(«Resource not accessible by integration», HTTP 403), aunque la consulta del
-repositorio indique permisos de administración del usuario. No se cambió el
-nombre remoto; el producto y el ejecutable ya son AuMux.
+El repositorio se encuentra en
+[Lechuga-visual/aumux-consola-virtual](https://github.com/Lechuga-visual/aumux-consola-virtual).
 
 El ejecutable y el ZIP de esta entrega sí se llaman **AuMux.exe** y
 **AuMux-0.11.0-Windows-x64.zip**. El logo suministrado se incluye en la interfaz,

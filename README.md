@@ -2,8 +2,7 @@
 
 **AuMux**, antes Monitor Mix, es una miniapp Windows x64 para mezclar entradas ASIO o probar generadores por la
 salida normal del PC, crear mezclas auxiliares y enviar el master a OBS.
-El repositorio conserva por ahora su dirección `Lechuga-visual/audio-obs-asio`;
-el producto y los archivos de esta versión ya usan AuMux.
+Repositorio: [Lechuga-visual/aumux-consola-virtual](https://github.com/Lechuga-visual/aumux-consola-virtual).
 
 **Prioridad del proyecto:** mezcla y monitoreo en tiempo real con la menor
 latencia estable de extremo a extremo, también hacia OBS y por red. La escucha
