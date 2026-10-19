@@ -1,5 +1,6 @@
 #![cfg_attr(windows, windows_subsystem = "windows")]
 mod access;
+mod audio_network;
 mod bridge;
 mod compressor;
 mod config;
@@ -40,6 +41,7 @@ struct App {
     system_audio: Option<native::Audio>,
     system_live: bool,
     bridge: Arc<bridge::Bridge>,
+    audio_network: Arc<audio_network::Hub>,
     demo: Option<Mixer>,
     live: bool,
     latencies: Vec<usize>,
@@ -64,6 +66,7 @@ impl App {
             system_audio: None,
             system_live: false,
             bridge: bridge::Bridge::start()?,
+            audio_network: audio_network::Hub::new(),
             demo: None,
             live: false,
             latencies: vec![0; DEFAULT_CHANNELS + DEFAULT_AUXES + 1],
@@ -127,7 +130,7 @@ impl App {
             "gain_reduction_db":self.controls.compressor.iter().map(|c| if active { f32::from_bits(c.reduction.load(Relaxed)) } else { 0.0 }).collect::<Vec<_>>(),
             "emergency":self.controls.emergency.load(Relaxed),"failed":self.controls.failed.load(Relaxed),
             "xruns":self.controls.xruns.load(Relaxed),"clipped_blocks":self.controls.clipped.load(Relaxed),
-            "listen":self.listen.status(),
+            "audio_network":self.audio_network.status(),"listen":self.listen.status(),
             "remote":self.remote.status(),
             "latency":self.latency(),
             "system":self.system.cached(),
@@ -145,6 +148,7 @@ impl App {
         self.controls.clipped.store(0, Relaxed);
         let mut mixer = Mixer::new(&self.config, self.controls.clone())?;
         mixer.listen = Some(self.listen.clone());
+        mixer.audio_network = Some(self.audio_network.clone());
         self.latencies = mixer.latencies.clone();
         if mode == "demo" {
             self.demo = Some(mixer);
@@ -160,7 +164,10 @@ impl App {
             self.system_live = true;
             self.live = true;
         } else {
-            if self.config.buses.iter().all(|b| b.output.is_none()) && !self.config.obs_bridge {
+            if self.config.buses.iter().all(|b| b.output.is_none())
+                && !self.config.obs_bridge
+                && !self.config.audio_network.iter().any(|r| r.enabled)
+            {
                 return Err(
                     "Assign at least one physical output pair or enable the OBS bridge".into(),
                 );
@@ -286,6 +293,7 @@ impl App {
                     let mut next =
                         Mixer::reconfigure(&c, controls.clone(), &self.config, &self.latencies)?;
                     next.listen = Some(self.listen.clone());
+                    next.audio_network = Some(self.audio_network.clone());
                     let latencies = next.latencies.clone();
                     if let Some(old) = &mut self.demo {
                         old.fade_removed(&next);
@@ -326,6 +334,7 @@ impl App {
                 }
                 self.bridge.enabled.store(c.obs_bridge, Relaxed);
                 self.listen.configure(&c);
+                self.audio_network.configure(&c.audio_network);
                 if topology_changed || !wrapped || v["replace_scene"] == true {
                     self.remote.invalidate();
                 } else {

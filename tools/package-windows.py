@@ -41,12 +41,15 @@ shutil.copytree(vendor, source/'vendor-rust', dirs_exist_ok=True)
 (source/'.cargo').mkdir(exist_ok=True)
 (source/'.cargo/config.toml').write_text(config.replace(str(vendor),'vendor-rust'))
 # Ship the visual editor guide and its images beside LEEME, and with the sources.
-visual=[root/'docs/firma-windows.md', root/'docs/hoja-de-ruta.md', root/'docs/control-remoto.md', *sorted((root/'docs').glob('interfaz-*.md')), *sorted((root/'docs').glob('monitor-mix-*.png')), *sorted((root/'docs').glob('aumux-*.png'))]
+visual=[root/'docs/capturas.md', root/'docs/firma-windows.md', root/'docs/hoja-de-ruta.md', root/'docs/control-remoto.md', *sorted((root/'docs').glob('interfaz-*.md')), *sorted((root/'docs').glob('monitor-mix-*.png')), *sorted((root/'docs').glob('aumux-*.png'))]
 for p in visual:
     if p.is_file():
         shutil.copy2(p,stage/p.name)
         shutil.copy2(p,source/'docs'/p.name)
 shutil.copy2(root/'README.md',source/'README.md')
+if (root/'docs/screenshots').is_dir():
+    shutil.copytree(root/'docs/screenshots', stage/'screenshots', dirs_exist_ok=True)
+    shutil.copytree(root/'docs/screenshots', source/'docs/screenshots', dirs_exist_ok=True)
 metadata = json.loads(Path("/workspace/scratch/monitor-cargo-metadata.json").read_text())
 licenses = stage / "licenses"
 for package in metadata["packages"]:

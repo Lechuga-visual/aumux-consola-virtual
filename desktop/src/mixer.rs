@@ -253,6 +253,7 @@ impl Controls {
 
 pub struct Mixer {
     pub listen: Option<Arc<crate::listen::Hub>>,
+    pub audio_network: Option<Arc<crate::audio_network::Hub>>,
     pub controls: Arc<Controls>,
     channel: Vec<Vec<Vec<f32>>>,
     pub buses: Vec<Vec<Vec<f32>>>,
@@ -372,6 +373,7 @@ impl Mixer {
         }
         Ok(Self {
             listen: None,
+            audio_network: None,
             keys: (0..channels)
                 .map(|_| vec![vec![0.0; MAX_FRAMES]; 2])
                 .collect(),
@@ -519,6 +521,9 @@ impl Mixer {
                 c.reduction.store(0.0_f32.to_bits(), Relaxed);
             }
             if let Some(hub) = &self.listen {
+                hub.publish(&self.buses, frames);
+            }
+            if let Some(hub) = &self.audio_network {
                 hub.publish(&self.buses, frames);
             }
             return true;
@@ -754,6 +759,9 @@ impl Mixer {
             self.previous_bus_mono[b] = self.bus_mono[b];
         }
         if let Some(hub) = &self.listen {
+            hub.publish(&self.buses, frames);
+        }
+        if let Some(hub) = &self.audio_network {
             hub.publish(&self.buses, frames);
         }
         true

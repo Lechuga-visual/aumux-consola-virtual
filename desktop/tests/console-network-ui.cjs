@@ -197,7 +197,7 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     await page.locator("#tools-menu summary").click();
     await page.locator("#touch-mode").selectOption("on");
     await page.locator("#tools-menu summary").click();
-    await page.screenshot({ path: "docs/aumux-0.11.2-console-mobile.png" });
+    await page.screenshot({ path: "docs/aumux-0.12-console-mobile.png" });
     await context.close();
     await api("remote", {
       action: "access",

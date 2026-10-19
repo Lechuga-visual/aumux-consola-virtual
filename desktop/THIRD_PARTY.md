@@ -22,6 +22,10 @@
   GPL-2.0-or-later. Los headers de compilación Windows corresponden a
   `5533a277e4400203b50114c993f89878d50a27b9` (32.1.0).
   No se distribuye el runtime de OBS.
+- **Qt 6 Widgets / Gui / Core**: dependencias dinámicas del editor del receptor
+  en Linux/macOS, con las licencias GPL/LGPL aplicables de la distribución de Qt
+  (https://www.qt.io/licensing/open-source-lgpl-obligations). El editor Windows
+  usa Win32; el ZIP Windows no incluye bibliotecas Qt.
 - **PBKDF2 / SHA-2 (RustCrypto)** — MIT OR Apache-2.0; derivación de
   contraseñas para acceso web, con versiones fijadas en Cargo.lock.
 - **if-addrs 0.13.4** — MIT OR BSD-3-Clause; enumeración de interfaces de red.

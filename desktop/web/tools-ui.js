@@ -320,3 +320,124 @@ function updateAccessFields() {
 }
 for (const scope of ["mix", "console", "listen"])
   $(scope + "-access-mode").addEventListener("change", updateAccessFields);
+
+// AuMux Audio routes live in the scene; editing a form never sends partial settings.
+let audioNetworkSignature = "";
+function renderAudioNetwork(force = false) {
+  const button = (text, action) => {
+    const b = el("button", "", text);
+    b.type = "button";
+    b.onclick = action;
+    return b;
+  };
+  const signature = JSON.stringify([
+    cfg.audio_network || [],
+    cfg.buses.map((b) => b.name),
+  ]);
+  if (!force && signature === audioNetworkSignature) return;
+  audioNetworkSignature = signature;
+  const container = $("audio-network-routes");
+  container.replaceChildren();
+  (cfg.audio_network || []).forEach((route, index) => {
+    const card = el("section", "access-card audio-network-route");
+    const title = el("h3", "", `Flujo ${index + 1} · ${route.stream}`);
+    function field(label, value, type = "text") {
+      const wrapper = el("label", "", label),
+        input = el("input");
+      input.type = type;
+      if (type === "checkbox") input.checked = value;
+      else input.value = value;
+      wrapper.append(input);
+      card.append(wrapper);
+      return input;
+    }
+    card.append(title);
+    const enabled = field("Transmitir", route.enabled, "checkbox");
+    const stream = field(
+      "Identificador (1–31 caracteres: letras, números, guion, punto)",
+      route.stream,
+    );
+    stream.maxLength = 31;
+    stream.pattern = "[A-Za-z0-9_.-]{1,31}";
+    stream.required = true;
+    const busLabel = el("label", "", "Mezcla de origen"),
+      bus = el("select");
+    bus.replaceChildren(...cfg.buses.map((b, i) => new Option(b.name, i)));
+    bus.value = route.bus;
+    busLabel.append(bus);
+    card.append(busLabel);
+    const bind = field(
+      "Interfaz IPv4 de salida (0.0.0.0: ruta del sistema)",
+      route.bind,
+    );
+    const port = field("Puerto UDP del receptor", route.port, "number");
+    port.min = 1024;
+    port.max = 65535;
+    port.step = 1;
+    const destinations = field(
+      "Destinos IP / MagicDNS / broadcast, separados por coma",
+      route.destinations.join(", "),
+    );
+    const actions = el("div", "form-row"),
+      apply = button("Aplicar flujo", async () => {
+        if (![stream, port].every((e) => e.reportValidity())) return;
+        const previous = structuredClone(cfg.audio_network || []);
+        cfg.audio_network[index] = {
+          enabled: enabled.checked,
+          stream: stream.value,
+          bus: Number(bus.value),
+          bind: bind.value.trim(),
+          port: Number(port.value),
+          destinations: destinations.value.split(/[,;\s]+/).filter(Boolean),
+        };
+        apply.disabled = true;
+        try {
+          await publish();
+          $("audio-network-message").textContent =
+            "Flujo guardado; comprueba el estado de salida.";
+          renderAudioNetwork(true);
+        } catch (e) {
+          cfg.audio_network = previous;
+          $("audio-network-message").textContent = e.message;
+        } finally {
+          apply.disabled = false;
+        }
+      }),
+      remove = button("Quitar flujo", async () => {
+        cfg.audio_network.splice(index, 1);
+        await publish();
+        renderAudioNetwork(true);
+      });
+    actions.append(apply, remove);
+    card.append(actions);
+    const status = el("p", "hint", "Esperando estado…");
+    status.dataset.audioNetworkStatus = index;
+    card.append(status);
+    container.append(card);
+  });
+  $("audio-network-add").disabled = (cfg.audio_network || []).length >= 8;
+}
+$("audio-network-add").onclick = async () => {
+  cfg.audio_network ||= [];
+  cfg.audio_network.push({
+    enabled: false,
+    bus: 0,
+    stream: cfg.audio_network.length
+      ? `AUMUX-${cfg.audio_network.length + 1}`
+      : "AUMUX-MAIN",
+    bind: "0.0.0.0",
+    port: 17843,
+    destinations: ["127.0.0.1"],
+  });
+  await publish();
+  renderAudioNetwork(true);
+};
+function updateAudioNetwork(s) {
+  renderAudioNetwork();
+  for (const node of document.querySelectorAll("[data-audio-network-status]")) {
+    const value = s.audio_network?.[Number(node.dataset.audioNetworkStatus)];
+    node.textContent = value
+      ? `${value.error || (value.enabled ? (s.mode === "DETENIDO" ? "Listo · motor detenido" : "Transmitiendo") : "Desactivado")} · ${value.sent} datagramas enviados · ${value.dropped} descartes/errores · cola ${value.queued}`
+      : "Desactivado";
+  }
+}

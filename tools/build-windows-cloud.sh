@@ -25,8 +25,8 @@ cat > /workspace/scratch/obs-build/obsconfig.h <<'CONFIG'
 #define OBS_BETA 0
 CONFIG
 x86_64-w64-mingw32-dlltool -d desktop/native/obs.def -l /workspace/scratch/obs-build/libobs.a
-x86_64-w64-mingw32-g++-posix -std=c++17 -shared -O2 -static -D_M_X64 \
+x86_64-w64-mingw32-g++-posix -std=c++17 -shared -O2 -static -D_M_X64 -DAUMUX_WITH_UI \
   -I"$obs_checkout/libobs" -I/workspace/scratch/obs-build \
-  desktop/native/obs-receiver.cpp /workspace/scratch/obs-build/libobs.a \
-  -lws2_32 -o /workspace/scratch/obs-build/monitor-mix-receiver.dll
+  desktop/native/obs-receiver.cpp desktop/native/obs-receiver-ui.cpp /workspace/scratch/obs-build/libobs.a \
+  -lws2_32 -luser32 -lgdi32 -lcomctl32 -o /workspace/scratch/obs-build/monitor-mix-receiver.dll
 echo 'Windows x64 app and OBS 32.1 receiver built; this does not execute them on Windows.'

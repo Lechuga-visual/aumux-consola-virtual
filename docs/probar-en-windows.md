@@ -1,4 +1,4 @@
-# AuMux 0.11.2 · prueba local en Windows x64
+# AuMux 0.12 · prueba local en Windows x64
 
 Miniapp de mezcla con canales y auxiliares configurables y master estéreo, a 48 kHz. Reutiliza DSP
 y host VST3 de SoundCraft de Artcraft, con una superficie y un ruteo propios.
@@ -8,7 +8,7 @@ Es un prototipo para pruebas; todavía no está validado para una sesión en viv
 
 ## Probar sonido sin ASIO ni interfaz externa
 
-1. Extrae **todo** `AuMux-0.11.2-Windows-x64.zip` y ejecuta `AuMux.exe`.
+1. Extrae **todo** `AuMux-0.12.0-Windows-x64.zip` y ejecuta `AuMux.exe`.
    Cierra la versión anterior antes de abrir esta.
 2. Pulsa **AUDIO PC**. Usa los parlantes/audífonos predeterminados de Windows
    mediante WASAPI, sin controlador ASIO ni dispositivo MOTU.
@@ -34,6 +34,31 @@ a **REACTIVAR AUDIO**: púlsalo para recuperar el sonido sin detener el motor,
 con una entrada gradual de un bloque. **DETENER** libera el dispositivo. Cerrar la consola
 de AuMux no detiene el proceso ni el audio. Usa **Cerrar servicio** desde la bandeja
 y confirma con **Sí** para terminar el motor y los servidores.
+
+## Novedades 0.12 · AuMux Audio
+
+1. Cierra OBS y la instancia anterior de AuMux. Extrae todo el ZIP nuevo.
+2. Ejecuta `Instalar-receptor-OBS.cmd` como administrador para actualizar la DLL.
+3. Abre `AuMux.exe`. La marca debe mostrar **0.12.0**.
+4. En OBS, agrega **AuMux Audio**, o reutiliza tu fuente existente.
+5. Abre sus propiedades y pulsa **Configurar AuMux Audio…**.
+
+**Mismo PC:** el ajuste **Local OBS** conserva `127.0.0.1:17840` y el identificador
+`AUMUX-MAIN`. En AuMux activa **MASTER → OBS**. Esta ruta sigue funcionando sin
+crear envíos de red.
+
+**Otro PC o auxiliares:** en AuMux abre **Preferencias → AuMux Audio · envíos UDP**,
+agrega un flujo, selecciona la mezcla y escribe el identificador y los destinos.
+Activa Transmitir y aplica. El puerto habitual es **17843**. En el receptor OBS usa
+**LAN / Tailscale**, el mismo puerto e identificador y aplica. Puedes configurar
+varias fuentes OBS con identificadores diferentes sobre el mismo puerto.
+
+El editor permite búfer 0–100 ms y delay de OBS por fuente; 8 ms es el punto
+inicial del preset de red, no una garantía para todas las conexiones. El delay
+se comparte con el ajuste de sincronización nativo de OBS. Los modos estéreo,
+mono e intercambio L/R se aplican por fuente.
+
+[Detalles, protocolo y pruebas de 0.12](interfaz-0.12.md).
 
 ## Corrección 0.11.2
 
@@ -339,7 +364,7 @@ Grabación multipista y OSC/Mackie pendientes.
 
 Si no aparecen **+ Canal**, **+ Aux** y **Canales y auxiliares**, cierra el
 proceso anterior y abre el ejecutable del ZIP nuevo: la marca superior debe
-mostrar **AuMux 0.11.2**. Se prueba en Windows extrayendo todo el ZIP; no mezcles
+mostrar **AuMux 0.12.0**. Se prueba en Windows extrayendo todo el ZIP; no mezcles
 archivos de varias versiones.
 
 Las novedades de dinámica, superficie adaptativa y escucha LAN se describen en

@@ -20,7 +20,7 @@
             height="30"
           />
           <strong>Au<span>Mux</span></strong>
-          <span class="version">0.11.2</span>
+          <span class="version">0.12.0</span>
         </div>
         <div class="scene-title">
           CONSOLA DE MONITOREO <span>•</span>
@@ -561,8 +561,46 @@
           >
             Escucha
           </button>
+          <button
+            id="pref-tab-audio-network"
+            role="tab"
+            data-preference="audio-network"
+            aria-controls="pref-audio-network"
+            aria-selected="false"
+            tabindex="-1"
+          >
+            AuMux Audio · envíos UDP
+          </button>
         </nav>
         <div class="preferences-content">
+          <section
+            id="pref-audio-network"
+            role="tabpanel"
+            aria-labelledby="pref-tab-audio-network"
+            hidden
+          >
+            <h3>AuMux Audio · master y auxiliares por UDP</h3>
+            <p>
+              PCM estéreo float32 · 48 kHz · identificadores de flujo ·
+              recepción independiente en OBS.
+            </p>
+            <p class="hint">
+              Una IP por destino, o broadcast de tu subred (por ejemplo
+              192.168.1.255). En Tailscale usa IP 100.x o MagicDNS de cada
+              receptor. Broadcast se limita a la LAN.
+            </p>
+            <div id="audio-network-routes"></div>
+            <button id="audio-network-add" type="button">
+              + Flujo de audio
+            </button>
+            <p id="audio-network-message" role="status"></p>
+            <p class="hint">
+              El receptor AuMux Audio usa normalmente UDP 17843. El puente
+              MASTER → OBS local conserva UDP 17840. Cada flujo requiere unos
+              3,1 Mbps más cabeceras por destino. Los cambios se guardan al
+              aplicar cada flujo.
+            </p>
+          </section>
           <section
             id="pref-console"
             role="tabpanel"

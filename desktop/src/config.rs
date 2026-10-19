@@ -137,6 +137,8 @@ pub struct Config {
     pub inputs: u32,
     pub obs_bridge: bool,
     #[serde(default)]
+    pub audio_network: Vec<crate::audio_network::Route>,
+    #[serde(default)]
     pub pc_monitor: usize,
     pub sample_rate: u32,
     pub buffer: u32,
@@ -151,6 +153,7 @@ impl Default for Config {
             device: None,
             inputs: 8,
             obs_bridge: false,
+            audio_network: Vec::new(),
             pc_monitor: 0,
             sample_rate: 48000,
             buffer: 256,
@@ -227,6 +230,7 @@ impl Config {
         }
     }
     pub fn validate(&self) -> Result<(), String> {
+        crate::audio_network::validate(&self.audio_network, self.buses.len())?;
         if self.version != 2
             || self.channels.is_empty()
             || self.channels.len() > MAX_CHANNELS

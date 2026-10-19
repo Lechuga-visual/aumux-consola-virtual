@@ -28,7 +28,7 @@ APT::Get::List-Cleanup "false";
 APTCONF
 export APT_CONFIG=/workspace/.audio-obs-apt/apt.conf
 /usr/bin/apt-get update
-/usr/bin/apt-get --yes --download-only --no-install-recommends -o APT::Sandbox::User=agent install libasound2-dev libobs-dev libsimde-dev g++-mingw-w64-x86-64-posix xvfb
+/usr/bin/apt-get --yes --download-only --no-install-recommends -o APT::Sandbox::User=agent install libasound2-dev libobs-dev libsimde-dev g++-mingw-w64-x86-64-posix xvfb qt6-base-dev cmake ninja-build libgl-dev libglx-dev libopengl-dev
 python3 - <<'PY'
 from pathlib import Path
 import subprocess
@@ -40,6 +40,12 @@ for deb in Path('/workspace/.audio-obs-apt/cache/archives').glob('*.deb'):
 p=root/'usr/lib/x86_64-linux-gnu/libasound.so'
 if p.is_symlink(): p.unlink()
 if not p.exists(): p.symlink_to('/usr/lib/x86_64-linux-gnu/libasound.so.2')
+# Apt omits already-installed runtime packages. Expose their matching host libraries
+# to the local Qt/OpenGL CMake SDK, while keeping all writes in the workspace.
+for pattern in ['libQt6*.so*', 'libGL*.so*', 'libOpenGL*.so*']:
+    for host in Path('/usr/lib/x86_64-linux-gnu').glob(pattern):
+        local=root/'usr/lib/x86_64-linux-gnu'/host.name
+        if not local.exists() and not local.is_symlink(): local.symlink_to(host)
 PY
 export CXXFLAGS=-I/workspace/.audio-obs-sysroot/usr/include
 export RUSTFLAGS='-L native=/workspace/.audio-obs-sysroot/usr/lib/x86_64-linux-gnu'

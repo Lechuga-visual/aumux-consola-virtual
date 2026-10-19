@@ -467,6 +467,7 @@ function updateWorkspaceStatus(s) {
   if ($("network-dialog").open) {
     updateRemoteAdmin(s.remote);
     updateAccessUI(s);
+    updateAudioNetwork(s);
     $("preferences-services").textContent =
       `Control: ${s.remote.enabled ? "activo · " + s.remote.port : "detenido"} · Escucha: ${s.listen.enabled ? "activa · " + s.listen.port : "detenida"}`;
     const n = s.listen;

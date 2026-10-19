@@ -91,3 +91,11 @@ estas funciones; no se simulan mediciones ni se ejecuta análisis pendiente.
 
 Ver [control remoto](control-remoto.md) para el diseño previo de OSC/Mackie y
 [la versión actual](interfaz-0.11.md) para lo ya implementado.
+
+## AuMux Audio 0.12
+
+Implementado: flujos UDP propios identificados, master/aux, unicast a varios
+destinos, broadcast LAN, receptor OBS con puerto compartido, búfer y delay por
+fuente, editor Win32 y editor Qt6 probado con libobs Linux. Ver
+[la guía 0.12](interfaz-0.12.md). Pendientes: validación física prolongada,
+macOS nativo y distribución Flatpak. El control X32/M32 sigue pendiente.

@@ -11,13 +11,27 @@ web permite objetivos de búfer de 40/80/120/200 ms (80 ms inicialmente), más e
 su optimización y medición son prioritarias en la
 [hoja de ruta](docs/hoja-de-ruta.md).
 
-**Prueba local:** [descargar Windows x64](dist/AuMux-0.11.2-Windows-x64.zip)
+**Prueba local:** [descargar Windows x64](dist/AuMux-0.12.0-Windows-x64.zip)
 e [instrucciones para Windows](docs/probar-en-windows.md).
 La descarga incluye el ejecutable, el receptor de OBS y el código fuente.
-Su checksum está en [SHA-256](dist/AuMux-0.11.2-Windows-x64.zip.sha256).
+Su checksum está en [SHA-256](dist/AuMux-0.12.0-Windows-x64.zip.sha256).
 
 **Capturas:** [galería de la interfaz actual](docs/capturas.md), con consola,
 efectos, preferencias y vistas remotas para tablet y celular.
+
+## Novedades 0.12 · AuMux Audio
+
+El receptor de OBS se llama **AuMux Audio** y conserva las escenas existentes.
+Añade flujos UDP identificados para master y auxiliares, envío a varios destinos
+o broadcast local, búfer por receptor y sincronización nativa de OBS. Incluye un
+editor propio con estilo AuMux, medidores reales y diagnóstico.
+
+Configura los envíos en **Preferencias → AuMux Audio · envíos UDP**.
+Consulta [la guía 0.12](docs/interfaz-0.12.md) y [el puente hacia OBS](docs/puente-obs.md).
+Windows incluye el editor nativo; el receptor y editor Qt6 se compilan y prueban
+contra libobs en Linux. macOS y Flatpak requieren validación y empaquetado propios.
+
+![Editor AuMux Audio probado en Linux con Qt6](docs/aumux-0.12-obs-editor-linux.png)
 
 ## Corrección 0.11.2
 
@@ -82,7 +96,7 @@ La miniapp reutiliza **los crates DSP y VST3 de SoundCraft de Artcraft**,
 fijados a una revisión concreta. La interfaz y el ruteo son propios; no es
 un fork de todo el DAW. No requiere controlar CueMix ni instalar REAPER.
 
-![Consola AuMux 0.11.2 con ocho canales, cuatro auxiliares y master](docs/screenshots/0.11.2/01-consola.png)
+![Consola AuMux 0.12.0 con ocho canales, cuatro auxiliares y master](docs/screenshots/0.12.0/01-consola.png)
 
 Para probar sin hardware: **AUDIO PC → G en un canal → Control Room → Input**.
 DEMO procesa sin reproducir. Las escenas 0.1 siguen siendo compatibles.
