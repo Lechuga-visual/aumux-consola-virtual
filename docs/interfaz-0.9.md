@@ -161,5 +161,5 @@ arrastre del fader sin scroll vertical, orientación vertical/horizontal, modo
 touch en PC, vista móvil/tablet, inspector, calculadora, latencia y escucha.
 El paquete se compila para Windows x64. No se ejecutó esta versión nativamente
 en Windows ni se midió audio físico o un tailnet real; quedan la prueba local,
-latencia real de la MOTU y sesiones largas. Optimizar la escucha de red sigue
+latencia real de la interfaz ASIO y sesiones largas. Optimizar la escucha de red sigue
 siendo una prioridad de [la hoja de ruta](hoja-de-ruta.md).

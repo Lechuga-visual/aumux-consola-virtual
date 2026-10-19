@@ -131,7 +131,7 @@ firma pública Authenticode; [firma e identidad](firma-windows.md) explica las
 opciones, incluida la solicitud gratuita para proyectos abiertos.
 
 La validación cubre audio, permisos, reconexión, UI y compilación cruzada;
-no equivale a una prueba física prolongada de Wi-Fi/5G/Tailscale, ASIO/MOTU,
+no equivale a una prueba física prolongada de Wi-Fi/5G/Tailscale, hardware ASIO,
 antivirus o bandeja nativa de Windows.
 
 ## Prueba de red del control

@@ -3,7 +3,7 @@
 Requisito acordado: AuMux debe poder funcionar como mezclador independiente
 y, en una etapa posterior, como superficie de control OSC o MIDI Mackie Control /
 Mackie HUI. Esta dirección queda documentada; **la versión 0.11 no implementa esos
-protocolos ni controla CueMix/MOTU**. El trabajo actual es la superficie de mezcla.
+protocolos ni controla mezcladores externos**. El trabajo actual es la superficie de mezcla.
 
 El control de mezclas personales por web ya está disponible en 0.8, con acceso
 limitado a un auxiliar por enlace y direcciones LAN/Tailscale/MagicDNS. En 0.9 se
@@ -38,11 +38,11 @@ de audio. Medidores y mensajes de realimentación necesitan una frecuencia de
 actualización limitada y colas acotadas. Controlador puro debe poder iniciarse
 sin ASIO, sin interfaz de audio y sin transmitir audio al puente de OBS.
 
-## Qué falta comprobar con la MOTU 896mk3 Hybrid
+## Qué falta comprobar para cada dispositivo
 
-- Qué modo de superficie admite la versión de CueMix FX instalada y cómo se
+- Qué modo de superficie admite el dispositivo o su aplicación de control y cómo se
   seleccionan los puertos de entrada/salida MIDI en Windows.
-- Si el control debe pasar por CueMix y un puerto MIDI virtual. No asumir que
+- Si el control debe pasar por una aplicación del fabricante y un puerto MIDI virtual. No asumir que
   enviar MIDI directamente a una interfaz controla su DSP.
 - Mensajes de inicialización y mantenimiento, faders, pan, mute, selección de
   mezcla, bancos y realimentación. MCU y HUI necesitan perfiles diferentes.
@@ -51,6 +51,5 @@ sin ASIO, sin interfaz de audio y sin transmitir audio al puente de OBS.
 
 Se debe contrastar el manual con mensajes reales y realizar primero una prueba
 mínima de un fader, mute y selección de mezcla. Los valores y números de canal
-no se inventarán a partir de la apariencia de la interfaz. Las notas anteriores
-sobre CueMix siguen en [control-cuemix.md](control-cuemix.md); los experimentos
-OSC anteriores no constituyen una integración activa con la MOTU.
+no se inventarán a partir de la apariencia de la interfaz. Los experimentos
+OSC anteriores no constituyen una integración activa con dispositivos externos.

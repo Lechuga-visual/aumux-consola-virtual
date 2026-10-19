@@ -11,7 +11,7 @@ Es un prototipo para pruebas; todavía no está validado para una sesión en viv
 1. Extrae **todo** `AuMux-0.12.0-Windows-x64.zip` y ejecuta `AuMux.exe`.
    Cierra la versión anterior antes de abrir esta.
 2. Pulsa **AUDIO PC**. Usa los parlantes/audífonos predeterminados de Windows
-   mediante WASAPI, sin controlador ASIO ni dispositivo MOTU.
+   mediante WASAPI, sin controlador ASIO ni interfaz externa.
 3. Pulsa **G** en Entrada 1. Se activa ruido blanco, inicialmente a −30 dBFS.
    Ahora deberías escuchar el master y ver los medidores de ese canal y master.
 4. Selecciona el canal y cambia su generador a **Ruido rosa** o **Tono seno**
@@ -210,11 +210,11 @@ sin bandeja. El botón de pantalla
 completa amplía la superficie. El escritorio está pensado para pantallas de
 1280 píxeles o más; las entradas se desplazan horizontalmente si hace falta.
 
-## Con la MOTU 896mk3 Hybrid
+## Con una interfaz ASIO
 
 1. Instala el controlador oficial, conecta la interfaz y cierra otras apps
    que estén usando su ASIO.
-2. Abre **MOTOR DE AUDIO**, pulsa **Actualizar dispositivos** y elige la MOTU.
+2. Abre **MOTOR DE AUDIO**, pulsa **Actualizar dispositivos** y elige tu interfaz ASIO.
 3. Selecciona las entradas físicas que abrirá el driver (hasta 64) y buffer; por ejemplo 48 kHz / 256
    muestras si el controlador lo admite.
 4. Desactiva los generadores de los canales que deban recibir audio físico.
@@ -223,7 +223,7 @@ completa amplía la superficie. El escritorio está pensado para pantallas de
 6. Cierra el panel de motor y pulsa **ASIO**. Comprueba cada mezcla por separado.
 
 Entrada y salida se abren en un único stream dúplex del mismo dispositivo.
-El ruteo CueMix existente puede duplicar el monitoreo: usa una sola ruta al
+El monitoreo directo de la interfaz puede duplicar la escucha: usa una sola ruta al
 comprobar cada señal. Para cambiar de ASIO a AUDIO PC o DEMO, pulsa DETENER.
 
 Los envíos pre-fader no siguen el fader principal; los post-fader sí. Mute
@@ -278,7 +278,7 @@ crea otro aux y lo añade. Quitar apaga ese envío (−∞). Todo funciona en vi
 detenido. Se migran los archivos 0.1 y sus inserts únicos. Se guardan selección,
 bypass y parámetros numéricos, no el estado binario completo ni presets internos.
 Los VST3 deben seguir instalados en su ruta. Los índices de dispositivo pueden
-cambiar: vuelve a seleccionar la MOTU si corresponde.
+cambiar: vuelve a seleccionar tu interfaz si corresponde.
 
 No hay compensación automática de latencia. El inspector informa la suma de
 latencias declaradas por los inserts, incluidos los que estén en bypass.
@@ -329,8 +329,8 @@ real de prueba. También se probaron la interfaz en Chromium y el puente desde
 la app hasta captura real de libobs en Linux.
 
 Se compilaron los binarios Windows con ASIO **y WASAPI**. No se reprodujo audio
-nativamente en Windows aquí: faltan tu prueba de la salida normal del PC, la
-MOTU, efectos particulares, latencia, sincronía de video y sesiones largas.
+nativamente en Windows aquí: faltan tu prueba de la salida normal del PC, una
+interfaz ASIO, efectos particulares, latencia, sincronía de video y sesiones largas.
 El recorte a ±1 evita valores fuera de escala; no sustituye un limitador.
 
 Si falla AUDIO PC, indica la salida predeterminada de Windows, frecuencia,
@@ -348,8 +348,8 @@ Prueba de lógica sin hardware desde PowerShell:
 ## OSC y superficies Mackie
 
 Se dejó anotada la dirección futura: mezclador independiente o controlador MIDI
-Mackie Control/HUI, además de OSC. No están implementados en 0.11. El mapa para
-CueMix/MOTU necesita comprobar documentación y mensajes con el equipo.
+Mackie Control/HUI, además de OSC. No están implementados en 0.11. Los perfiles de
+dispositivos necesitan comprobar documentación y mensajes con cada equipo.
 
 Las pruebas de C++ nativo comprueban los 21 inserts y el EQ con ASan/UBSan,
 valores límite y bloques de 1–8192 muestras, y verifican que el procesamiento

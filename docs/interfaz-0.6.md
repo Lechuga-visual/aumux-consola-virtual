@@ -78,4 +78,4 @@ medido sin reconstrucción ni trabajo de heap en el callback, persistencia y
 validación de presets, e interacción real en Chromium: perillas, puntos,
 selección de bandas, cadena, Supr, importación/exportación y envíos en vivo.
 El ZIP incluye fuentes y licencias y se compila para Windows x64. La prueba
-nativa de esta versión con WASAPI/ASIO y la MOTU requiere el PC de Windows.
+nativa de esta versión con WASAPI/ASIO y hardware de audio requiere el PC de Windows.

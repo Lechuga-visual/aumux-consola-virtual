@@ -84,7 +84,7 @@ estas funciones; no se simulan mediciones ni se ejecuta análisis pendiente.
 ## Control y expansión
 
 - OSC y modo controlador sin abrir motor de audio.
-- Salida Mackie Control/Mackie HUI y mapa MOTU/CueMix verificado con documentación.
+- Salida Mackie Control/Mackie HUI y perfiles de dispositivos verificados con documentación.
 - Persistencia de estados binarios VST3 y evaluación de editores nativos.
 - Compensación de latencia de plugins y pruebas prolongadas
   de estabilidad/latencia con ASIO y hardware real.

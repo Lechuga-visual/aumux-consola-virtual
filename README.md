@@ -87,14 +87,14 @@ completa no fallen por `WouldBlock`. Ver [corrección de consola remota](docs/in
 - Fader Flip Main/Aux dinámico, botón MAIN y doble clic en pan para centrar, vista completa/reducida y paneles de medidores/inspector ocultables.
 - Control Room para escucha PC de un bus, con medidor estéreo propio.
 - Ruido blanco, rosa y seno independientes por canal, antes de los inserts.
-- AUDIO PC por WASAPI: escucha master o monitores sin ASIO ni MOTU.
+- AUDIO PC por WASAPI: escucha master o monitores sin controlador ASIO ni interfaz externa.
 - Modo DEMO sin dispositivo, medidores, silencio total reversible y ajustes JSON.
 - Puente de master por UDP local y receptor para OBS x64 32.1 o posterior.
 - Instalador OBS corregido a ProgramData, diagnóstico y confirmación de recepción.
 
 La miniapp reutiliza **los crates DSP y VST3 de SoundCraft de Artcraft**,
 fijados a una revisión concreta. La interfaz y el ruteo son propios; no es
-un fork de todo el DAW. No requiere controlar CueMix ni instalar REAPER.
+un fork de todo el DAW. No requiere controlar un mezclador externo ni instalar REAPER.
 
 ![Consola AuMux 0.12.0 con ocho canales, cuatro auxiliares y master](docs/screenshots/0.12.0/01-consola.png)
 
@@ -130,7 +130,7 @@ PYTHONPATH=/workspace/.aumux-test-deps python3 desktop/tests/websocket-smoke.py
 Se verificaron ruteo y mute, procesamiento con un binario VST3 de prueba,
 la UI en Chromium y audio real desde DEMO hasta callbacks de libobs en Linux.
 Los binarios de Windows se compilaron y se inspeccionaron sus dependencias;
-**no se ejecutaron nativamente en Windows ni se probaron con la MOTU**.
+**no se ejecutaron nativamente en Windows ni se probaron con hardware ASIO**.
 
 El cambio de estructura se prepara fuera del callback de audio y se adopta al
 terminar un bloque. Conserva los inserts existentes y devuelve la memoria al
@@ -156,15 +156,14 @@ administrador con OBS cerrado. OBS 32.2.2 x64 es compatible. Consulta
 
 [Dirección OSC, Mackie Control y Mackie HUI](docs/control-remoto.md): se prevé
 un modo controlador sin abrir audio, además del mezclador independiente.
-Estos protocolos y el mapa específico MOTU quedan para la siguiente etapa;
+Estos protocolos y los perfiles de dispositivos quedan para la siguiente etapa;
 no se implementan en 0.11.
 
 ## Componentes anteriores
 
 `include/`, `src/` y las pruebas CMake son el primer motor C++ portable.
-Se conservan, pero no son el motor de la miniapp Rust actual. `tools/cuemix_osc.py`
-y los documentos de CueMix conservan investigación anterior; no son necesarios
-para esta app. No hay una integración de control de CueMix activa.
+Se conservan, pero no son el motor de la miniapp Rust actual. La
+[utilidad OSC experimental](docs/osc.md) tampoco es necesaria para usar AuMux.
 
 Licencias y procedencia: [desktop/THIRD_PARTY.md](desktop/THIRD_PARTY.md).
 

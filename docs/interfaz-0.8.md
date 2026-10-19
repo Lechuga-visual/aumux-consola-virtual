@@ -116,5 +116,5 @@ dos sesiones, vista móvil, reconexión, mutes, PRE/POST, faders y conflictos lo
 
 La prueba de control en loopback mide el tiempo de ida y confirmación HTTP;
 no es una medición de latencia de audio ni de Tailscale. La compilación Windows
-x64 y el paquete se verifican aquí; la ejecución con Windows/MOTU y la conexión
+x64 y el paquete se verifican aquí; la ejecución con Windows e interfaces ASIO y la conexión
 entre dispositivos reales del tailnet quedan para la prueba local.
