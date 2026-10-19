@@ -16,6 +16,9 @@ e [instrucciones para Windows](docs/probar-en-windows.md).
 La descarga incluye el ejecutable, el receptor de OBS y el código fuente.
 Su checksum está en [SHA-256](dist/AuMux-0.11.2-Windows-x64.zip.sha256).
 
+**Capturas:** [galería de la interfaz actual](docs/capturas.md), con consola,
+efectos, preferencias y vistas remotas para tablet y celular.
+
 ## Corrección 0.11.2
 
 En modo touch, los faders de consola local y remota solo se mueven al arrastrar
@@ -79,7 +82,7 @@ La miniapp reutiliza **los crates DSP y VST3 de SoundCraft de Artcraft**,
 fijados a una revisión concreta. La interfaz y el ruteo son propios; no es
 un fork de todo el DAW. No requiere controlar CueMix ni instalar REAPER.
 
-![Consola AuMux touch 0.11](docs/aumux-0.11-main-touch.png)
+![Consola AuMux 0.11.2 con ocho canales, cuatro auxiliares y master](docs/screenshots/0.11.2/01-consola.png)
 
 Para probar sin hardware: **AUDIO PC → G en un canal → Control Room → Input**.
 DEMO procesa sin reproducir. Las escenas 0.1 siguen siendo compatibles.

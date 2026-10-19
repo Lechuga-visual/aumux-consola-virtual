@@ -2,6 +2,8 @@
 
 [Descargar Windows x64](../dist/AuMux-0.11.2-Windows-x64.zip).
 
+[Ver la galería de capturas de esta versión](capturas.md).
+
 En la consola local y en la consola completa remota, con el modo **Touch**
 activado, solo la perilla blanca del fader recibe gestos de arrastre. La mezcla
 remota de auxiliares usa el mismo comportamiento. El recorrido y las marcas de

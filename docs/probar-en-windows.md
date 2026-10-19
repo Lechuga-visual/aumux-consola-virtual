@@ -4,6 +4,8 @@ Miniapp de mezcla con canales y auxiliares configurables y master estéreo, a 48
 y host VST3 de SoundCraft de Artcraft, con una superficie y un ruteo propios.
 Es un prototipo para pruebas; todavía no está validado para una sesión en vivo.
 
+[Ver capturas de la consola, efectos, preferencias y accesos remotos](capturas.md).
+
 ## Probar sonido sin ASIO ni interfaz externa
 
 1. Extrae **todo** `AuMux-0.11.2-Windows-x64.zip` y ejecuta `AuMux.exe`.
