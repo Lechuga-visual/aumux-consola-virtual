@@ -44,8 +44,8 @@ al paquete. Linux usa Qt6. El núcleo de transporte y las opciones son compartid
 
 ## Protocolo propio AUM1
 
-Datagramas UDP little-endian. PCM estéreo intercalado, float32, 48000 Hz. No es
-compatible con ReaStream: se usa solamente como referencia de funcionamiento.
+AuMux Audio usa datagramas UDP little-endian con PCM estéreo intercalado,
+float32, 48000 Hz.
 
 | Desplazamiento | Campo |
 | --- | --- |

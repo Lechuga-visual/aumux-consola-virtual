@@ -150,7 +150,7 @@ La guía detalla estas limitaciones y la prueba paso a paso.
 El receptor conserva su DLL, ID y nombre de fuente **Monitor Mix — master local**
 para mantener las escenas OBS existentes. En 0.3 se corrigió su ruta: ejecuta el nuevo instalador como
 administrador con OBS cerrado. OBS 32.2.2 x64 es compatible. Consulta
-[el puente y la alternativa ReaStream](docs/puente-obs.md).
+[el puente AuMux Audio, su configuración y latencia](docs/puente-obs.md).
 
 ## Control remoto previsto
 

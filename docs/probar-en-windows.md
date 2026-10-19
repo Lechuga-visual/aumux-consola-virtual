@@ -318,7 +318,7 @@ Para desinstalar el receptor, cierra OBS y elimina únicamente
 La copia 0.2 en `%APPDATA%` no se utiliza en Windows normal; puedes eliminar
 únicamente esa carpeta `monitor-mix-receiver` antigua con OBS cerrado.
 
-[Cómo funciona el puente, latencia y alternativa ReaStream](puente-obs.md).
+[Cómo funciona el puente AuMux Audio, configuración y latencia](puente-obs.md).
 
 ## Validación y diagnóstico
 

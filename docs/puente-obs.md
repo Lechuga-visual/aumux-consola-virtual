@@ -92,23 +92,3 @@ el buffer del dispositivo, los efectos y el buffering de OBS. Los VST3 pueden
 añadir latencia; todavía no hay compensación automática. El motor recorta las
 salidas a ±1 antes de transmitir; evita sobrecargar el master, pues ese recorte
 no sustituye un limitador. No se aplica un códec con pérdida.
-
-## ¿Cambiarlo por ReaStream?
-
-ReaStream se distribuye gratis dentro de [ReaPlugs](https://www.reaper.fm/reaplugs/).
-La edición ReaPlugs para Windows es VST2; OBS puede alojar filtros VST2, mientras
-que AuMux actualmente aloja VST3. Por eso poner ReaStream en OBS no basta:
-también hace falta un emisor compatible. No se puede insertarlo directamente
-en nuestra cadena VST3 ni reemplazar el DLL de fuente por el DLL de ReaStream.
-
-Una ruta alternativa con software existente es enviar desde un host que admita
-ReaStream VST2 (por ejemplo, REAPER) y recibir con ReaStream en un filtro VST2 de
-una fuente de audio activa en OBS, con identificador coincidente. Eso añade otro
-host y exige conectar primero el master de AuMux a ese host; no simplifica
-esta instalación concreta. REAPER tiene su propia licencia, separada de ReaPlugs.
-
-Una salida nativa compatible con ReaStream permitiría eliminar ese host emisor,
-pero necesita implementar el protocolo y probar paquetes, canales, frecuencias y
-reconexión contra el receptor real. **0.3 no transmite ReaStream** ni afirma esa
-interoperabilidad. Se conserva el puente propio corregido para poder probarlo
-ahora, sin añadir otra dependencia ni prometer una latencia sin medir.
