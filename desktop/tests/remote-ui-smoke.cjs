@@ -31,6 +31,7 @@ const fs = require("node:fs/promises");
       headless: true,
       args: ["--no-sandbox", "--no-proxy-server", "--disable-dev-shm-usage"],
     });
+    require("./floating-panels.cjs")(browser);
     const errors = [],
       operator = await browser.newPage({
         viewport: { width: 1500, height: 960 },

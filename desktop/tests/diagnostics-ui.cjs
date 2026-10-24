@@ -28,6 +28,7 @@ const path = require("node:path");
       headless: true,
       args: ["--no-sandbox", "--no-proxy-server", "--disable-dev-shm-usage"],
     });
+    require("./floating-panels.cjs")(browser);
     const page = await browser.newPage({
       viewport: { width: 1440, height: 980 },
       acceptDownloads: true,

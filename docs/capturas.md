@@ -8,8 +8,15 @@ en Chromium sobre Linux.
 Esta galería muestra las funciones actuales. El modo de control de consolas
 digitales X32/M32 y las demás familias comentadas sigue pendiente de implementación.
 
-[Descargar para Windows](../dist/AuMux-0.13.0-Windows-x64.zip) ·
+[Descargar para Windows](../dist/AuMux-0.13.1-Windows-x64.zip) ·
 [Guía de prueba](probar-en-windows.md) · [Volver al README](../README.md)
+
+## Ventanas independientes 0.13.1
+
+La consola puede seguir ajustándose mientras EQ, plugins o preferencias están
+en otras ventanas. [Guía de ventanas](interfaz-0.13.1.md).
+
+![Panel EQ independiente de la consola](aumux-0.13.1-eq-independiente.png)
 
 ## Herramientas de señal 0.13
 

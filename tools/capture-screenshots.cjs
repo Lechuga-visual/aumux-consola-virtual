@@ -67,6 +67,7 @@ const assert = require("node:assert/strict");
         "--autoplay-policy=no-user-gesture-required",
       ],
     });
+    require("../desktop/tests/floating-panels.cjs")(browser);
     const page = await browser.newPage({
       viewport: { width: 1640, height: 980 },
     });

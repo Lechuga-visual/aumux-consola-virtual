@@ -23,6 +23,7 @@ const http = require("node:http");
       headless: true,
       args: ["--no-sandbox", "--no-proxy-server", "--disable-dev-shm-usage"],
     });
+    require("./floating-panels.cjs")(browser);
     const page = await browser.newPage({
       viewport: { width: 390, height: 844 },
     });

@@ -268,6 +268,17 @@ impl Hub {
     pub fn probing(&self) -> bool {
         self.busy() && self.snapshot.lock().unwrap().probe
     }
+    pub fn cancel_owner(&self, owner: &str) -> bool {
+        let mut s = self.snapshot.lock().unwrap();
+        if s.context["owner"].as_str() != Some(owner) {
+            return false;
+        }
+        self.active.store(0, Release);
+        if s.state == "capturing" || s.state == "monitoring" {
+            s.state = "cancelled".into();
+        }
+        true
+    }
     pub fn cancel(&self) {
         self.active.store(0, Release);
         let mut s = self.snapshot.lock().unwrap();
@@ -542,5 +553,23 @@ mod monitor_tests {
         assert!(hub.progress.load(Relaxed) > 0);
         hub.cancel();
         crate::test_support::no_heap(|| tap.monitor(&input, 1, &[], &[], 8192));
+    }
+}
+#[cfg(test)]
+mod owner_tests {
+    use super::*;
+    #[test]
+    fn closing_an_observer_does_not_cancel_another_windows_capture() {
+        let hub = Hub::new();
+        let s = Source {
+            kind: 2,
+            index: 0,
+            side: 0,
+        };
+        hub.monitor(s, s, json!({"owner":"scope-window"})).unwrap();
+        assert!(!hub.cancel_owner("phase-window"));
+        assert!(hub.busy());
+        assert!(hub.cancel_owner("scope-window"));
+        assert!(!hub.busy());
     }
 }

@@ -118,6 +118,7 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       headless: true,
       args: ["--no-sandbox", "--no-proxy-server", "--disable-dev-shm-usage"],
     });
+    require("./floating-panels.cjs")(browser);
     const context = await browser.newContext({
       viewport: { width: 390, height: 844 },
       isMobile: true,

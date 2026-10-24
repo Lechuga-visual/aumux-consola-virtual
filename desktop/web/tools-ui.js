@@ -26,12 +26,14 @@ window.addEventListener("resize", applyTouchMode);
 applyTouchMode();
 $("open-calculator").onclick = () => {
   $("tools-menu").open = false;
-  $("calculator-dialog").showModal();
+  if (openDetachedPanel("calculator-dialog")) return;
+  showFloatingPanel("calculator-dialog");
   calculateLatency();
 };
 function openLatency() {
   $("tools-menu").open = false;
-  $("latency-dialog").showModal();
+  if (openDetachedPanel("latency-dialog")) return;
+  showFloatingPanel("latency-dialog");
   if (lastStatus) updateLatencyTools(lastStatus);
 }
 $("open-diagnostics").onclick = openLatency;

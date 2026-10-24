@@ -77,6 +77,7 @@ function compGraph() {
   $("comp-graph").replaceChildren(svg);
 }
 function openCompressor(type, index) {
+  if (openDetachedPanel("compressor-dialog", { type, index })) return;
   flushComp();
   compTarget = { type, index };
   const c = currentComp();
@@ -173,7 +174,7 @@ function openCompressor(type, index) {
   );
   compGraph();
   $("comp-status").textContent = "Cambios en vivo";
-  if (!$("compressor-dialog").open) $("compressor-dialog").showModal();
+  showFloatingPanel("compressor-dialog");
 }
 function compChanged() {
   compGraph();
@@ -484,7 +485,8 @@ function updateWorkspaceStatus(s) {
   }
 }
 $("network-settings").onclick = () => {
-  $("network-dialog").showModal();
+  if (openDetachedPanel("network-dialog", { tab: "network" })) return;
+  showFloatingPanel("network-dialog");
   showPreference("network");
   $("network-host").value =
     lastStatus?.remote?.host || lastStatus?.listen?.host || "";
@@ -531,19 +533,21 @@ async function syncRemoteMix(s) {
     remoteNeedsRender &&
     !configRequests &&
     !structureBusy &&
-    !remotePointerDown
+    !remotePointerDown &&
+    !panelTextEditing()
   ) {
     remoteNeedsRender = false;
     render();
     if ($("routing-dialog").open) renderRouting();
+    refreshOpenPanels();
   }
   if (
-    !s.remote?.enabled ||
     s.remote.revision === syncedRemoteRevision ||
     remoteSyncBusy ||
     configRequests ||
     structureBusy ||
-    remotePointerDown
+    remotePointerDown ||
+    panelTextEditing()
   )
     return;
   remoteSyncBusy = true;
@@ -551,7 +555,13 @@ async function syncRemoteMix(s) {
     const r = await webFetch("/api/sync-state");
     if (!r.ok) return;
     const incoming = await r.json();
-    if (configRequests || structureBusy || remotePointerDown || !serverConfig)
+    if (
+      configRequests ||
+      structureBusy ||
+      remotePointerDown ||
+      panelTextEditing() ||
+      !serverConfig
+    )
       return;
     const structure =
       incoming.config.channels.length !== cfg.channels.length ||
@@ -582,6 +592,7 @@ async function syncRemoteMix(s) {
       render();
       if ($("routing-dialog").open) renderRouting();
     }
+    refreshOpenPanels();
   } catch (e) {
     error(e);
   } finally {

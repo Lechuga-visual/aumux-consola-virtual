@@ -1,4 +1,5 @@
 "use strict";
+const diagnosticOwner = `panel-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 let diagnosticTool = "",
   diagnosticGeneration = 0,
   diagnosticPromise = null,
@@ -77,6 +78,10 @@ function diagnosticMillis(n) {
   return typeof n === "number" ? n.toFixed(3) + " ms" : "Sin medición";
 }
 function openDiagnostic(tool) {
+  if (openDetachedPanel("diagnostic-dialog", { tool })) {
+    $("tools-menu").open = false;
+    return;
+  }
   diagnosticTool = tool;
   diagnosticGeneration++;
   $("tools-menu").open = false;
@@ -94,7 +99,7 @@ function openDiagnostic(tool) {
     phase: "Detector de fase",
     scope: "Osciloscopio",
   }[tool];
-  if (!$("diagnostic-dialog").open) $("diagnostic-dialog").showModal();
+  showFloatingPanel("diagnostic-dialog");
   if (tool === "loopback") {
     $("diagnostic-controls").append(
       el(
@@ -117,6 +122,7 @@ function openDiagnostic(tool) {
             output = $("diag-output");
           if (!input.reportValidity() || !output.reportValidity()) return;
           await api("diagnostics/probe", {
+            owner: diagnosticOwner,
             input: Number(input.value) - 1,
             output: Number(output.value) - 1,
             label: "Loopback físico",
@@ -153,6 +159,7 @@ function openDiagnostic(tool) {
       if (output == null)
         throw Error("Asigna una salida física al bus antes de medir");
       await api("diagnostics/probe", {
+        owner: diagnosticOwner,
         input: Number($("diag-input").value) - 1,
         output,
         route: { channel: Number(channel.value), bus: b },
@@ -283,6 +290,19 @@ async function readDiagnostic() {
   if (!r.ok) throw Error("No se pudo consultar el diagnóstico");
   const d = await r.json();
   if (tool !== diagnosticTool || generation !== diagnosticGeneration) return d;
+  const sourceName = (s) =>
+    s?.kind === 0
+      ? `Entrada física ${s.index + 1}`
+      : s?.kind === 1
+        ? `${cfg.channels[s.index]?.name || "Canal"} ${s.side ? "R" : "L"}`
+        : s?.kind === 2
+          ? `${cfg.buses[s.index]?.name || "Bus"} ${s.side ? "R" : "L"}`
+          : "—";
+  $("diagnostic-sources").textContent =
+    ["feedback", "phase", "scope"].includes(tool) && d.context?.a
+      ? `Captura ${d.active ? "actual" : "anterior"}: A · ${sourceName(d.context.a)} / B · ${sourceName(d.context.b)}${d.context.owner && d.context.owner !== diagnosticOwner ? " · compartida con otra ventana" : ""}`
+      : "";
+
   if (["loopback", "comparison"].includes(diagnosticTool)) {
     $("diagnostic-message").textContent = d.active
       ? `Capturando ${d.captured_frames} muestras…`
@@ -644,6 +664,7 @@ function buildMonitorControls(tool) {
           const index = Number(bus.value);
           await api("diagnostics/cancel");
           await api("diagnostics/monitor", {
+            owner: diagnosticOwner,
             a: { kind: 2, index, side: 0 },
             b: { kind: 2, index, side: 1 },
           });
@@ -686,6 +707,7 @@ function buildMonitorControls(tool) {
               rising: $("diag-scope-trigger").value === "rising",
             });
           await api("diagnostics/monitor", {
+            owner: diagnosticOwner,
             a: JSON.parse($("diag-source-a").value),
             b: JSON.parse($("diag-source-b").value),
           });
@@ -1010,5 +1032,15 @@ function drawScope(d) {
 }
 $("diagnostic-dialog").addEventListener("close", () => {
   if (["feedback", "phase", "scope"].includes(diagnosticTool))
-    api("diagnostics/cancel").catch(error);
+    api("diagnostics/cancel", { owner: diagnosticOwner }).catch(error);
+});
+
+window.addEventListener("beforeunload", () => {
+  if (diagnosticTool)
+    fetch("/api/diagnostics/cancel", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Monitor-Token": token },
+      body: JSON.stringify({ owner: diagnosticOwner }),
+      keepalive: true,
+    }).catch(() => {});
 });

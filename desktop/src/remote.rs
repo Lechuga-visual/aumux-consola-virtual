@@ -520,6 +520,7 @@ impl Remote {
                 | "/workspace-ui.js"
                 | "/effects-ui.js"
                 | "/tools-ui.js"
+                | "/panels-ui.js"
                 | "/diagnostics-ui.js"
         ) {
             if !self.console_gate.authorized(console_cookie) {
@@ -529,6 +530,7 @@ impl Remote {
                 "/console.css" => ("text/css", include_str!("../web/console.css")),
                 "/console.js" => ("text/javascript", include_str!("../web/console.js")),
                 "/workspace-ui.js" => ("text/javascript", include_str!("../web/workspace-ui.js")),
+                "/panels-ui.js" => ("text/javascript", include_str!("../web/panels-ui.js")),
                 "/diagnostics-ui.js" => {
                     ("text/javascript", include_str!("../web/diagnostics-ui.js"))
                 }

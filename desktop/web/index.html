@@ -20,7 +20,7 @@
             height="30"
           />
           <strong>Au<span>Mux</span></strong>
-          <span class="version">0.13.0</span>
+          <span class="version">0.13.1</span>
         </div>
         <div class="scene-title">
           CONSOLA DE MONITOREO <span>•</span>
@@ -47,6 +47,12 @@
                   <button id="open-report">Informe exportable</button>
                 </div>
               </details>
+              <label
+                >Paneles<select id="panel-mode">
+                  <option value="windows">Ventanas independientes</option>
+                  <option value="floating">Flotantes en la consola</option>
+                </select></label
+              >
               <label
                 >Interfaz touch<select id="touch-mode">
                   <option value="off">Desactivada</option>
@@ -883,6 +889,7 @@
         <h2 id="diagnostic-title">Pruebas de audio</h2>
         <button data-close="diagnostic-dialog">✕</button>
       </div>
+      <p id="diagnostic-sources" class="hint"></p>
       <p id="diagnostic-notice" role="status"></p>
       <p id="diagnostic-message" role="status"></p>
       <div id="diagnostic-controls"></div>
@@ -1000,6 +1007,7 @@
         conectores físicos dependen del controlador.
       </p>
     </dialog>
+    <script src="/panels-ui.js"></script>
     <script src="/console.js"></script>
     <script src="/effects-ui.js"></script>
     <script src="/workspace-ui.js"></script>

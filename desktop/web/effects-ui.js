@@ -1,5 +1,6 @@
 "use strict";
 // FX chains, user presets, and routing share the scene model; audio stays in Rust/C++.
+let fxPanelBase;
 let fxSequence = 0,
   fxAutoTimer,
   nativeCataloguePromise;
@@ -60,10 +61,18 @@ async function savePendingFx() {
     throw Error(
       "Detén el motor para modificar la cadena o los parámetros VST3",
     );
-  const before = structuredClone(target.inserts);
+  const before = structuredClone(target.inserts),
+    sentValue = structuredClone(value);
   target.inserts[selectedFx.slot] = value;
   try {
     await publish();
+    const actual = target.inserts[selectedFx.slot];
+    if (actual?.id === value.id && pendingFx?.id === value.id) {
+      for (const [key, next] of Object.entries(actual.params))
+        if (pendingFx.params[key] === sentValue.params[key])
+          pendingFx.params[key] = next;
+      fxPanelBase = structuredClone(actual);
+    }
     $("fx-edit-status").textContent = running
       ? "Aplicado · en vivo"
       : "Cambios guardados";
@@ -152,6 +161,7 @@ function renderFxRail() {
     running || selectedFx.slot >= target.inserts.length - 1;
 }
 function openFx(type, index, slot) {
+  if (openDetachedPanel("fx", { type, index, slot })) return;
   clearTimeout(fxAutoTimer);
   fxAutoTimer = undefined;
   const sequence = ++fxSequence;
@@ -159,6 +169,7 @@ function openFx(type, index, slot) {
   const target = targetOf(type, index),
     fx = target.inserts[slot];
   pendingFx = fx ? structuredClone(fx) : null;
+  fxPanelBase = fx ? structuredClone(fx) : null;
   descriptors = [];
   $("path").value = fx?.path || "";
   $("params").replaceChildren(
@@ -190,7 +201,7 @@ function openFx(type, index, slot) {
     "vst-search",
   ])
     $(id).disabled = running;
-  if (!$("fx").open) $("fx").showModal();
+  showFloatingPanel("fx");
   nativeCatalogue()
     .then((list) => {
       if (sequence !== fxSequence) return;
@@ -257,6 +268,7 @@ function showParams() {
     params: old?.id === d.id ? { ...old.params } : {},
   };
   for (const p of d.params) pendingFx.params[p.id] ??= p.value;
+  if (old?.id === d.id) fxPanelBase = structuredClone(pendingFx);
   $("fx-title").textContent = d.name;
   $("fx-browser").open = false;
   renderFxControls(d);
@@ -684,11 +696,12 @@ function routingLevel(value, label, change) {
   return row;
 }
 function openRouting(index) {
+  if (openDetachedPanel("routing-dialog", { type: "channel", index })) return;
   routingChannel = index;
   $("routing-title").textContent = `Envíos · ${cfg.channels[index].name}`;
   $("routing-status").textContent = "Cambios en vivo";
   renderRouting();
-  if (!$("routing-dialog").open) $("routing-dialog").showModal();
+  showFloatingPanel("routing-dialog");
 }
 function renderRouting() {
   const c = cfg.channels[routingChannel];

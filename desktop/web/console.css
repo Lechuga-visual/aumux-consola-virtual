@@ -3281,3 +3281,51 @@ body.touch-mode {
   white-space: pre-wrap;
   color: #ffd294;
 }
+
+/* Floating panels remain modeless; detached panels get their own OS window. */
+dialog.floating-panel {
+  position: fixed;
+  margin: 0;
+  resize: both;
+  overflow: auto;
+  max-height: 94dvh;
+  min-width: 300px;
+  max-width: 96vw;
+}
+dialog.floating-panel .dialog-heading {
+  cursor: move;
+  touch-action: none;
+  user-select: none;
+}
+.panel-detach {
+  margin-left: auto;
+  margin-right: 12px;
+  flex-shrink: 0;
+  min-width: 30px;
+}
+body.detached-panel {
+  height: 100dvh;
+  overflow: hidden;
+  background: #20252d;
+}
+body.detached-panel > .app {
+  display: none;
+}
+body.detached-panel dialog.detached-active {
+  border: 0;
+  border-radius: 0;
+  box-sizing: border-box;
+  box-shadow: none;
+}
+body.detached-panel dialog.detached-active .dialog-heading {
+  cursor: default;
+}
+body.detached-panel #network-dialog.detached-active {
+  overflow: hidden;
+}
+@media (max-width: 600px) {
+  dialog.floating-panel {
+    min-width: 0;
+    max-width: 98vw;
+  }
+}

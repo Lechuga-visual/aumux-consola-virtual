@@ -217,19 +217,36 @@ impl App {
         }
     }
     fn status(&self) -> Value {
+        self.status_peaks(true)
+    }
+    fn panel_status(&self) -> Value {
+        self.status_peaks(false)
+    }
+    fn status_peaks(&self, consume: bool) -> Value {
         let meters: Vec<f32> = self
             .controls
             .meters
             .iter()
-            .map(|m| f32::from_bits(m.swap(0, Relaxed)))
+            .map(|m| {
+                f32::from_bits(if consume {
+                    m.swap(0, Relaxed)
+                } else {
+                    m.load(Relaxed)
+                })
+            })
             .collect();
         let channel: Vec<_> = self
             .controls
             .channel_meters
             .iter()
-            .map(|m| m.read())
+            .map(|m| if consume { m.read() } else { m.snapshot() })
             .collect();
-        let bus: Vec<_> = self.controls.bus_meters.iter().map(|m| m.read()).collect();
+        let bus: Vec<_> = self
+            .controls
+            .bus_meters
+            .iter()
+            .map(|m| if consume { m.read() } else { m.snapshot() })
+            .collect();
         let active = self.live || self.demo.is_some();
         let channel_meters: Vec<_> = channel
             .iter()
@@ -374,6 +391,7 @@ impl App {
     fn read_api(&mut self, path: &str) -> Result<Value, String> {
         match path {
             "/api/config" => Ok(json!(self.config)),
+            "/api/panel-status" => Ok(self.panel_status()),
             "/api/status" => Ok(self.status()),
             "/api/mix-state" => Ok(
                 json!({"revision":self.remote.status()["revision"],"channels":self.config.channels.iter().map(|ch|json!({"sends_db":ch.sends_db,"send_mute":ch.send_mute,"pre":ch.pre})).collect::<Vec<_>>() }),
@@ -436,7 +454,7 @@ impl App {
                 if self.system_live && (a.kind == 0 || b.kind == 0) {
                     return Err("AUDIO PC no abre entradas físicas; selecciona canal o bus".into());
                 }
-                self.diagnostics.monitor(a,b,json!({"a":a,"b":b,"rate":self.config.sample_rate,"buffer":self.config.buffer,"mode":if self.system_live{"PC"}else if self.live{"ASIO"}else{"DEMO"}}))
+                self.diagnostics.monitor(a,b,json!({"owner":v["owner"].as_str().map(|s|s.chars().take(100).collect::<String>()),"a":a,"b":b,"rate":self.config.sample_rate,"buffer":self.config.buffer,"mode":if self.system_live{"PC"}else if self.live{"ASIO"}else{"DEMO"}}))
             }
             "/api/diagnostics/bench/start" => {
                 if self.live || self.demo.is_some() || self.diagnostics.busy() {
@@ -458,7 +476,12 @@ impl App {
                 Ok(self.diagnostics_status())
             }
             "/api/diagnostics/cancel" => {
-                self.diagnostics.cancel();
+                let v: Value = serde_json::from_str(body).map_err(|e| e.to_string())?;
+                if let Some(owner) = v["owner"].as_str() {
+                    self.diagnostics.cancel_owner(owner);
+                } else {
+                    self.diagnostics.cancel();
+                }
                 self.restore_probe();
                 Ok(self.diagnostics.status())
             }
@@ -479,7 +502,11 @@ impl App {
                     return Err("Entrada o salida fuera del dispositivo abierto".into());
                 }
                 let label = v["label"].as_str().unwrap_or("Loopback físico");
+                let owner = v["owner"]
+                    .as_str()
+                    .map(|s| s.chars().take(100).collect::<String>());
                 let mut context = json!({"input":input+1,"output":output+1,"buffer":self.audio.frames,"device":self.config.device,"sample_rate":self.config.sample_rate,"mode":"ASIO","kind":"physical_round_trip"});
+                context["owner"] = json!(owner);
                 if let Some(route) = v.get("route") {
                     let channel = route["channel"].as_u64().ok_or("Canal requerido")? as usize;
                     let bus = route["bus"].as_u64().ok_or("Bus requerido")? as usize;
@@ -937,6 +964,7 @@ fn run() -> Result<(), String> {
                 "/api/diagnostics/report" => reply(req,200,"application/json",app.diagnostics_report().to_string()),
                 "/api/diagnostics/live" => reply(req,200,"application/json",app.diagnostics.live_status().to_string()),
                 "/api/diagnostics" => reply(req,200,"application/json",app.diagnostics_status().to_string()),
+                "/panels-ui.js" => reply(req,200,"text/javascript; charset=utf-8",include_str!("../web/panels-ui.js").into()),
                 "/diagnostics-ui.js" => reply(req,200,"text/javascript; charset=utf-8",include_str!("../web/diagnostics-ui.js").into()),
                 "/api/latency" => reply(req,200,"application/json",app.latency().to_string()),
                 "/api/addresses" => reply(req,200,"application/json",network::addresses().to_string()),
@@ -948,6 +976,7 @@ fn run() -> Result<(), String> {
                     "application/json",
                     serde_json::to_string(&app.config).map_err(|e| e.to_string())?,
                 ),
+                "/api/panel-status" => reply(req,200,"application/json",app.panel_status().to_string()),
                 "/api/status" => reply(req, 200, "application/json", app.status().to_string()),
                 "/api/presets" => match presets::load() {Ok(p)=>reply(req,200,"application/json",serde_json::json!(p).to_string()),Err(e)=>reply(req,400,"application/json",serde_json::json!({"error":e}).to_string())},
                 "/api/native" => reply(req,200,"application/json",serde_json::to_string(native_fx::registry()).map_err(|e|e.to_string())?),
@@ -1034,5 +1063,19 @@ fn main() {
             tray::error(&e);
         }
         std::process::exit(1);
+    }
+}
+
+#[cfg(test)]
+mod panel_status_tests {
+    use super::*;
+    #[test]
+    fn panel_observers_do_not_consume_main_console_peak_accumulators() {
+        let app = App::new().unwrap();
+        app.controls.meters[0].store(0.75f32.to_bits(), Relaxed);
+        assert_eq!(app.panel_status()["meters"][0], 0.75);
+        assert_eq!(app.panel_status()["meters"][0], 0.75);
+        assert_eq!(app.status()["meters"][0], 0.75);
+        assert_eq!(app.controls.meters[0].load(Relaxed), 0);
     }
 }

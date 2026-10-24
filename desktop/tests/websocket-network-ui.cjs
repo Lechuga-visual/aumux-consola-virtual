@@ -140,6 +140,7 @@ const { setTimeout: sleep } = require("node:timers/promises");
       headless: true,
       args: ["--no-sandbox", "--no-proxy-server", "--disable-dev-shm-usage"],
     });
+    require("./floating-panels.cjs")(browser);
 
     async function mobileWithDelay(delay) {
       const context = await browser.newContext({

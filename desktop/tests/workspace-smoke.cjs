@@ -42,6 +42,7 @@ const fs = require("node:fs/promises");
         "--autoplay-policy=no-user-gesture-required",
       ],
     });
+    require("./floating-panels.cjs")(browser);
     const page = await browser.newPage({
         viewport: { width: 1640, height: 980 },
       }),

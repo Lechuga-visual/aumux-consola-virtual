@@ -1214,7 +1214,9 @@ function updateLatency() {
 async function poll() {
   try {
     const statusStarted = performance.now();
-    const r = await webFetch("/api/status");
+    const r = await webFetch(
+      detachedPanelId ? "/api/panel-status" : "/api/status",
+    );
     if (r.status === 403 && location.pathname.startsWith("/console")) {
       location.reload();
       return;
@@ -1245,7 +1247,10 @@ async function poll() {
       (s.failed ? " · ERROR DE AUDIO" : "");
     $("status").classList.toggle("live", running && !s.emergency);
     $("status").classList.toggle("failed", s.failed || s.emergency);
-    if (was !== running) render();
+    if (was !== running) {
+      render();
+      refreshOpenPanels();
+    }
     $("engine-summary").textContent =
       `${cfg.sample_rate / 1000} kHz · ${s.actual_buffer} muestras`;
     $("stats").textContent =
@@ -1291,7 +1296,9 @@ async function poll() {
       poll,
       failedStatusPolls
         ? Math.min(4000, 250 * 2 ** Math.min(failedStatusPolls - 1, 4))
-        : 80,
+        : detachedPanelId
+          ? 160
+          : 80,
     );
   }
 }
@@ -1454,7 +1461,9 @@ $("mixer-layout").onchange = () => {
   applyDeskPreferences();
 };
 applyDeskPreferences();
-$("settings").onclick = () => $("audio-settings").showModal();
+$("settings").onclick = () => {
+  if (!openDetachedPanel("audio-settings")) showFloatingPanel("audio-settings");
+};
 $("help").onclick = () => $("help-dialog").showModal();
 for (const button of document.querySelectorAll("[data-close]"))
   button.onclick = () => $(button.dataset.close).close();
@@ -1943,6 +1952,7 @@ function currentEq() {
   return targetOf(eqTarget.type, eqTarget.index).eq;
 }
 function openEq(type, index) {
+  if (openDetachedPanel("eq-dialog", { type, index })) return;
   flushEq();
   eqTarget = { type, index };
   eqBandIndex = 0;
@@ -2192,7 +2202,7 @@ function openEq(type, index) {
   );
   selectEqBand(0);
   renderEqPresets();
-  $("eq-dialog").showModal();
+  showFloatingPanel("eq-dialog");
 }
 function selectEqBand(index) {
   eqBandIndex = index;
@@ -2483,7 +2493,8 @@ document.addEventListener("DOMContentLoaded", () => {
       serverConfig = structuredClone(cfg);
       render();
       poll();
-      requestAnimationFrame(animateMeters);
+      if (!detachedPanelId) requestAnimationFrame(animateMeters);
+      window.dispatchEvent(new Event("aumux-ready"));
     })
     .catch(error);
 });
