@@ -192,9 +192,9 @@ const assert = require("node:assert/strict");
     touch.on("pageerror", (error) => errors.push(error.message));
     await touch.goto(consoleUrl, { waitUntil: "domcontentloaded" });
     await touch.waitForSelector("#mixer .strip");
-    await touch.locator("#tools-menu summary").click();
+    await touch.locator("#tools-menu > summary").click();
     await touch.locator("#touch-mode").selectOption("on");
-    await touch.locator("#tools-menu summary").click();
+    await touch.locator("#tools-menu > summary").click();
     await shot(touch, "08-consola-remota-touch");
     const mobile = await browser.newContext({
       viewport: { width: 390, height: 844 },

@@ -234,6 +234,9 @@ unsafe extern "C" fn callback(
         return 2;
     }
     if status != 0 {
+        if let Some(tap) = &s.mixer.diagnostics {
+            tap.discontinuity();
+        }
         s.mixer.controls.xruns.fetch_add(1, Relaxed);
     }
     s.scratch[..frames * s.input_stride].fill(0.0);

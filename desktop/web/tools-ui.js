@@ -135,6 +135,12 @@ function updateLatencyTools(s) {
     latencyCard("Audio de red · ida", "Sin medición"),
     latencyCard("Extremo a extremo · audio", "Sin medición"),
   );
+  const p = s.performance;
+  if (p)
+    $("dsp-performance").textContent =
+      `DSP · último ${p.last_ms.toFixed(3)} ms · promedio ${p.mean_ms.toFixed(3)} ms · máximo ${p.max_ms.toFixed(3)} ms
+Bloques ${p.blocks} · DSP fuera de presupuesto ${p.over_budget_blocks} · XRuns del driver ${s.xruns}
+El tiempo DSP excluye la espera del dispositivo; no es latencia física ni un contador de cortes detectados.`;
   const paths = el("div", "latency-paths");
   paths.append(el("strong", "", "Plugins por ruta hacia este bus"));
   for (const path of bus?.paths || [])
@@ -265,6 +271,7 @@ function positionTools() {
     ) + "px";
   panel.style.top = Math.max(8, Math.min(top, innerHeight - height - 8)) + "px";
 }
+$("diagnostics-menu").addEventListener("toggle", positionTools);
 const toolsPanel = $("tools-menu").querySelector(".tools-dropdown");
 toolsPanel.setAttribute("popover", "manual");
 $("tools-menu").addEventListener("toggle", () => {

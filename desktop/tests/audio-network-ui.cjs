@@ -86,7 +86,7 @@ const assert = require("node:assert/strict");
         "IEM voces",
       ),
     );
-    await page.screenshot({ path: "docs/aumux-0.12-network-audio.png" });
+    await page.screenshot({ path: "docs/aumux-0.13-network-audio.png" });
     await page.locator("#audio-network-add").click();
     const other = page.locator(".audio-network-route").nth(1);
     await other.getByLabel("Transmitir", { exact: true }).check();

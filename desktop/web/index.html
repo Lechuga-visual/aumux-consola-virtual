@@ -20,7 +20,7 @@
             height="30"
           />
           <strong>Au<span>Mux</span></strong>
-          <span class="version">0.12.0</span>
+          <span class="version">0.13.0</span>
         </div>
         <div class="scene-title">
           CONSOLA DE MONITOREO <span>•</span>
@@ -30,17 +30,33 @@
           <details id="tools-menu" class="tools-menu">
             <summary>Herramientas</summary>
             <div class="tools-dropdown">
-              <button id="open-calculator">Calculadora de latencia</button
-              ><button id="open-diagnostics">Latencia y diagnóstico</button>
+              <button id="open-calculator">Calculadora de latencia</button>
+              <details id="diagnostics-menu" class="tools-submenu">
+                <summary>Latencia y diagnóstico</summary>
+                <div>
+                  <button id="open-diagnostics">Datos en tiempo real</button>
+                  <button id="open-loopback">
+                    Medidor de latencia loopback
+                  </button>
+                  <button id="open-stability">
+                    Pruebas de buffers y estabilidad
+                  </button>
+                  <button id="open-comparison">
+                    Comparador de rutas y EFX
+                  </button>
+                  <button id="open-report">Informe exportable</button>
+                </div>
+              </details>
               <label
                 >Interfaz touch<select id="touch-mode">
                   <option value="off">Desactivada</option>
                   <option value="on">Activada</option>
                 </select></label
               >
-              <button disabled>Detector de acoples · pendiente</button
-              ><button disabled>Detector de fase · pendiente</button
-              ><button disabled>Osciloscopio · pendiente</button>
+              <button id="open-feedback">
+                Detector / eliminador de acoples</button
+              ><button id="open-phase">Detector de fase</button
+              ><button id="open-scope">Osciloscopio</button>
             </div>
           </details>
           <button id="toggle-meters" aria-pressed="true">Medidores</button>
@@ -854,12 +870,23 @@
       </div>
       <label>Ruta<select id="latency-route"></select></label>
       <div id="latency-details" class="latency-grid"></div>
+      <pre id="dsp-performance" class="diagnostic-readout"></pre>
       <p class="hint">
         Búfer: cálculo. Driver y plugins: datos declarados, no medición física.
         RTT: ida y vuelta del control web, no del audio. No se suman
         automáticamente porque pueden solaparse. El total real extremo a extremo
         requiere medición con loopback.
       </p>
+    </dialog>
+    <dialog id="diagnostic-dialog">
+      <div class="dialog-heading">
+        <h2 id="diagnostic-title">Pruebas de audio</h2>
+        <button data-close="diagnostic-dialog">✕</button>
+      </div>
+      <p id="diagnostic-notice" role="status"></p>
+      <p id="diagnostic-message" role="status"></p>
+      <div id="diagnostic-controls"></div>
+      <div id="diagnostic-results"></div>
     </dialog>
     <dialog id="calculator-dialog">
       <div class="dialog-heading">
@@ -977,5 +1004,6 @@
     <script src="/effects-ui.js"></script>
     <script src="/workspace-ui.js"></script>
     <script src="/tools-ui.js"></script>
+    <script src="/diagnostics-ui.js"></script>
   </body>
 </html>

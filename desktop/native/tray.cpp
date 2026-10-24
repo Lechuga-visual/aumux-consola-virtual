@@ -128,6 +128,11 @@ unsigned mm_process_metrics(std::uint64_t* cpu_100ns, std::uint64_t* resident_by
     }
     return available;
 }
+bool mm_process_io(std::uint64_t* read, std::uint64_t* write) {
+    IO_COUNTERS counters{};
+    if (!GetProcessIoCounters(GetCurrentProcess(), &counters)) return false;
+    *read = counters.ReadTransferCount; *write = counters.WriteTransferCount; return true;
+}
 unsigned mm_logical_processors() {
     const auto count = GetActiveProcessorCount(ALL_PROCESSOR_GROUPS);
     return count ? count : 1;

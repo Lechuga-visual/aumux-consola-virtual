@@ -10,13 +10,20 @@ web permite objetivos de búfer de 40/80/120/200 ms (80 ms inicialmente), más e
 su optimización y medición son prioritarias en la
 [hoja de ruta](docs/hoja-de-ruta.md).
 
-**Prueba local:** [descargar Windows x64](dist/AuMux-0.12.0-Windows-x64.zip)
+**Prueba local:** [descargar Windows x64](dist/AuMux-0.13.0-Windows-x64.zip)
 e [instrucciones para Windows](docs/probar-en-windows.md).
 La descarga incluye el ejecutable, el receptor de OBS y el código fuente.
-Su checksum está en [SHA-256](dist/AuMux-0.12.0-Windows-x64.zip.sha256).
+Su checksum está en [SHA-256](dist/AuMux-0.13.0-Windows-x64.zip.sha256).
 
 **Capturas:** [galería de la interfaz actual](docs/capturas.md), con consola,
 efectos, preferencias y vistas remotas para tablet y celular.
+
+## Novedades 0.13 · pruebas de audio
+
+**Herramientas → Latencia y diagnóstico** reúne datos en tiempo real, loopback
+físico, barridos de buffers, comparación de rutas/EFX e informes HTML/JSON.
+Detector/eliminador de acoples con cortes manuales en el EQ, detector de fase y
+osciloscopio tienen entradas propias. Ver [guía y alcance de las mediciones](docs/interfaz-0.13.md).
 
 ## Novedades 0.12 · AuMux Audio
 

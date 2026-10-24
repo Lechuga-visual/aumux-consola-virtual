@@ -3161,3 +3161,123 @@ body.touch-mode {
     gap: 6px;
   }
 }
+
+/* Diagnostic tools retain the console palette and explicit touch mode. */
+.tools-submenu > summary {
+  cursor: pointer;
+  padding: 10px;
+  color: var(--text, #e4e7ec);
+}
+.tools-submenu > div {
+  display: grid;
+  padding-left: 12px;
+  border-left: 2px solid #2d8c9a;
+}
+.tools-submenu button {
+  white-space: normal;
+  text-align: left;
+}
+.diagnostic-readout {
+  white-space: pre-wrap;
+  font:
+    12px/1.6 ui-monospace,
+    monospace;
+  color: #a9d5dc;
+}
+#diagnostic-dialog {
+  width: min(1020px, 96vw);
+  max-height: 92dvh;
+  overflow: auto;
+  background: #20252d;
+  color: #d6dce3;
+}
+#diagnostic-controls {
+  display: flex;
+  gap: 12px;
+  align-items: end;
+  flex-wrap: wrap;
+  margin: 12px 0;
+}
+#diagnostic-controls > .hint {
+  flex-basis: 100%;
+}
+.diagnostic-field {
+  display: grid;
+  gap: 6px;
+  min-width: 140px;
+}
+.diagnostic-field input,
+.diagnostic-field select {
+  max-width: 100%;
+  min-height: 32px;
+}
+#diagnostic-results {
+  overflow: auto;
+}
+.diagnostic-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 12px;
+}
+.diagnostic-table th,
+.diagnostic-table td {
+  border-bottom: 1px solid #424c59;
+  padding: 8px;
+  text-align: left;
+}
+.diagnostic-table th {
+  color: #7cdae3;
+}
+#diagnostic-message {
+  color: #84dae0;
+  white-space: pre-wrap;
+}
+.diagnostic-canvas {
+  display: block;
+  width: 100%;
+  height: 300px;
+  background: #111821;
+  border: 1px solid #4a596c;
+  touch-action: none;
+}
+.touch-mode #diagnostic-dialog button,
+.touch-mode #diagnostic-dialog input,
+.touch-mode #diagnostic-dialog select {
+  min-height: 44px;
+}
+@media (max-width: 600px) {
+  #diagnostic-dialog {
+    padding: 12px;
+  }
+  .diagnostic-field {
+    min-width: 0;
+    width: 100%;
+  }
+}
+
+.diagnostic-candidate {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 12px 0;
+  border-bottom: 1px solid #45515f;
+}
+.diagnostic-candidate span {
+  color: #efc782;
+  font-variant-numeric: tabular-nums;
+}
+.phase-readout {
+  display: grid;
+  gap: 14px;
+  margin: 20px 0;
+}
+.phase-readout meter {
+  width: 100%;
+  height: 24px;
+}
+#diagnostic-notice {
+  white-space: pre-wrap;
+  color: #ffd294;
+}

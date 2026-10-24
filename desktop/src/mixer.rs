@@ -91,6 +91,7 @@ fn native_values(spec: Option<&Fx>) -> Vec<NativeValue> {
         .collect()
 }
 pub struct Controls {
+    pub performance: crate::diagnostics::performance::Performance,
     eq: Vec<crate::eq::Control>,
     pub compressor: Vec<crate::compressor::Control>,
     native_params: Vec<[Vec<NativeValue>; INSERTS]>,
@@ -132,6 +133,7 @@ impl Controls {
         let floats = |n| (0..n).map(|_| AtomicU32::new(0)).collect::<Vec<_>>();
         let flags = |n| (0..n).map(|_| AtomicBool::new(false)).collect::<Vec<_>>();
         let s = Arc::new(Self {
+            performance: Default::default(),
             compressor: c
                 .channels
                 .iter()
@@ -252,6 +254,7 @@ impl Controls {
 }
 
 pub struct Mixer {
+    pub diagnostics: Option<crate::diagnostics::Tap>,
     pub listen: Option<Arc<crate::listen::Hub>>,
     pub audio_network: Option<Arc<crate::audio_network::Hub>>,
     pub controls: Arc<Controls>,
@@ -372,6 +375,7 @@ impl Mixer {
             latencies[channels + i] = bus_fx[i].iter().map(|p| p.latency()).sum();
         }
         Ok(Self {
+            diagnostics: None,
             listen: None,
             audio_network: None,
             keys: (0..channels)
@@ -491,6 +495,7 @@ impl Mixer {
         frames: usize,
         outputs: usize,
     ) -> bool {
+        let _timing = self.controls.performance.measure(frames, self.rate as u32);
         output.fill(0.0);
         if frames > MAX_FRAMES
             || input.len() < frames * self.inputs
@@ -528,6 +533,28 @@ impl Mixer {
             }
             return true;
         }
+        if let Some(tap) = &mut self.diagnostics {
+            if tap.probe(input, self.inputs, output, outputs, frames) {
+                for m in self
+                    .controls
+                    .channel_meters
+                    .iter()
+                    .chain(self.controls.bus_meters.iter())
+                {
+                    m.silence();
+                }
+                if let Some(hub) = &self.listen {
+                    hub.publish(&self.buses, frames);
+                }
+                if let Some(hub) = &self.audio_network {
+                    hub.publish(&self.buses, frames);
+                }
+                return true;
+            }
+            if tap.take_resume() {
+                self.controls.resume_fade.store(true, Relaxed);
+            }
+        }
         if self.controls.resume_fade.swap(false, Relaxed) {
             self.previous.fill(0.0);
             self.previous_bus.fill(0.0);
@@ -542,8 +569,16 @@ impl Mixer {
                 1.0
             };
         }
+        let probe_route = self.diagnostics.as_ref().and_then(|t| t.route());
         for i in 0..self.channel.len() {
             let ch = &mut self.channel[i];
+            if probe_route.is_some_and(|(channel, _)| channel != i) {
+                for side in 0..2 {
+                    ch[side][..frames].fill(0.0);
+                    self.keys[i][side][..frames].fill(0.0);
+                }
+                continue;
+            }
             let route = self.controls.input_route[i].load(Relaxed);
             let left_input = (route & 255) as usize;
             let right_input = ((route >> 8) & 255) as usize;
@@ -587,6 +622,14 @@ impl Mixer {
                 ch[0][f] = left;
                 ch[1][f] = right + (left - right) * mono_mix;
             }
+            if probe_route.is_some() {
+                if let Some(tap) = &self.diagnostics {
+                    for f in 0..frames {
+                        ch[0][f] = tap.excitation(f);
+                        ch[1][f] = ch[0][f];
+                    }
+                }
+            }
             self.generator_blend[i] = blend;
             self.generator_level[i] = noise_gain;
             self.channel_eq[i].process(ch, frames, &self.controls.eq[i], self.rate);
@@ -595,6 +638,9 @@ impl Mixer {
             }
         }
         for i in 0..self.channel.len() {
+            if probe_route.is_some_and(|(channel, _)| channel != i) {
+                continue;
+            }
             let route = self.controls.input_route[i].load(Relaxed);
             let mono = if route & (1 << 16) == 0 { 1.0 } else { 0.0 };
             let ch = &mut self.channel[i];
@@ -684,6 +730,9 @@ impl Mixer {
             self.previous_mono[i] = mono;
         }
         for b in 0..self.buses.len() {
+            if probe_route.is_some_and(|(_, bus)| bus != b) {
+                continue;
+            }
             let bus = &mut self.buses[b];
             self.bus_eq[b].process(
                 bus,
@@ -757,6 +806,16 @@ impl Mixer {
             self.controls.bus_meters[b].record(stereo_peak, stereo_energy, frames, self.rate);
             self.previous_bus[b] = target;
             self.previous_bus_mono[b] = self.bus_mono[b];
+        }
+        if let Some(tap) = &mut self.diagnostics {
+            tap.monitor(input, self.inputs, &self.channel, &self.buses, frames);
+        }
+        if probe_route.is_some() {
+            for bus in &mut self.buses {
+                for side in bus {
+                    side[..frames].fill(0.0);
+                }
+            }
         }
         if let Some(hub) = &self.listen {
             hub.publish(&self.buses, frames);
@@ -1253,5 +1312,80 @@ mod tests {
         assert_eq!(c.channels[0].inserts.len(), 1);
         c.channels[0].inserts = vec![Fx::default(); 5];
         assert!(c.validate().is_err());
+    }
+}
+#[cfg(test)]
+mod diagnostic_delay_tests {
+    use super::*;
+    struct Delay {
+        ring: [[f32; 37]; 2],
+        position: usize,
+    }
+    impl Plugin for Delay {
+        fn info(&self) -> &'static soundcraft_dsp::PluginInfo {
+            panic!("metadata unused in this processing fixture")
+        }
+        fn prepare(&mut self, _: f32, _: usize, _: usize) {}
+        fn reset(&mut self) {
+            self.ring = [[0.0; 37]; 2];
+            self.position = 0;
+        }
+        fn set_param(&mut self, _: &str, _: f32) -> bool {
+            false
+        }
+        fn param(&self, _: &str) -> Option<f32> {
+            None
+        }
+        fn process(&mut self, io: &mut [Vec<f32>], frames: usize) {
+            for f in 0..frames {
+                for s in 0..2 {
+                    std::mem::swap(&mut self.ring[s][self.position], &mut io[s][f]);
+                }
+                self.position = (self.position + 1) % 37;
+            }
+        }
+        fn latency(&self) -> usize {
+            37
+        }
+    }
+    #[test]
+    fn comparator_signal_really_crosses_inserts_and_bypass_removes_their_delay() {
+        use crate::diagnostics::{Hub, signal};
+        for bypass in [false, true] {
+            let mut c = Config::default();
+            for ch in &mut c.channels {
+                ch.input = None;
+                ch.input_right = None;
+            }
+            c.buses[0].output = Some(0);
+            c.buses[0].gain_db = 0.0;
+            let control = Controls::new(&c);
+            control.bypass[0][0].store(bypass, Relaxed);
+            let mut mixer = Mixer::new(&c, control).unwrap();
+            mixer.channel_fx[0].push(Box::new(Delay {
+                ring: [[0.0; 37]; 2],
+                position: 0,
+            }));
+            let hub = Hub::new();
+            mixer.diagnostics = Some(hub.tap());
+            hub.route_probe(0, 0, 0, 0, "Insert", serde_json::json!({}))
+                .unwrap();
+            let input = vec![0.0; 128 * c.inputs as usize];
+            let mut output = vec![0.0; 256];
+            let mut returned = Vec::new();
+            for _ in 0..188 {
+                crate::test_support::no_heap(|| {
+                    assert!(mixer.process(&input, &mut output, 128, 2))
+                });
+                returned.extend(output.chunks_exact(2).map(|s| s[0]));
+            }
+            let result = signal::detect_probe(&returned, false);
+            assert_eq!(
+                result.samples,
+                Some(if bypass { 0 } else { 37 }),
+                "{result:?}"
+            );
+            hub.cancel();
+        }
     }
 }

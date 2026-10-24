@@ -4,6 +4,7 @@ mod audio_network;
 mod bridge;
 mod compressor;
 mod config;
+mod diagnostics;
 mod eq;
 mod fx;
 mod generator;
@@ -34,6 +35,12 @@ use tiny_http::{Header, Method, Request, Response, Server};
 
 struct App {
     config: Config,
+    diagnostics: Arc<diagnostics::Hub>,
+    benchmark: Option<diagnostics::bench::Job>,
+    bench_results: Vec<Value>,
+    probe_restore: bool,
+    inventory: diagnostics::inventory::Inventory,
+    device_name: Option<String>,
     listen: Arc<listen::Hub>,
     remote: Arc<remote::Remote>,
     controls: Arc<Controls>,
@@ -59,6 +66,12 @@ impl App {
         listen.configure(&config);
         Ok(Self {
             listen,
+            diagnostics: diagnostics::Hub::new(),
+            benchmark: None,
+            bench_results: Vec::new(),
+            probe_restore: false,
+            inventory: diagnostics::inventory::Inventory::new(),
+            device_name: None,
             remote: remote::Remote::new(),
             config,
             controls,
@@ -77,6 +90,11 @@ impl App {
         })
     }
     fn stop(&mut self) {
+        self.diagnostics.cancel();
+        if self.probe_restore {
+            self.controls.update(&self.config);
+            self.probe_restore = false;
+        }
         self.listen.running(false);
         self.audio.stop();
         if let Some(audio) = &mut self.system_audio {
@@ -85,6 +103,118 @@ impl App {
         self.system_live = false;
         self.demo = None;
         self.live = false;
+    }
+    fn restore_probe(&mut self) {
+        if self.probe_restore && !self.diagnostics.busy() {
+            self.controls.update(&self.config);
+            self.probe_restore = false;
+        }
+    }
+    fn diagnostics_report(&self) -> Value {
+        let mut config = json!(self.config);
+        for kind in ["channels", "buses"] {
+            if let Some(nodes) = config[kind].as_array_mut() {
+                for node in nodes {
+                    if let Some(fx) = node.get_mut("fx").filter(|f| !f.is_null()) {
+                        fx["path"] = json!("Ruta local omitida");
+                    }
+                    if let Some(inserts) = node.get_mut("inserts").and_then(Value::as_array_mut) {
+                        for fx in inserts {
+                            fx["path"] = json!("Ruta local omitida");
+                        }
+                    }
+                }
+            }
+        }
+        let mut status = self.status();
+        if let Some(remote) = status["remote"].as_object_mut() {
+            remote.remove("sessions");
+        }
+        if let Some(listen) = status["listen"].as_object_mut() {
+            listen.remove("url");
+        }
+        let mut diagnostics = self.diagnostics_status();
+        fn omit_paths(v: &mut Value) {
+            match v {
+                Value::Object(o) => {
+                    for (k, v) in o {
+                        if k == "path" {
+                            *v = json!("Ruta local omitida");
+                        } else {
+                            omit_paths(v);
+                        }
+                    }
+                }
+                Value::Array(a) => {
+                    for v in a {
+                        omit_paths(v);
+                    }
+                }
+                _ => {}
+            }
+        }
+        omit_paths(&mut diagnostics);
+        json!({"application":{"name":"AuMux","version":env!("CARGO_PKG_VERSION"),"architecture":std::env::consts::ARCH,"report_format":1},"generated_unix_seconds":std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0,|d|d.as_secs()),"inventory":self.inventory.snapshot(),"interface":{"name":self.device_name,"selected_id":self.config.device,"hardware_revision":Value::Null,"asio_driver_version":Value::Null,"note":"El inventario enumera controladores de audio de Windows; no identifica automáticamente qué versión ASIO usa cada dispositivo. Revisión de hardware/firmware y versión ASIO: no informadas, completar manualmente."},"status":status,"configuration":config,"diagnostics":diagnostics,"measurement_notes":["Loopback: ida/vuelta física medida por correlación a 48 kHz. No divide automáticamente el resultado en entrada y salida.","Buffers y plugins: datos calculados o declarados, separados de mediciones físicas.","Picos CPU/RAM/E/S: muestras del proceso del motor desde su inicio, cada ~1 s; no incluyen el navegador ni picos entre muestras.","E/S de proceso no equivale al porcentaje de actividad del disco ni a su máximo instantáneo."]})
+    }
+    fn diagnostics_status(&self) -> Value {
+        let mut v = self.diagnostics.status();
+        v["benchmark"] = self.benchmark.as_ref().map_or(Value::Null, |j| j.status());
+        v["bench_results"] = json!(self.bench_results);
+        v
+    }
+    fn finish_bench(&mut self, job: diagnostics::bench::Job) {
+        self.stop();
+        self.config = job.original;
+        self.controls = Controls::new(&self.config);
+        self.latencies = vec![0; self.config.channels.len() + self.config.buses.len()];
+        self.remote.invalidate();
+    }
+    fn cancel_bench(&mut self) {
+        if let Some(job) = self.benchmark.take() {
+            if job.began.is_some() {
+                self.bench_results.push(json!({"requested_buffer":job.buffers[job.index],"mode":job.mode,"cancelled":true,"performance":self.controls.performance.snapshot(),"system":self.system.cached()}));
+            }
+            self.finish_bench(job);
+        }
+    }
+    fn benchmark_tick(&mut self) {
+        let Some(mut job) = self.benchmark.take() else {
+            return;
+        };
+        if job.began.is_some() && (job.due() || self.controls.failed.load(Relaxed)) {
+            let performance = self.controls.performance.snapshot();
+            let actual = if self.system_live {
+                self.system_audio.as_ref().map_or(0, |a| a.frames)
+            } else if self.live {
+                self.audio.frames
+            } else {
+                self.config.buffer
+            };
+            self.bench_results.push(json!({"mode":job.mode,"hardware":job.mode!="demo","requested_buffer":job.buffers[job.index],"actual_buffer":actual,"seconds":job.began.unwrap().elapsed().as_secs_f64(),"xruns":self.controls.xruns.load(Relaxed),"clipped_blocks":self.controls.clipped.load(Relaxed),"failed":self.controls.failed.load(Relaxed),"performance":performance,"system":self.system.cached(),"sample_rate":self.config.sample_rate,"device":self.config.device}));
+            self.stop();
+            job.index += 1;
+            job.began = None;
+        }
+        while job.began.is_none() && job.index < job.buffers.len() {
+            self.config.buffer = job.buffers[job.index];
+            match self.start(&job.mode) {
+                Ok(_) => {
+                    job.began = Some(Instant::now());
+                }
+                Err(error) => {
+                    self.bench_results.push(json!({"mode":job.mode,"requested_buffer":job.buffers[job.index],"error":error}));
+                    job.index += 1;
+                }
+            }
+        }
+        if job.index >= job.buffers.len() {
+            self.finish_bench(job);
+        } else {
+            self.benchmark = Some(job);
+        }
+        if self.bench_results.len() > 100 {
+            self.bench_results.drain(..self.bench_results.len() - 100);
+        }
     }
     fn status(&self) -> Value {
         let meters: Vec<f32> = self
@@ -122,7 +252,7 @@ impl App {
         } else if self.live {
             self.audio.frames
         } else {
-            256
+            self.config.buffer
         };
         json!({"mode":if self.system_live {"PC"}else if self.live {"ASIO"} else if self.demo.is_some(){"DEMO"}else{"DETENIDO"},
             "meters":meters,"channel_meters":channel_meters,"channel_rms":channel_rms,
@@ -133,7 +263,7 @@ impl App {
             "audio_network":self.audio_network.status(),"listen":self.listen.status(),
             "remote":self.remote.status(),
             "latency":self.latency(),
-            "system":self.system.cached(),
+            "system":self.system.cached(),"performance":self.controls.performance.snapshot(),
             "bridge_drops":self.bridge.dropped.load(Relaxed),"bridge":self.bridge.status(),"latencies":self.latencies,"actual_buffer":actual_buffer})
     }
     fn start(&mut self, mode: &str) -> Result<Value, String> {
@@ -141,16 +271,30 @@ impl App {
             return Err("Unknown audio mode".into());
         }
         self.stop();
+        if mode == "asio" {
+            self.device_name = self
+                .audio
+                .devices()?
+                .iter()
+                .find(|d| Some(d.id) == self.config.device)
+                .map(|d| d.name.clone());
+        } else if mode == "system" {
+            self.device_name = Some("Salida predeterminada de Windows (WASAPI)".into());
+        }
         self.controls = Controls::new(&self.config);
         self.controls.failed.store(false, Relaxed);
         self.controls.emergency.store(false, Relaxed);
         self.controls.xruns.store(0, Relaxed);
         self.controls.clipped.store(0, Relaxed);
         let mut mixer = Mixer::new(&self.config, self.controls.clone())?;
+        mixer.diagnostics = Some(self.diagnostics.tap());
         mixer.listen = Some(self.listen.clone());
         mixer.audio_network = Some(self.audio_network.clone());
         self.latencies = mixer.latencies.clone();
         if mode == "demo" {
+            self.input
+                .resize(MAX_FRAMES * self.config.inputs as usize, 0.0);
+            self.output.resize(MAX_FRAMES * MAX_IO, 0.0);
             self.demo = Some(mixer);
             self.next = Instant::now();
         } else if mode == "system" {
@@ -183,14 +327,16 @@ impl App {
         let Some(m) = &mut self.demo else {
             return;
         };
+        let frames = self.config.buffer as usize;
         for _ in 0..8 {
             if self.next > Instant::now() {
                 break;
             }
             self.input.fill(0.0); // Each strip's generator supplies its own signal in the mixer.
-            m.process(&self.input, &mut self.output, 256, 64);
-            self.bridge.push(&m.buses[0], 256, self.config.sample_rate);
-            self.next += Duration::from_secs_f64(256.0 / self.config.sample_rate as f64);
+            m.process(&self.input, &mut self.output, frames, MAX_IO);
+            self.bridge
+                .push(&m.buses[0], frames, self.config.sample_rate);
+            self.next += Duration::from_secs_f64(frames as f64 / self.config.sample_rate as f64);
         }
         if self.next + Duration::from_millis(100) < Instant::now() {
             self.next = Instant::now();
@@ -205,7 +351,7 @@ impl App {
             } else if self.live {
                 self.audio.frames
             } else {
-                256
+                self.config.buffer
             },
             if self.system_live {
                 self.system_audio.as_ref().and_then(|a| a.latency_frames())
@@ -240,13 +386,145 @@ impl App {
             "/api/sync-state" => {
                 Ok(json!({"revision":self.remote.status()["revision"],"config":self.config}))
             }
+            "/api/diagnostics/report" => Ok(self.diagnostics_report()),
+            "/api/diagnostics/live" => Ok(self.diagnostics.live_status()),
+            "/api/diagnostics" => Ok(self.diagnostics_status()),
             "/api/latency" => Ok(self.latency()),
             "/api/addresses" => Ok(network::addresses()),
             _ => Err("API no disponible".into()),
         }
     }
     fn api(&mut self, path: &str, body: &str) -> Result<Value, String> {
+        if self.diagnostics.probing()
+            && !matches!(path, "/api/diagnostics/cancel" | "/api/stop" | "/api/panic")
+        {
+            return Err(
+                "Medición física activa; espera o cancela antes de cambiar la consola".into(),
+            );
+        }
+        if self.benchmark.is_some()
+            && !matches!(
+                path,
+                "/api/diagnostics/bench/cancel" | "/api/stop" | "/api/panic"
+            )
+        {
+            return Err("Prueba de buffers activa; cancélala antes de modificar la consola".into());
+        }
         match path {
+            "/api/diagnostics/scope-window" => {
+                let v: Value = serde_json::from_str(body).map_err(|e| e.to_string())?;
+                let frames = v["frames"]
+                    .as_u64()
+                    .filter(|n| (48..=4096).contains(n))
+                    .ok_or("Ventana fuera de rango")?;
+                self.diagnostics
+                    .scope_window(frames as usize, v["rising"] == true);
+                Ok(self.diagnostics.live_status())
+            }
+            "/api/diagnostics/monitor" => {
+                if !self.live && self.demo.is_none() {
+                    return Err("Inicia el motor antes de analizar una señal".into());
+                }
+                let v: Value = serde_json::from_str(body).map_err(|e| e.to_string())?;
+                let a: diagnostics::Source =
+                    serde_json::from_value(v["a"].clone()).map_err(|e| e.to_string())?;
+                let b: diagnostics::Source =
+                    serde_json::from_value(v["b"].clone()).map_err(|e| e.to_string())?;
+                if !a.valid(&self.config) || !b.valid(&self.config) {
+                    return Err("Fuente de análisis inexistente".into());
+                }
+                if self.system_live && (a.kind == 0 || b.kind == 0) {
+                    return Err("AUDIO PC no abre entradas físicas; selecciona canal o bus".into());
+                }
+                self.diagnostics.monitor(a,b,json!({"a":a,"b":b,"rate":self.config.sample_rate,"buffer":self.config.buffer,"mode":if self.system_live{"PC"}else if self.live{"ASIO"}else{"DEMO"}}))
+            }
+            "/api/diagnostics/bench/start" => {
+                if self.live || self.demo.is_some() || self.diagnostics.busy() {
+                    return Err("Detén el motor y las capturas antes del barrido de buffers".into());
+                }
+                if self.remote.status()["enabled"] == true {
+                    return Err(
+                        "Detén el servicio de control remoto durante el barrido de buffers".into(),
+                    );
+                }
+                let v: Value = serde_json::from_str(body).map_err(|e| e.to_string())?;
+                let job = diagnostics::bench::Job::parse(&v, &self.config)?;
+                self.benchmark = Some(job);
+                self.benchmark_tick();
+                Ok(self.diagnostics_status())
+            }
+            "/api/diagnostics/bench/cancel" => {
+                self.cancel_bench();
+                Ok(self.diagnostics_status())
+            }
+            "/api/diagnostics/cancel" => {
+                self.diagnostics.cancel();
+                self.restore_probe();
+                Ok(self.diagnostics.status())
+            }
+            "/api/diagnostics/probe" => {
+                if !self.live || self.system_live {
+                    return Err(
+                        "El loopback físico requiere el motor ASIO activo con entradas y salidas"
+                            .into(),
+                    );
+                }
+                if self.controls.emergency.load(Relaxed) || self.controls.failed.load(Relaxed) {
+                    return Err("Recupera el motor antes de medir".into());
+                }
+                let v: Value = serde_json::from_str(body).map_err(|e| e.to_string())?;
+                let input = v["input"].as_u64().ok_or("Entrada requerida")? as usize;
+                let output = v["output"].as_u64().ok_or("Salida requerida")? as usize;
+                if input >= self.config.inputs as usize || output >= self.audio.outputs {
+                    return Err("Entrada o salida fuera del dispositivo abierto".into());
+                }
+                let label = v["label"].as_str().unwrap_or("Loopback físico");
+                let mut context = json!({"input":input+1,"output":output+1,"buffer":self.audio.frames,"device":self.config.device,"sample_rate":self.config.sample_rate,"mode":"ASIO","kind":"physical_round_trip"});
+                if let Some(route) = v.get("route") {
+                    let channel = route["channel"].as_u64().ok_or("Canal requerido")? as usize;
+                    let bus = route["bus"].as_u64().ok_or("Bus requerido")? as usize;
+                    if channel >= self.config.channels.len() || bus >= self.config.buses.len() {
+                        return Err("Ruta fuera de la escena".into());
+                    }
+                    if self.config.buses[bus].output != Some(output) {
+                        return Err("La salida de prueba debe coincidir con la salida izquierda/mono asignada al bus".into());
+                    }
+                    let bypass = v["bypass"] == true;
+                    context["kind"] = json!("physical_route");
+                    context["channel_index"] = json!(channel);
+                    context["bus_index"] = json!(bus);
+                    context["channel"] = json!(self.config.channels[channel]);
+                    context["bus"] = json!(self.config.buses[bus]);
+                    context["bypass"] = json!(bypass);
+                    let result = self
+                        .diagnostics
+                        .route_probe(input, output, channel, bus, label, context)?;
+                    if bypass {
+                        let mut c = self.config.clone();
+                        c.channels[channel].eq.bypass = true;
+                        c.channels[channel].compressor.bypass = true;
+                        for fx in &mut c.channels[channel].inserts {
+                            fx.bypass = true;
+                        }
+                        if let Some(fx) = &mut c.channels[channel].fx {
+                            fx.bypass = true;
+                        }
+                        c.buses[bus].eq.bypass = true;
+                        c.buses[bus].compressor.bypass = true;
+                        for fx in &mut c.buses[bus].inserts {
+                            fx.bypass = true;
+                        }
+                        if let Some(fx) = &mut c.buses[bus].fx {
+                            fx.bypass = true;
+                        }
+                        self.controls.update(&c);
+                        self.probe_restore = true;
+                    }
+                    Ok(result)
+                } else {
+                    self.diagnostics.probe(input, output, label, context)
+                }
+            }
             "/api/config" => {
                 let v: Value = serde_json::from_str(body).map_err(|e| e.to_string())?;
                 let wrapped = v.get("config").is_some();
@@ -288,10 +566,16 @@ impl App {
                 if self.live && !self.system_live && c.output_channels() > self.audio.outputs {
                     return Err("La ruta mono/estéreo excede las salidas ASIO abiertas".into());
                 }
+                if self.diagnostics.busy() && !self.config.same_graph(&c) {
+                    return Err(
+                        "Detén la captura antes de cambiar la estructura o las cadenas".into(),
+                    );
+                }
                 if active && !self.config.same_graph(&c) {
                     let controls = Controls::new(&c);
                     let mut next =
                         Mixer::reconfigure(&c, controls.clone(), &self.config, &self.latencies)?;
+                    next.diagnostics = Some(self.diagnostics.tap());
                     next.listen = Some(self.listen.clone());
                     next.audio_network = Some(self.audio_network.clone());
                     let latencies = next.latencies.clone();
@@ -340,6 +624,9 @@ impl App {
                 } else {
                     self.remote.changed();
                 }
+                if c.device != self.config.device {
+                    self.device_name = None;
+                }
                 self.config = c;
                 self.remote.refresh(
                     &self.config,
@@ -355,10 +642,13 @@ impl App {
                 self.start(v["mode"].as_str().unwrap_or(""))
             }
             "/api/stop" => {
+                self.cancel_bench();
                 self.stop();
                 Ok(self.status())
             }
             "/api/panic" => {
+                self.cancel_bench();
+                self.diagnostics.cancel();
                 self.controls.emergency.store(true, Relaxed);
                 Ok(self.status())
             }
@@ -376,7 +666,12 @@ impl App {
                 if self.live {
                     return Err("Stop ASIO before scanning devices".into());
                 }
-                Ok(json!(self.audio.devices()?))
+                let devices = self.audio.devices()?;
+                self.device_name = devices
+                    .iter()
+                    .find(|d| Some(d.id) == self.config.device)
+                    .map(|d| d.name.clone());
+                Ok(json!(devices))
             }
             "/api/vst3" => {
                 let v: Value = serde_json::from_str(body).map_err(|e| e.to_string())?;
@@ -586,12 +881,20 @@ fn run() -> Result<(), String> {
             };
             let _ = rpc.reply.try_send(result);
         }
+        app.benchmark_tick();
+        if app.controls.failed.load(Relaxed) {
+            app.diagnostics.cancel();
+        }
+        app.diagnostics.tick();
+        app.restore_probe();
         app.demo_tick();
-        app.remote.drain(
-            &mut app.config,
-            &app.controls,
-            app.live || app.demo.is_some(),
-        );
+        if !app.diagnostics.probing() {
+            app.remote.drain(
+                &mut app.config,
+                &app.controls,
+                app.live || app.demo.is_some(),
+            );
+        }
         if Instant::now() >= next_remote {
             let latency = app.latency();
             app.remote.set_latency(latency.clone());
@@ -631,6 +934,10 @@ fn run() -> Result<(), String> {
                 "/workspace-ui.js" => reply(req,200,"text/javascript; charset=utf-8",include_str!("../web/workspace-ui.js").into()),
                 "/tools-ui.js" => reply(req,200,"text/javascript; charset=utf-8",include_str!("../web/tools-ui.js").into()),
                 "/api/sync-state" => reply(req,200,"application/json",json!({"revision":app.remote.status()["revision"],"config":app.config}).to_string()),
+                "/api/diagnostics/report" => reply(req,200,"application/json",app.diagnostics_report().to_string()),
+                "/api/diagnostics/live" => reply(req,200,"application/json",app.diagnostics.live_status().to_string()),
+                "/api/diagnostics" => reply(req,200,"application/json",app.diagnostics_status().to_string()),
+                "/diagnostics-ui.js" => reply(req,200,"text/javascript; charset=utf-8",include_str!("../web/diagnostics-ui.js").into()),
                 "/api/latency" => reply(req,200,"application/json",app.latency().to_string()),
                 "/api/addresses" => reply(req,200,"application/json",network::addresses().to_string()),
                 "/effects-ui.js" => reply(req,200,"text/javascript; charset=utf-8",include_str!("../web/effects-ui.js").into()),

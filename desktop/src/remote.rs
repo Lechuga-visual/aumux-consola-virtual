@@ -515,7 +515,12 @@ impl Remote {
         }
         if matches!(
             path,
-            "/console.css" | "/console.js" | "/workspace-ui.js" | "/effects-ui.js" | "/tools-ui.js"
+            "/console.css"
+                | "/console.js"
+                | "/workspace-ui.js"
+                | "/effects-ui.js"
+                | "/tools-ui.js"
+                | "/diagnostics-ui.js"
         ) {
             if !self.console_gate.authorized(console_cookie) {
                 return send(&mut stream, 403, "text/plain", "Consola protegida");
@@ -524,6 +529,9 @@ impl Remote {
                 "/console.css" => ("text/css", include_str!("../web/console.css")),
                 "/console.js" => ("text/javascript", include_str!("../web/console.js")),
                 "/workspace-ui.js" => ("text/javascript", include_str!("../web/workspace-ui.js")),
+                "/diagnostics-ui.js" => {
+                    ("text/javascript", include_str!("../web/diagnostics-ui.js"))
+                }
                 "/tools-ui.js" => ("text/javascript", include_str!("../web/tools-ui.js")),
                 _ => ("text/javascript", include_str!("../web/effects-ui.js")),
             };

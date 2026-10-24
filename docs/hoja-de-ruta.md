@@ -77,9 +77,11 @@ Definir segmentación/RF64 para sesiones largas y recuperación de archivos.
 ## Herramientas de señal
 
 Disponibles: diagnóstico de componentes de latencia y calculadora a 48 kHz.
-Pendientes: medición física de extremo a extremo/loopback, detector de acoples,
-detector de cancelación de fase y osciloscopio. El menú Herramientas reserva
-estas funciones; no se simulan mediciones ni se ejecuta análisis pendiente.
+Desde 0.13: loopback físico ASIO, barridos de buffers, comparación de rutas/EFX,
+informes, detector de posibles acoples con cortes manuales en EQ, correlación
+de fase y osciloscopio. Ver [alcance y pruebas](interfaz-0.13.md). Pendientes:
+validación con hardware real y latencia hasta receptores OBS/móviles; el
+loopback no mide automáticamente esos otros trayectos.
 
 ## Control y expansión
 

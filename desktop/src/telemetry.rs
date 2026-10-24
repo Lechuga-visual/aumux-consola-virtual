@@ -8,6 +8,13 @@ const SAMPLE_PERIOD: Duration = Duration::from_secs(1);
 pub struct Metrics {
     /// Process CPU time divided by wall time and logical processor count.
     pub cpu_percent: Option<f64>,
+    pub peak_cpu_percent: Option<f64>,
+    pub peak_ram_bytes: Option<u64>,
+    pub io_read_bytes_per_second: Option<f64>,
+    pub io_write_bytes_per_second: Option<f64>,
+    pub peak_io_read_bytes_per_second: Option<f64>,
+    pub peak_io_write_bytes_per_second: Option<f64>,
+    pub io_scope: &'static str,
     /// Resident working set; excludes the separate browser process.
     pub ram_bytes: Option<u64>,
     pub logical_processors: usize,
@@ -26,6 +33,7 @@ pub struct Telemetry {
     latest: Metrics,
     last_sample: Instant,
     previous_cpu: Option<u64>,
+    previous_io: Option<(u64, u64)>,
 }
 
 impl Telemetry {
@@ -34,6 +42,13 @@ impl Telemetry {
         Self {
             latest: Metrics {
                 cpu_percent: None,
+                peak_cpu_percent: None,
+                peak_ram_bytes: raw.resident_bytes,
+                io_read_bytes_per_second: None,
+                io_write_bytes_per_second: None,
+                peak_io_read_bytes_per_second: None,
+                peak_io_write_bytes_per_second: None,
+                io_scope: "process_io_not_disk_busy_percent",
                 ram_bytes: raw.resident_bytes,
                 logical_processors: logical_processors(),
                 sample_interval_ms: None,
@@ -43,6 +58,7 @@ impl Telemetry {
             },
             last_sample: Instant::now(),
             previous_cpu: raw.cpu_nanos,
+            previous_io: process_io(),
         }
     }
 
@@ -64,6 +80,31 @@ impl Telemetry {
             elapsed,
             self.latest.logical_processors,
         );
+        self.latest.peak_cpu_percent =
+            max_option(self.latest.peak_cpu_percent, self.latest.cpu_percent);
+        self.latest.peak_ram_bytes = match (self.latest.peak_ram_bytes, raw.resident_bytes) {
+            (Some(a), Some(b)) => Some(a.max(b)),
+            (a, b) => a.or(b),
+        };
+        let current = process_io();
+        let rate = |a: u64, b: u64| b.checked_sub(a).map(|n| n as f64 / elapsed.as_secs_f64());
+        self.latest.io_read_bytes_per_second = self
+            .previous_io
+            .zip(current)
+            .and_then(|(a, b)| rate(a.0, b.0));
+        self.latest.io_write_bytes_per_second = self
+            .previous_io
+            .zip(current)
+            .and_then(|(a, b)| rate(a.1, b.1));
+        self.latest.peak_io_read_bytes_per_second = max_option(
+            self.latest.peak_io_read_bytes_per_second,
+            self.latest.io_read_bytes_per_second,
+        );
+        self.latest.peak_io_write_bytes_per_second = max_option(
+            self.latest.peak_io_write_bytes_per_second,
+            self.latest.io_write_bytes_per_second,
+        );
+        self.previous_io = current;
         self.latest.ram_bytes = raw.resident_bytes;
         self.latest.sample_interval_ms = Some(elapsed.as_millis().min(u64::MAX as u128) as u64);
         self.previous_cpu = raw.cpu_nanos;
@@ -261,4 +302,33 @@ mod tests {
         );
         assert_eq!(local_ipv4("", &serde_json::json!({"interfaces":[]})), None);
     }
+}
+
+fn max_option(a: Option<f64>, b: Option<f64>) -> Option<f64> {
+    match (a, b) {
+        (Some(a), Some(b)) => Some(a.max(b)),
+        (a, b) => a.or(b),
+    }
+}
+#[cfg(windows)]
+fn process_io() -> Option<(u64, u64)> {
+    unsafe extern "C" {
+        fn mm_process_io(read: *mut u64, write: *mut u64) -> bool;
+    }
+    let (mut read, mut write) = (0, 0);
+    unsafe { mm_process_io(&mut read, &mut write) }.then_some((read, write))
+}
+#[cfg(target_os = "linux")]
+fn process_io() -> Option<(u64, u64)> {
+    let s = std::fs::read_to_string("/proc/self/io").ok()?;
+    let value = |name: &str| {
+        s.lines()
+            .find_map(|l| l.strip_prefix(name))
+            .and_then(|v| v.trim().parse().ok())
+    };
+    Some((value("read_bytes:")?, value("write_bytes:")?))
+}
+#[cfg(not(any(windows, target_os = "linux")))]
+fn process_io() -> Option<(u64, u64)> {
+    None
 }

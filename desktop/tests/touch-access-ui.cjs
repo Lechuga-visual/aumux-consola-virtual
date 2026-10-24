@@ -98,7 +98,7 @@ const assert = require("node:assert/strict");
       "127.0.0.1",
     );
     await operator.screenshot({
-      path: "docs/aumux-0.12-preferences-network.png",
+      path: "docs/aumux-0.13-preferences-network.png",
     });
     await operator.locator("#pref-tab-console").click();
     assert(await operator.locator("#pref-console").isVisible());
@@ -120,7 +120,7 @@ const assert = require("node:assert/strict");
       document.querySelector("#mix-generic-url").value.startsWith("http"),
     );
     await operator.screenshot({
-      path: "docs/aumux-0.12-preferences-aux.png",
+      path: "docs/aumux-0.13-preferences-aux.png",
     });
     const shared = await operator.locator("#mix-generic-url").inputValue();
     assert(shared.endsWith("/") && !shared.includes("key="));
@@ -267,7 +267,7 @@ const assert = require("node:assert/strict");
     await mix.waitForFunction(() =>
       document.querySelector("#remote-latency").textContent.includes("RTT"),
     );
-    await mix.screenshot({ path: "docs/aumux-0.12-mobile-mix.png" });
+    await mix.screenshot({ path: "docs/aumux-0.13-mobile-mix.png" });
     await mix.locator("footer summary").click();
     // Password replaces open access; the page must request authentication, not silently keep controls.
     await operator.evaluate(async () => {
@@ -311,7 +311,7 @@ const assert = require("node:assert/strict");
       false,
       "touch must be explicitly enabled even on a tablet",
     );
-    await full.locator("#tools-menu summary").click();
+    await full.locator("#tools-menu > summary").click();
     await full.locator("#touch-mode").selectOption("on");
     await full.waitForFunction(() =>
       document.body.classList.contains("touch-mode"),
@@ -319,7 +319,7 @@ const assert = require("node:assert/strict");
     await full.waitForTimeout(100);
     const menuPlacement = await full.evaluate(() => {
       const button = document
-        .querySelector("#tools-menu summary")
+        .querySelector("#tools-menu > summary")
         .getBoundingClientRect();
       const panel = document
         .querySelector(".tools-dropdown")
@@ -342,8 +342,8 @@ const assert = require("node:assert/strict");
       menuPlacement.panel.right <= 1100 && menuPlacement.panel.bottom <= 820,
       "touch menu fits viewport",
     );
-    await full.screenshot({ path: "docs/aumux-0.12-touch-tools.png" });
-    await full.locator("#tools-menu summary").click();
+    await full.screenshot({ path: "docs/aumux-0.13-touch-tools.png" });
+    await full.locator("#tools-menu > summary").click();
     let configPosts = 0;
     await full.route("**/api/config", async (route) => {
       if (route.request().method() === "POST") {
@@ -376,7 +376,7 @@ const assert = require("node:assert/strict");
       ),
       false,
     );
-    await full.locator("#tools-menu summary").click();
+    await full.locator("#tools-menu > summary").click();
     await full.locator("#open-calculator").click();
     await full.locator("#calc-plugins").fill("480");
     await full.locator("#calc-plugins").dispatchEvent("input");
@@ -384,9 +384,10 @@ const assert = require("node:assert/strict");
       (await full.locator("#calc-result").innerText()).includes("20.67 ms"),
     );
     assert.equal(await operator.evaluate(() => cfg.buffer), 256);
-    await full.screenshot({ path: "docs/aumux-0.12-calculator.png" });
+    await full.screenshot({ path: "docs/aumux-0.13-calculator.png" });
     await full.locator("[data-close=calculator-dialog]").click();
-    await full.locator("#tools-menu summary").click();
+    await full.locator("#tools-menu > summary").click();
+    await full.locator("#diagnostics-menu > summary").click();
     await full.locator("#open-diagnostics").click();
     await full.locator("#latency-route").selectOption("2");
     await full.waitForFunction(() =>
@@ -399,21 +400,21 @@ const assert = require("node:assert/strict");
         "IEM baterista",
       ),
     );
-    await full.screenshot({ path: "docs/aumux-0.12-latency.png" });
+    await full.screenshot({ path: "docs/aumux-0.13-latency.png" });
     await full.locator("[data-close=latency-dialog]").click();
     await full.locator("#toggle-inspector").click();
     assert(await full.locator(".sidebar").isVisible());
     await full.locator("#toggle-inspector").click();
-    await full.screenshot({ path: "docs/aumux-0.12-main-touch.png" });
+    await full.screenshot({ path: "docs/aumux-0.13-main-touch.png" });
     // The local console's explicit Touch switch also works with a mouse-only desktop.
-    await operator.locator("#tools-menu summary").click();
+    await operator.locator("#tools-menu > summary").click();
     await operator.locator("#touch-mode").selectOption("on");
     assert(
       await operator
         .locator("body")
         .evaluate((e) => e.classList.contains("touch-mode")),
     );
-    await operator.locator("#tools-menu summary").click();
+    await operator.locator("#tools-menu > summary").click();
     await operator.setViewportSize({ width: 1000, height: 980 });
     await trackTouch(operator, ".fader input", "#mixer-stage");
     const localGain = await operator.evaluate(() => cfg.channels[0].gain_db);
@@ -422,14 +423,14 @@ const assert = require("node:assert/strict");
       await operator.evaluate((v) => cfg.channels[0].gain_db > v, localGain),
     );
     await operator.setViewportSize({ width: 1600, height: 980 });
-    await operator.locator("#tools-menu summary").click();
+    await operator.locator("#tools-menu > summary").click();
     await operator.locator("#touch-mode").selectOption("off");
     assert(
       !(await operator
         .locator("body")
         .evaluate((e) => e.classList.contains("touch-mode"))),
     );
-    await operator.locator("#tools-menu summary").click();
+    await operator.locator("#tools-menu > summary").click();
     const listenLink = await operator.evaluate(async () => {
       await api("listen-access", { mode: "open" });
       return (await api("listen", { enabled: true, port: 0 })).url;
@@ -474,7 +475,7 @@ const assert = require("node:assert/strict");
     );
     await listen.waitForTimeout(200);
     await listen.screenshot({
-      path: "docs/aumux-0.12-mobile-listen.png",
+      path: "docs/aumux-0.13-mobile-listen.png",
     });
     await listen.locator("#stop").click();
     await mix.setViewportSize({ width: 844, height: 390 });
