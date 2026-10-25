@@ -1,6 +1,7 @@
 # AuMux · galería de capturas
 
-Capturas reales de **AuMux 0.13.0**, ejecutado en **DEMO a 48 kHz** con ocho
+Capturas reales de **AuMux 0.13.2** para los selectores de plugins, y de las
+versiones indicadas para el resto. Las vistas de señal usan **DEMO a 48 kHz** con ocho
 canales, cuatro auxiliares y master. Los generadores internos producen la señal
 que muestran los medidores; no se conectó hardware ASIO. Las vistas se capturaron
 en Chromium sobre Linux.
@@ -8,8 +9,17 @@ en Chromium sobre Linux.
 Esta galería muestra las funciones actuales. El modo de control de consolas
 digitales X32/M32 y las demás familias comentadas sigue pendiente de implementación.
 
-[Descargar para Windows](../dist/AuMux-0.13.1-Windows-x64.zip) ·
+[Descargar para Windows](../dist/AuMux-0.13.2-Windows-x64.zip) ·
 [Guía de prueba](probar-en-windows.md) · [Volver al README](../README.md)
+
+## Plugins por categorías 0.13.2
+
+Menú rápido desde cada tira y navegador completo en la ventana FX independiente.
+[Uso, favoritos y clasificación VST3](interfaz-0.13.2.md).
+
+![Menú rápido de plugins en la consola](screenshots/0.13.2/01-menu-rapido.png)
+
+![Navegador completo de plugins](screenshots/0.13.2/02-navegador-plugins.png)
 
 ## Ventanas independientes 0.13.1
 

@@ -7,8 +7,7 @@ const path = require("node:path");
 
 (async () => {
   const binary =
-    process.env.MONITOR_BINARY ||
-    path.resolve("desktop/target/debug/aumux");
+    process.env.MONITOR_BINARY || path.resolve("desktop/target/debug/aumux");
   const presetDir = await fs.mkdtemp("/workspace/scratch/monitor-ui-presets-");
   const app = spawn(binary, ["--no-browser"], {
     stdio: ["ignore", "pipe", "pipe"],
@@ -49,6 +48,18 @@ const path = require("node:path");
       viewport: { width: 1640, height: 980 },
       acceptDownloads: true,
     });
+    const legacyFxBrowser = async () => {
+      await page.waitForFunction(
+        () => $("quick-fx").matches(":popover-open") || $("fx").open,
+      );
+      if (await page.locator("#quick-fx").isVisible())
+        await page.click("#quick-fx-more");
+      await page.waitForSelector("#fx[open]");
+      await page.evaluate(() => {
+        $("fx-browser").open = true;
+        $("fx-advanced").open = true;
+      });
+    };
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
     await fetch(url, { signal: AbortSignal.timeout(5000) });
@@ -501,6 +512,7 @@ const path = require("node:path");
           .locator(".insert-slot")
           .nth(slot)
           .click();
+        await legacyFxBrowser();
         await page.waitForFunction(
           () => document.getElementById("vst-installed").options.length > 0,
         );
@@ -548,6 +560,7 @@ const path = require("node:path");
       .locator(".insert-slot")
       .nth(2)
       .click();
+    await legacyFxBrowser();
     await page.waitForFunction(
       () => document.getElementById("builtin-fx").options.length === 22,
     );
@@ -568,6 +581,7 @@ const path = require("node:path");
       .locator(".insert-slot")
       .nth(2)
       .click();
+    await legacyFxBrowser();
     await page.waitForSelector(".generic-native-panel");
     assert(
       (await page.locator(".generic-knob-bank [role=slider]").count()) > 0,
@@ -594,6 +608,7 @@ const path = require("node:path");
     );
     // Add a temporary native effect from the rail, then delete it using Supr.
     await page.click("#fx-add");
+    await legacyFxBrowser();
     await page.selectOption("#builtin-fx", "native/mda/overdrive");
     await page.waitForFunction(
       () => document.getElementById("fx-title").textContent === "MDA Overdrive",
@@ -615,6 +630,7 @@ const path = require("node:path");
       .locator(".insert-slot")
       .nth(3)
       .click();
+    await legacyFxBrowser();
     await page.selectOption("#builtin-fx", "native/freevox8");
     await page.waitForSelector(".freevox-panel");
     assert.equal(
@@ -695,6 +711,7 @@ const path = require("node:path");
       .locator(".insert-slot")
       .nth(3)
       .click();
+    await legacyFxBrowser();
     await page.waitForSelector(".freevox-panel");
     assert.equal(
       await page
@@ -731,6 +748,7 @@ const path = require("node:path");
       .locator(".insert-slot")
       .nth(3)
       .click();
+    await legacyFxBrowser();
     await page.waitForSelector(".freevox-panel");
     await page.getByLabel("FreeVox8 Output gain", { exact: true }).fill("-12");
     await page

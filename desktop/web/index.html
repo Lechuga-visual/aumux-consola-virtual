@@ -20,7 +20,7 @@
             height="30"
           />
           <strong>Au<span>Mux</span></strong>
-          <span class="version">0.13.1</span>
+          <span class="version">0.13.2</span>
         </div>
         <div class="scene-title">
           CONSOLA DE MONITOREO <span>•</span>
@@ -415,58 +415,105 @@
         <section class="fx-editor">
           <details id="fx-browser" open>
             <summary>Seleccionar o cambiar efecto · nativo / VST3</summary>
-            <label
-              >Efectos nativos<select id="builtin-fx">
-                <option value="">Seleccionar efecto nativo…</option>
-              </select></label
-            >
-            <p class="hint">
-              20 efectos MDA y FreeVox8 (vocoder). También puedes cargar tus
-              VST3 abajo. Cargar o editar inserts requiere detener el motor; el
-              bypass funciona en vivo.
-            </p>
-            <div class="vst-browser">
-              <div class="form-row">
+            <div id="plugin-library">
+              <div class="plugin-library-toolbar">
                 <input
-                  id="vst-search"
-                  type="text"
-                  placeholder="Buscar VST3 instalado…"
-                  aria-label="Buscar VST3 instalado"
-                /><button id="vst-rescan">Actualizar lista</button>
+                  id="plugin-search"
+                  type="search"
+                  placeholder="Buscar nombre, fabricante o función…"
+                  aria-label="Buscar plugins"
+                />
+                <button id="plugin-rescan">Actualizar</button>
               </div>
-              <select
-                id="vst-installed"
-                size="7"
-                aria-label="VST3 instalados"
-              ></select>
-              <p id="vst-scan-status" class="hint"></p>
-              <details>
-                <summary>Carpeta adicional</summary>
+              <div class="plugin-library-filters">
+                <select id="plugin-format" aria-label="Formato de plugins">
+                  <option value="all">Todos los formatos</option>
+                  <option value="native">Nativos</option>
+                  <option value="vst3">VST3</option>
+                </select>
+                <select id="plugin-vendor" aria-label="Fabricante de plugins">
+                  <option value="">Todos los fabricantes</option>
+                </select>
+              </div>
+              <div class="plugin-library-columns">
+                <nav
+                  id="plugin-categories"
+                  aria-label="Categorías de plugins"
+                ></nav>
+                <div
+                  id="plugin-results"
+                  role="group"
+                  aria-label="Plugins disponibles"
+                ></div>
+              </div>
+              <div class="plugin-library-footer">
+                <label
+                  >Categoría<select
+                    id="plugin-category-override"
+                    aria-label="Asignar categoría al plugin"
+                  ></select
+                ></label>
+                <button id="plugin-use" class="accent-button" disabled>
+                  Añadir
+                </button>
+              </div>
+              <p id="plugin-library-status" class="hint" role="status"></p>
+            </div>
+            <details id="fx-advanced">
+              <summary>Avanzado · ruta manual, carpeta y clases VST3</summary>
+              <label
+                >Efectos nativos<select id="builtin-fx">
+                  <option value="">Seleccionar efecto nativo…</option>
+                </select></label
+              >
+              <p class="hint">
+                20 efectos MDA y FreeVox8 (vocoder). También puedes cargar tus
+                VST3 abajo. Cargar o editar inserts requiere detener el motor;
+                el bypass funciona en vivo.
+              </p>
+              <div class="vst-browser">
                 <div class="form-row">
                   <input
-                    id="vst-directory"
+                    id="vst-search"
                     type="text"
-                    placeholder="D:\Audio\VST3"
-                    aria-label="Carpeta adicional VST3"
-                  />
+                    placeholder="Buscar VST3 instalado…"
+                    aria-label="Buscar VST3 instalado"
+                  /><button id="vst-rescan">Actualizar lista</button>
                 </div>
-                <p class="hint">
-                  Actualiza la lista después de cambiar la carpeta. También se
-                  admite VST3_PATH.
-                </p>
-              </details>
-            </div>
-            <label
-              >Ruta del VST3 seleccionado (o entrada manual)<input
-                id="path"
-                type="text"
-                spellcheck="false"
-                placeholder="C:\Program Files\Common Files\VST3\Efecto.vst3"
-            /></label>
-            <div class="form-row">
-              <button id="inspect">Leer efecto</button
-              ><select id="classes" aria-label="Efecto del bundle"></select>
-            </div>
+                <select
+                  id="vst-installed"
+                  size="7"
+                  aria-label="VST3 instalados"
+                ></select>
+                <p id="vst-scan-status" class="hint"></p>
+                <details>
+                  <summary>Carpeta adicional</summary>
+                  <div class="form-row">
+                    <input
+                      id="vst-directory"
+                      type="text"
+                      placeholder="D:\Audio\VST3"
+                      aria-label="Carpeta adicional VST3"
+                    />
+                  </div>
+                  <p class="hint">
+                    Actualiza la lista después de cambiar la carpeta. También se
+                    admite VST3_PATH.
+                  </p>
+                </details>
+              </div>
+              <label
+                >Ruta del VST3 seleccionado (o entrada manual)<input
+                  id="path"
+                  type="text"
+                  spellcheck="false"
+                  placeholder="C:\Program Files\Common Files\VST3\Efecto.vst3"
+              /></label>
+              <div class="form-row">
+                <button id="inspect">Leer efecto</button
+                ><select id="classes" aria-label="Efecto del bundle"></select>
+              </div>
+            </details>
           </details>
           <div id="fx-presets"></div>
           <div id="params"></div>
@@ -1010,6 +1057,7 @@
     <script src="/panels-ui.js"></script>
     <script src="/console.js"></script>
     <script src="/effects-ui.js"></script>
+    <script src="/plugin-browser.js"></script>
     <script src="/workspace-ui.js"></script>
     <script src="/tools-ui.js"></script>
     <script src="/diagnostics-ui.js"></script>

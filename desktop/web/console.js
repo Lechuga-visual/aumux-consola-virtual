@@ -134,6 +134,30 @@ function reconcileConfig(incoming, base) {
   if (!cfg || !incoming || !base) return false;
   let changed = false;
   function walk(target, old, next) {
+    // A replacement insert has a different parameter schema. Adopt it as one
+    // unit instead of keeping knobs from the plugin it replaced.
+    if (
+      typeof next.id === "string" &&
+      typeof next.path === "string" &&
+      typeof old?.id === "string" &&
+      (next.id !== old.id || next.path !== old.path) &&
+      target.id === old.id &&
+      target.path === old.path
+    ) {
+      for (const key of Object.keys(target)) delete target[key];
+      Object.assign(target, structuredClone(next));
+      changed = true;
+      return;
+    }
+    for (const key of Object.keys(old || {})) {
+      if (
+        !Object.hasOwn(next, key) &&
+        JSON.stringify(target[key]) === JSON.stringify(old[key])
+      ) {
+        delete target[key];
+        changed = true;
+      }
+    }
     for (const key of Object.keys(next)) {
       const a = target[key],
         b = old?.[key],
@@ -423,7 +447,8 @@ function insertRack(type, index) {
     button.title = fx
       ? `${fxName(fx)}\n${fx.path}${running ? "\nDetén el audio para editar." : ""}`
       : "Añadir un efecto nativo o VST3";
-    button.onclick = () => openFx(type, index, slot);
+    button.onclick = () =>
+      fx ? openFx(type, index, slot) : openQuickFx(button, type, index, slot);
     row.append(button);
     if (fx) {
       const bypass = el("button", "bypass" + (fx.bypass ? " off" : ""), "⏻");
@@ -1327,6 +1352,7 @@ async function scanVst3() {
   vstRoots = result.roots;
   catalogueLoaded = true;
   filterVst3();
+  pluginCatalogueUpdated();
 }
 function filterVst3() {
   const query = $("vst-search").value.toLocaleLowerCase();

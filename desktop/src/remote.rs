@@ -519,6 +519,7 @@ impl Remote {
                 | "/console.js"
                 | "/workspace-ui.js"
                 | "/effects-ui.js"
+                | "/plugin-browser.js"
                 | "/tools-ui.js"
                 | "/panels-ui.js"
                 | "/diagnostics-ui.js"
@@ -535,6 +536,9 @@ impl Remote {
                     ("text/javascript", include_str!("../web/diagnostics-ui.js"))
                 }
                 "/tools-ui.js" => ("text/javascript", include_str!("../web/tools-ui.js")),
+                "/plugin-browser.js" => {
+                    ("text/javascript", include_str!("../web/plugin-browser.js"))
+                }
                 _ => ("text/javascript", include_str!("../web/effects-ui.js")),
             };
             return send(&mut stream, 200, kind, body);

@@ -6,7 +6,7 @@ let fxSequence = 0,
   nativeCataloguePromise;
 const fxMetadata = new Map();
 async function nativeCatalogue() {
-  return (nativeCataloguePromise ??= fetch("/api/native")
+  return (nativeCataloguePromise ??= webFetch("/api/native")
     .then(async (r) => {
       if (!r.ok) throw Error("No se pudo leer la lista nativa");
       return r.json();
@@ -241,17 +241,16 @@ function openFx(type, index, slot) {
         },
       ]);
   }
-  if (!running) {
-    if (!catalogueLoaded)
-      scanVst3().catch((e) => ($("vst-scan-status").textContent = e.message));
-    else filterVst3();
-  }
+  ensurePluginCatalogue().catch(
+    (e) => ($("plugin-library-status").textContent = e.message),
+  );
 }
 function setFxDescriptors(list) {
   descriptors = list;
   $("classes").replaceChildren(...list.map((p, i) => new Option(p.name, i)));
   if (!list.length) throw Error("Este bundle no contiene efectos de audio");
   for (const d of list) fxMetadata.set(descriptorKey($("path").value, d.id), d);
+  rememberPluginDescriptors($("path").value, list);
   showParams();
 }
 function showParams() {

@@ -134,6 +134,9 @@ const assert = require("node:assert/strict");
     await page
       .locator('#builtin-fx option[value="native/mda/dynamics"]')
       .waitFor({ state: "attached" });
+    await page.evaluate(() => {
+      $("fx-advanced").open = true;
+    });
     await page.locator("#builtin-fx").selectOption("native/mda/dynamics");
     await page.locator(".generic-native-panel").waitFor();
     await page.locator("#applyfx").click();

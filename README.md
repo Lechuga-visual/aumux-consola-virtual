@@ -10,13 +10,20 @@ web permite objetivos de búfer de 40/80/120/200 ms (80 ms inicialmente), más e
 su optimización y medición son prioritarias en la
 [hoja de ruta](docs/hoja-de-ruta.md).
 
-**Prueba local:** [descargar Windows x64](dist/AuMux-0.13.1-Windows-x64.zip)
+**Prueba local:** [descargar Windows x64](dist/AuMux-0.13.2-Windows-x64.zip)
 e [instrucciones para Windows](docs/probar-en-windows.md).
 La descarga incluye el ejecutable, el receptor de OBS y el código fuente.
-Su checksum está en [SHA-256](dist/AuMux-0.13.1-Windows-x64.zip.sha256).
+Su checksum está en [SHA-256](dist/AuMux-0.13.2-Windows-x64.zip.sha256).
 
 **Capturas:** [galería de la interfaz actual](docs/capturas.md), con consola,
 efectos, preferencias y vistas remotas para tablet y celular.
+
+## Novedades 0.13.2 · navegador de plugins
+
+**＋ FX** abre un menú rápido por categorías en cada canal, auxiliar y master.
+La ventana de plugins incorpora el navegador completo de dos columnas, con búsqueda,
+filtros de fabricante/formato, favoritos, recientes y clasificación manual.
+[Uso y capturas de ambos selectores](docs/interfaz-0.13.2.md).
 
 ## Novedades 0.13.1 · paneles independientes
 

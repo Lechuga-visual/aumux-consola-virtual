@@ -166,6 +166,8 @@ function startDetachedPanel(id, state) {
   }
 }
 function refreshOpenPanels() {
+  updatePluginLibrarySelection();
+  if (quickFx.open) renderQuickFx();
   if (panelTextEditing()) return;
   if (document.getElementById("eq-dialog").open && eqTarget) {
     document.getElementById("eq-title").textContent =

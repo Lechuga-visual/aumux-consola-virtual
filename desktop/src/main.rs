@@ -774,7 +774,7 @@ impl App {
                         "min":pi.min,"max":pi.max,"value":p.param(pi.id).unwrap_or(pi.default)})
                         })
                         .collect();
-                    effects.push(json!({"id":d.id,"name":d.name,"params":params}));
+                    effects.push(json!({"id":d.id,"name":d.name,"vendor":d.vendor,"sub_categories":d.sub_categories,"params":params}));
                 }
                 Ok(json!(effects))
             }
@@ -969,6 +969,7 @@ fn run() -> Result<(), String> {
                 "/api/latency" => reply(req,200,"application/json",app.latency().to_string()),
                 "/api/addresses" => reply(req,200,"application/json",network::addresses().to_string()),
                 "/effects-ui.js" => reply(req,200,"text/javascript; charset=utf-8",include_str!("../web/effects-ui.js").into()),
+                "/plugin-browser.js" => reply(req,200,"text/javascript; charset=utf-8",include_str!("../web/plugin-browser.js").into()),
                 "/api/mix-state" => reply(req,200,"application/json",json!({"revision":app.remote.status()["revision"],"channels":app.config.channels.iter().map(|ch|json!({"sends_db":ch.sends_db,"send_mute":ch.send_mute,"pre":ch.pre})).collect::<Vec<_>>()}).to_string()),
                 "/api/config" => reply(
                     req,
