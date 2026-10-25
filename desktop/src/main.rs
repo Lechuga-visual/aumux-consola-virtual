@@ -4,6 +4,7 @@ mod audio_network;
 mod bridge;
 mod compressor;
 mod config;
+mod demo;
 mod diagnostics;
 mod eq;
 mod fx;
@@ -49,12 +50,10 @@ struct App {
     system_live: bool,
     bridge: Arc<bridge::Bridge>,
     audio_network: Arc<audio_network::Hub>,
-    demo: Option<Mixer>,
+    demo: Option<demo::Demo>,
     live: bool,
     latencies: Vec<usize>,
-    input: Vec<f32>,
-    output: Vec<f32>,
-    next: Instant,
+    fx_latencies: Vec<Vec<usize>>,
     system: telemetry::Telemetry,
 }
 impl App {
@@ -83,9 +82,7 @@ impl App {
             demo: None,
             live: false,
             latencies: vec![0; DEFAULT_CHANNELS + DEFAULT_AUXES + 1],
-            input: vec![0.0; 256 * DEFAULT_CHANNELS],
-            output: vec![0.0; 256 * 64],
-            next: Instant::now(),
+            fx_latencies: vec![Vec::new(); DEFAULT_CHANNELS + DEFAULT_AUXES + 1],
             system: telemetry::Telemetry::new(),
         })
     }
@@ -308,12 +305,9 @@ impl App {
         mixer.listen = Some(self.listen.clone());
         mixer.audio_network = Some(self.audio_network.clone());
         self.latencies = mixer.latencies.clone();
+        self.fx_latencies = mixer.fx_latencies.clone();
         if mode == "demo" {
-            self.input
-                .resize(MAX_FRAMES * self.config.inputs as usize, 0.0);
-            self.output.resize(MAX_FRAMES * MAX_IO, 0.0);
-            self.demo = Some(mixer);
-            self.next = Instant::now();
+            self.demo = Some(demo::Demo::start(mixer, self.bridge.clone(), &self.config)?);
         } else if mode == "system" {
             if self.system_audio.is_none() {
                 self.system_audio = Some(native::Audio::new(true)?);
@@ -339,25 +333,6 @@ impl App {
         }
         self.listen.running(true);
         Ok(self.status())
-    }
-    fn demo_tick(&mut self) {
-        let Some(m) = &mut self.demo else {
-            return;
-        };
-        let frames = self.config.buffer as usize;
-        for _ in 0..8 {
-            if self.next > Instant::now() {
-                break;
-            }
-            self.input.fill(0.0); // Each strip's generator supplies its own signal in the mixer.
-            m.process(&self.input, &mut self.output, frames, MAX_IO);
-            self.bridge
-                .push(&m.buses[0], frames, self.config.sample_rate);
-            self.next += Duration::from_secs_f64(frames as f64 / self.config.sample_rate as f64);
-        }
-        if self.next + Duration::from_millis(100) < Instant::now() {
-            self.next = Instant::now();
-        }
     }
     fn latency(&self) -> Value {
         latency::report(
@@ -601,21 +576,17 @@ impl App {
                 if active && !self.config.same_graph(&c) {
                     let controls = Controls::new(&c);
                     let mut next =
-                        Mixer::reconfigure(&c, controls.clone(), &self.config, &self.latencies)?;
+                        Mixer::reconfigure(&c, controls.clone(), &self.config, &self.fx_latencies)?;
                     next.diagnostics = Some(self.diagnostics.tap());
                     next.listen = Some(self.listen.clone());
                     next.audio_network = Some(self.audio_network.clone());
                     let latencies = next.latencies.clone();
-                    if let Some(old) = &mut self.demo {
-                        old.fade_removed(&next);
-                        self.input.fill(0.0);
-                        old.process(&self.input, &mut self.output, 256, MAX_IO);
-                        self.bridge
-                            .push(&old.buses[0], 256, self.config.sample_rate);
-                        self.next +=
-                            Duration::from_secs_f64(256.0 / self.config.sample_rate as f64);
-                        next.inherit(old);
-                        self.demo = Some(next); // retired graph destruction on this control thread
+                    let fx_latencies = next.fx_latencies.clone();
+                    if let Some(demo) = &self.demo {
+                        if let Err(error) = demo.replace_mixer(next) {
+                            self.stop();
+                            return Err(error);
+                        }
                     } else {
                         let audio = if self.system_live {
                             self.system_audio
@@ -631,6 +602,7 @@ impl App {
                     }
                     self.controls = controls;
                     self.latencies = latencies;
+                    self.fx_latencies = fx_latencies;
                 } else if self.config.channels.len() != c.channels.len()
                     || self.config.buses.len() != c.buses.len()
                 {
@@ -639,9 +611,6 @@ impl App {
                 } else {
                     // Atomic input/format/level/EQ updates are read at block boundaries.
                     self.controls.update(&c);
-                }
-                if !active {
-                    self.input.resize(256 * c.inputs as usize, 0.0);
                 }
                 self.bridge.enabled.store(c.obs_bridge, Relaxed);
                 self.listen.configure(&c);
@@ -748,9 +717,6 @@ impl App {
             }
             "/api/presets" => presets::command(body),
             "/api/inspect" => {
-                if self.live || self.demo.is_some() {
-                    return Err("Stop audio before inspecting a VST3 bundle".into());
-                }
                 let v: Value = serde_json::from_str(body).map_err(|e| e.to_string())?;
                 let path = v["path"].as_str().ok_or("Missing VST3 path")?;
                 if path.len() > 4096 {
@@ -914,7 +880,6 @@ fn run() -> Result<(), String> {
         }
         app.diagnostics.tick();
         app.restore_probe();
-        app.demo_tick();
         if !app.diagnostics.probing() {
             app.remote.drain(
                 &mut app.config,

@@ -75,6 +75,11 @@ function savePluginPrefs() {
     localStorage.setItem(pluginStorageKey, JSON.stringify(pluginPrefs));
   } catch {}
 }
+function newPluginInstance() {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
 const pluginKey = (p) => `${p.path}\n${p.id || ""}`;
 const pluginText = (value) =>
   String(value)
@@ -241,7 +246,6 @@ function pluginContext(type, index, slot) {
   return { type, index, slot, chain: JSON.stringify(node.inserts) };
 }
 function checkPluginContext(context) {
-  if (running) throw Error("Detén el motor para cambiar la cadena de plugins");
   const node = targetOf(context.type, context.index);
   if (!node || JSON.stringify(node.inserts) !== context.chain)
     throw Error(
@@ -281,6 +285,7 @@ async function insertCataloguePlugin(entry, context) {
     const node = checkPluginContext(context),
       before = structuredClone(node.inserts);
     node.inserts[context.slot] = {
+      instance: newPluginInstance(),
       path: entry.path,
       id: d.id,
       name: d.name,
@@ -343,9 +348,8 @@ function openQuickFx(anchor, type, index, slot) {
   $("quick-fx-search").focus();
   ensurePluginCatalogue()
     .then(() => {
-      $("quick-fx-status").textContent = running
-        ? "Detén el motor para añadir efectos"
-        : "Un clic para añadir · Esc para cerrar";
+      $("quick-fx-status").textContent =
+        "Un clic para añadir · Esc para cerrar";
       positionQuickFx();
     })
     .catch((e) => {
@@ -395,7 +399,7 @@ function renderQuickFx() {
       el("span", "", (isFavoritePlugin(entry) ? "★ " : "") + entry.name),
       el("span", "plugin-tag", entry.format === "native" ? "NATIVO" : "VST3"),
     );
-    button.disabled = running;
+    button.disabled = pluginBusy;
     button.onclick = async () => {
       const context = quickFxContext;
       $("quick-fx-status").textContent = "Añadiendo…";
@@ -516,13 +520,12 @@ function renderPluginLibrary() {
   }
   root.scrollTop = scroll;
   updatePluginLibrarySelection();
-  $("plugin-library-status").textContent = running
-    ? "Detén el motor para añadir o reemplazar inserts"
-    : `${entries.length} efectos · selecciona y añade; doble clic o Enter para acceso rápido`;
+  $("plugin-library-status").textContent =
+    `${entries.length} efectos · selecciona y añade; doble clic o Enter para acceso rápido`;
 }
 function updatePluginLibrarySelection() {
   const selected = pluginEntries.find((p) => pluginKey(p) === browserPluginKey);
-  $("plugin-use").disabled = !selected || running || pluginBusy;
+  $("plugin-use").disabled = !selected || pluginBusy;
   $("plugin-use").textContent =
     selectedFx &&
     targetOf(selectedFx.type, selectedFx.index)?.inserts[selectedFx.slot]
@@ -542,8 +545,6 @@ async function useBrowserPlugin() {
   if (!entry || !selectedFx || pluginBusy) return;
   const selection = { ...selectedFx };
   try {
-    if (running)
-      throw Error("Detén el motor para cambiar la cadena de plugins");
     if (targetOf(selection.type, selection.index).inserts[selection.slot]) {
       await flushNativeFx();
       await savePendingFx();

@@ -3,6 +3,10 @@
 [Descargar Windows x64](../dist/AuMux-0.13.2-Windows-x64.zip) ·
 [Instalación](probar-en-windows.md) · [Ventanas independientes](interfaz-0.13.1.md)
 
+> Desde **0.13.3**, añadir y ordenar cadenas funciona en vivo. La restricción
+> de detener el motor descrita aquí corresponde a 0.13.2.
+> [Comportamiento actual](interfaz-0.13.3.md).
+
 ## Menú rápido desde cada tira
 
 Pulsa **＋ FX** en un espacio libre de un canal, auxiliar o master. Se abre un

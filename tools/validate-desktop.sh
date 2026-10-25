@@ -58,6 +58,7 @@ QT_QPA_PLATFORM=offscreen /workspace/scratch/aumux-obs-linux/aumux-editor-test d
 rg 'PASS:' /workspace/scratch/aumux-editor-test.log
 AUMUX_OBS_NETWORK_TEST=/workspace/scratch/obs-build/network-test python3 desktop/tests/audio-network-smoke.py
 python3 desktop/tests/listen-smoke.py
+python3 desktop/tests/live-fx-smoke.py
 python3 desktop/tests/remote-smoke.py
 python3 desktop/tests/websocket-smoke.py
 python3 desktop/tests/access-smoke.py

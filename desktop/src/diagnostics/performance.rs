@@ -18,6 +18,18 @@ pub struct Timer<'a> {
     budget: u64,
 }
 impl Performance {
+    pub fn inherit(&self, other: &Self) {
+        for (target, source) in [
+            (&self.blocks, &other.blocks),
+            (&self.nanos, &other.nanos),
+            (&self.maximum, &other.maximum),
+            (&self.overruns, &other.overruns),
+            (&self.latest, &other.latest),
+        ] {
+            target.store(source.load(Relaxed), Relaxed);
+        }
+    }
+
     pub fn measure(&self, frames: usize, rate: u32) -> Timer<'_> {
         Timer {
             p: self,

@@ -15,6 +15,8 @@ pub struct Fx {
     pub path: String,
     pub id: String,
     #[serde(default)]
+    pub instance: String,
+    #[serde(default)]
     pub params: BTreeMap<String, f32>,
     #[serde(default)]
     pub name: String,
@@ -22,9 +24,10 @@ pub struct Fx {
     pub bypass: bool,
 }
 impl Fx {
-    fn same_graph(&self, other: &Self) -> bool {
+    pub(crate) fn same_graph(&self, other: &Self) -> bool {
         self.path == other.path
             && self.id == other.id
+            && self.instance == other.instance
             && (self.id.starts_with("native/") || self.params == other.params)
     }
 }
@@ -222,11 +225,13 @@ impl Config {
             if let Some(fx) = c.fx.take() {
                 c.inserts.insert(0, fx);
             }
+            normalise_instances(&mut c.inserts);
         }
         for b in &mut self.buses {
             if let Some(fx) = b.fx.take() {
                 b.inserts.insert(0, fx);
             }
+            normalise_instances(&mut b.inserts);
         }
     }
     pub fn validate(&self) -> Result<(), String> {
@@ -298,6 +303,19 @@ impl Config {
                 return Err("Invalid channel controls".into());
             }
         }
+        for chain in self
+            .channels
+            .iter()
+            .map(|n| n.effects().collect::<Vec<_>>())
+            .chain(self.buses.iter().map(|n| n.effects().collect::<Vec<_>>()))
+        {
+            let mut identities = std::collections::BTreeSet::new();
+            for fx in chain {
+                if !fx.instance.is_empty() && !identities.insert(&fx.instance) {
+                    return Err("Identidad de insert duplicada en la cadena".into());
+                }
+            }
+        }
         for fx in self
             .channels
             .iter()
@@ -306,6 +324,7 @@ impl Config {
         {
             if fx.path.len() > 4096
                 || fx.id.len() > 128
+                || fx.instance.len() > 128
                 || fx.params.len() > 2048
                 || fx.name.len() > 240
                 || fx
@@ -340,18 +359,6 @@ impl Config {
             && self.sample_rate == other.sample_rate
             && self.buffer == other.buffer
     }
-    /// Resize keeps existing VST instances. Editing their chains still requires stopping.
-    pub fn same_existing_fx(&self, other: &Self) -> bool {
-        self.channels
-            .iter()
-            .zip(&other.channels)
-            .all(|(a, b)| same_chain(a.effects(), b.effects()))
-            && self
-                .buses
-                .iter()
-                .zip(&other.buses)
-                .all(|(a, b)| same_chain(a.effects(), b.effects()))
-    }
     pub fn same_graph(&self, other: &Self) -> bool {
         self.channels.len() == other.channels.len()
             && self.buses.len() == other.buses.len()
@@ -378,6 +385,21 @@ impl Config {
             .unwrap_or(2)
     }
 }
+fn normalise_instances(inserts: &mut [Fx]) {
+    let mut used: std::collections::BTreeSet<String> = inserts
+        .iter()
+        .filter(|fx| !fx.instance.is_empty())
+        .map(|fx| fx.instance.clone())
+        .collect();
+    let mut serial = 0;
+    for fx in inserts.iter_mut().filter(|fx| fx.instance.is_empty()) {
+        while used.contains(&format!("legacy-{serial}")) {
+            serial += 1;
+        }
+        fx.instance = format!("legacy-{serial}");
+        used.insert(fx.instance.clone());
+    }
+}
 fn same_chain<'a>(a: impl Iterator<Item = &'a Fx>, b: impl Iterator<Item = &'a Fx>) -> bool {
     let mut a = a;
     let mut b = b;
@@ -387,5 +409,34 @@ fn same_chain<'a>(a: impl Iterator<Item = &'a Fx>, b: impl Iterator<Item = &'a F
             (Some(a), Some(b)) if a.same_graph(b) => {}
             _ => return false,
         }
+    }
+}
+
+#[cfg(test)]
+mod instance_tests {
+    use super::*;
+    #[test]
+    fn legacy_instance_ids_are_unique_stable_and_reordering_is_a_graph_change() {
+        let mut config = Config::default();
+        let fx = Fx {
+            id: "native/mda/delay".into(),
+            ..Fx::default()
+        };
+        config.channels[0].inserts = vec![fx.clone(), fx];
+        config.normalise();
+        let original = config.clone();
+        assert_ne!(
+            config.channels[0].inserts[0].instance,
+            config.channels[0].inserts[1].instance
+        );
+        config.normalise();
+        assert_eq!(
+            serde_json::to_value(&config).unwrap(),
+            serde_json::to_value(&original).unwrap()
+        );
+        config.channels[0].inserts.swap(0, 1);
+        assert!(!config.same_graph(&original));
+        config.channels[0].inserts[1].instance = config.channels[0].inserts[0].instance.clone();
+        assert!(config.validate().is_err());
     }
 }

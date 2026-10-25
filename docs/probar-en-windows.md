@@ -1,4 +1,4 @@
-# AuMux 0.13.2 · prueba local en Windows x64
+# AuMux 0.13.3 · prueba local en Windows x64
 
 Miniapp de mezcla con canales y auxiliares configurables y master estéreo, a 48 kHz. Reutiliza DSP
 y host VST3 de SoundCraft de Artcraft, con una superficie y un ruteo propios.
@@ -8,7 +8,7 @@ Es un prototipo para pruebas; todavía no está validado para una sesión en viv
 
 ## Probar sonido sin ASIO ni interfaz externa
 
-1. Extrae **todo** `AuMux-0.13.2-Windows-x64.zip` y ejecuta `AuMux.exe`.
+1. Extrae **todo** `AuMux-0.13.3-Windows-x64.zip` y ejecuta `AuMux.exe`.
    Cierra la versión anterior antes de abrir esta.
 2. Pulsa **AUDIO PC**. Usa los parlantes/audífonos predeterminados de Windows
    mediante WASAPI, sin controlador ASIO ni interfaz externa.
@@ -35,11 +35,11 @@ con una entrada gradual de un bloque. **DETENER** libera el dispositivo. Cerrar 
 de AuMux no detiene el proceso ni el audio. Usa **Cerrar servicio** desde la bandeja
 y confirma con **Sí** para terminar el motor y los servidores.
 
-## Novedades 0.13.2 · ventanas
+## Novedades 0.13.3 · ventanas
 
 Los paneles de herramientas, plugins, EQ y preferencias permiten seguir usando
 la consola. Ventanas independientes por defecto; modo flotante desde
-**Herramientas → Paneles**. [Guía de ventanas](interfaz-0.13.2.md).
+**Herramientas → Paneles**. [Guía de ventanas](interfaz-0.13.3.md).
 
 ## Novedades 0.13 · pruebas de hardware
 
@@ -52,7 +52,7 @@ son entradas separadas. [Guía para preparar y registrar las pruebas](interfaz-0
 
 1. Cierra OBS y la instancia anterior de AuMux. Extrae todo el ZIP nuevo.
 2. Ejecuta `Instalar-receptor-OBS.cmd` como administrador para actualizar la DLL.
-3. Abre `AuMux.exe`. La marca debe mostrar **0.13.2**.
+3. Abre `AuMux.exe`. La marca debe mostrar **0.13.3**.
 4. En OBS, agrega **AuMux Audio**, o reutiliza tu fuente existente.
 5. Abre sus propiedades y pulsa **Configurar AuMux Audio…**.
 
@@ -244,12 +244,13 @@ corta todos los envíos del canal. El mute del master no silencia auxiliares.
 
 ## VST3 y escenas
 
-Con el audio detenido, pulsa un insert vacío **＋ FX**. Aparece una lista de bundles instalados,
-con búsqueda por nombre/ruta. Selecciona uno: se leen sus efectos y parámetros;
-selecciona la clase si contiene varias, ajusta parámetros y aplica el insert.
-Se muestra su nombre real en la tira.
+Pulsa un insert vacío **＋ FX**, incluso con el motor funcionando. Aparece el
+menú rápido por función, con búsqueda, favoritos y recientes. Pulsar un efecto
+lo inserta; **Más plugins…** abre el navegador completo en la ventana FX, con
+filtros por fabricante y formato. Los bundles VST3 con varias clases permiten
+elegir el efecto. La tira muestra su nombre real.
 
-La primera lista del panel ofrece **FreeVox8 (filterbank)** y los **20 efectos
+El navegador ofrece **FreeVox8 (filterbank)** y los **20 efectos
 MDA** integrados. No necesitas instalar sus VST3. Comparten los cuatro slots
 con VST3 externos y se procesan en serie; el EQ no consume slots. El panel
 ofrece perillas para MDA y un panel propio para FreeVox8. Los parámetros
@@ -273,7 +274,8 @@ Los cambios de parámetros se guardan al aplicar, cambiar de efecto o cerrar.
 Los parámetros nativos existentes se actualizan automáticamente en vivo;
 los VST3 requieren detener el audio para editarse y usan un panel genérico de
 deslizadores y valores, sin abrir su ventana gráfica propia. Las casillas de
-la lista controlan bypass en vivo. Agregar, quitar y reordenar requiere detener.
+la lista controlan bypass en vivo. Agregar, reemplazar, quitar y reordenar
+funciona en vivo desde 0.13.3.
 
 El selector **Presets** ofrece los valores iniciales y tus presets guardados.
 Escribe un nombre y pulsa Guardar; elige uno para recuperarlo. También puedes
@@ -377,9 +379,14 @@ Grabación multipista y OSC/Mackie pendientes.
 
 Si no aparecen **+ Canal**, **+ Aux** y **Canales y auxiliares**, cierra el
 proceso anterior y abre el ejecutable del ZIP nuevo: la marca superior debe
-mostrar **AuMux 0.13.2**. Se prueba en Windows extrayendo todo el ZIP; no mezcles
+mostrar **AuMux 0.13.3**. Se prueba en Windows extrayendo todo el ZIP; no mezcles
 archivos de varias versiones.
 
 Las novedades de dinámica, superficie adaptativa y escucha LAN se describen en
 [interfaz-0.7.md](interfaz-0.7.md). Otros dispositivos Windows y optimización de escucha de baja
 latencia quedan en [la hoja de ruta](hoja-de-ruta.md).
+
+## Cambiar efectos mientras suena
+
+Desde 0.13.3 puedes añadir, reemplazar, quitar y reordenar inserts en vivo.
+[Detalles y cambios que todavía requieren detener el motor](interfaz-0.13.3.md).

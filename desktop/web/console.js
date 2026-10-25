@@ -140,9 +140,12 @@ function reconcileConfig(incoming, base) {
       typeof next.id === "string" &&
       typeof next.path === "string" &&
       typeof old?.id === "string" &&
-      (next.id !== old.id || next.path !== old.path) &&
+      (next.id !== old.id ||
+        next.path !== old.path ||
+        next.instance !== old.instance) &&
       target.id === old.id &&
-      target.path === old.path
+      target.path === old.path &&
+      target.instance === old.instance
     ) {
       for (const key of Object.keys(target)) delete target[key];
       Object.assign(target, structuredClone(next));
@@ -435,7 +438,7 @@ function insertRack(type, index) {
     const fx = target.inserts[slot],
       row = el("div", "insert-row" + (fx?.bypass ? " bypassed" : ""));
     const button = el("button", "insert-slot" + (!fx ? " empty" : ""));
-    button.disabled = (!fx && running) || (!fx && slot > target.inserts.length);
+    button.disabled = !fx && slot > target.inserts.length;
     button.append(
       el("span", "slot-number", String(slot + 1).padStart(2, "0")),
       el(
@@ -445,7 +448,7 @@ function insertRack(type, index) {
       ),
     );
     button.title = fx
-      ? `${fxName(fx)}\n${fx.path}${running ? "\nDetén el audio para editar." : ""}`
+      ? `${fxName(fx)}\n${fx.path}`
       : "Añadir un efecto nativo o VST3";
     button.onclick = () =>
       fx ? openFx(type, index, slot) : openQuickFx(button, type, index, slot);
@@ -1200,7 +1203,7 @@ function renderInspector() {
       el(
         "p",
         "hint",
-        "Sin inserts. Añade un efecto nativo o VST3 desde la tira con el audio detenido.",
+        "Sin inserts. Añade un efecto nativo o VST3 desde ＋ FX, también en vivo.",
       ),
     );
   target.inserts.forEach((fx, slot) => {

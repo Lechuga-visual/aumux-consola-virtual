@@ -78,9 +78,9 @@ const fs = require("node:fs/promises");
       .hover();
     assert.equal(await page.locator("#quick-fx-results button").count(), 3);
     assert.equal(inspected, 0);
-    await fs.mkdir("docs/screenshots/0.13.2", { recursive: true });
+    await fs.mkdir("docs/screenshots/0.13.3", { recursive: true });
     await page.screenshot({
-      path: "docs/screenshots/0.13.2/01-menu-rapido.png",
+      path: "docs/screenshots/0.13.3/01-menu-rapido.png",
     });
     await page
       .locator('#quick-fx-results [data-plugin-id="native/mda/dynamics"]')
@@ -131,7 +131,7 @@ const fs = require("node:fs/promises");
     await fx.locator("#plugin-vendor").selectOption("");
     await fx.locator("#plugin-format").selectOption("all");
     await fx.screenshot({
-      path: "docs/screenshots/0.13.2/02-navegador-plugins.png",
+      path: "docs/screenshots/0.13.3/02-navegador-plugins.png",
     });
     await fx.locator("#plugin-search").fill("limiter");
     await fx.locator(".plugin-result-name").click();
@@ -256,12 +256,65 @@ const fs = require("node:fs/promises");
       openQuickFx($("mixer").querySelector(".insert-slot"), "channel", 5, 0),
     );
     await page.fill("#quick-fx-search", "dynamics");
-    assert(await page.locator("#quick-fx-results button").first().isDisabled());
+    assert(
+      !(await page.locator("#quick-fx-results button").first().isDisabled()),
+    );
+    await page
+      .locator('#quick-fx-results [data-plugin-id="native/mda/dynamics"]')
+      .click();
+    await page.waitForFunction(
+      () => cfg.channels[5].inserts[0]?.id === "native/mda/dynamics" && running,
+    );
     await page.keyboard.press("Escape");
+    const blocksBefore = await page.evaluate(
+      () => lastStatus.performance.blocks,
+    );
+    await empty("#mixer", 5, 1).click();
+    await page.fill("#quick-fx-search", "delay");
+    await page.screenshot({ path: "docs/aumux-0.13.3-fx-en-vivo.png" });
+    await page
+      .locator('#quick-fx-results [data-plugin-id="native/mda/delay"]')
+      .click();
+    await page.waitForFunction(() => cfg.channels[5].inserts.length === 2);
+    const liveEvent = page.waitForEvent("popup");
+    await empty("#mixer", 5, 0).click();
+    const live = await liveEvent;
+    live.on("pageerror", (e) => errors.push(e.message));
+    await live.waitForSelector("#params .rotary-control");
+    assert(!(await live.locator("#fxdown").isDisabled()));
+    await live.locator("#fxdown").click();
+    await page.waitForFunction(
+      () => cfg.channels[5].inserts[0].id === "native/mda/delay" && running,
+    );
+    await live.waitForFunction(() => selectedFx.slot === 1);
+    await live.locator("#removefx").click();
+    await page.waitForFunction(
+      () => cfg.channels[5].inserts.length === 1 && running,
+    );
+    await live.close();
+    if (process.env.MONITOR_VST3_FIXTURE) {
+      await empty("#mixer", 6, 0).click();
+      await page.fill("#quick-fx-search", "Fixture");
+      await page.locator("#quick-fx-results button").first().click();
+      await page.waitForFunction(
+        () => cfg.channels[6].inserts[0]?.id.startsWith("vst3:") && running,
+      );
+      await empty("#buses", 1, 1).click();
+      await page.fill("#quick-fx-search", "Fixture");
+      await page.locator("#quick-fx-results button").first().click();
+      await page.waitForFunction(
+        () => cfg.buses[1].inserts[1]?.id.startsWith("vst3:") && running,
+      );
+    }
+    await page.waitForFunction(
+      (before) =>
+        lastStatus.performance.blocks > before && lastStatus.mode === "DEMO",
+      blocksBefore,
+    );
     await page.evaluate(() => api("stop"));
     await page.reload();
     await page.waitForSelector("#mixer .strip");
-    await empty("#mixer", 6, 0).click();
+    await empty("#mixer", 7, 0).click();
     await page
       .locator('#quick-fx-categories [data-category="favorites"]')
       .click();

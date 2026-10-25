@@ -963,6 +963,16 @@ pub fn merge_values(base: &Value, candidate: &Value, current: &Value) -> Value {
     if candidate == base {
         return current.clone();
     }
+    // Insert instances are atomic when their identity changes: stale parameter
+    // edits must never migrate into a replacement, even of the same plugin class.
+    if base["id"].is_string() && base["path"].is_string() && base["instance"].is_string() {
+        if candidate["instance"] != base["instance"] {
+            return candidate.clone();
+        }
+        if current["instance"] != base["instance"] {
+            return current.clone();
+        }
+    }
     match (base, candidate, current) {
         (Value::Object(b), Value::Object(n), Value::Object(c)) => Value::Object(
             n.iter()
@@ -994,6 +1004,18 @@ pub fn merge_values(base: &Value, candidate: &Value, current: &Value) -> Value {
 #[cfg(test)]
 mod merge_operator_tests {
     use super::*;
+    #[test]
+    fn stale_plugin_parameters_never_migrate_into_a_replacement_instance() {
+        let base = json!({"path":"native:delay","id":"native/mda/delay","instance":"original","params":{"time":1}});
+        let mut stale = base.clone();
+        stale["params"]["time"] = json!(2);
+        let mut replaced = base.clone();
+        replaced["instance"] = json!("replacement");
+        replaced["params"]["time"] = json!(3);
+        assert_eq!(merge_values(&base, &stale, &replaced), replaced);
+        assert_eq!(merge_values(&base, &replaced, &stale), replaced);
+    }
+
     #[test]
     fn simultaneous_operators_preserve_untouched_names_levels_and_parameters() {
         let base =

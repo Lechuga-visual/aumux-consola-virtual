@@ -265,13 +265,19 @@ pub struct Mixer {
     channel_comp: Vec<crate::compressor::Processor>,
     bus_comp: Vec<crate::compressor::Processor>,
     bus_eq: Vec<crate::eq::Processor>,
-    channel_fx: Vec<Vec<Box<dyn Plugin>>>,
-    bus_fx: Vec<Vec<Box<dyn Plugin>>>,
+    channel_fx: Vec<Vec<Option<Box<dyn Plugin>>>>,
+    bus_fx: Vec<Vec<Option<Box<dyn Plugin>>>>,
     routes: Vec<Option<usize>>,
     previous: Vec<f32>,
     previous_sends: Vec<Vec<f32>>,
     previous_bus: Vec<f32>,
     pub latencies: Vec<usize>,
+    pub fx_latencies: Vec<Vec<usize>>,
+    channel_reuse: Vec<Vec<Option<usize>>>,
+    bus_reuse: Vec<Vec<Option<usize>>>,
+    chain_changed: Vec<bool>,
+    chain_transition: Vec<i8>,
+    fx_dry: [Vec<f32>; 2],
     generators: Vec<[crate::generator::Generator; 2]>,
     generator_modes: Vec<Signal>,
     generator_blend: Vec<f32>,
@@ -281,6 +287,35 @@ pub struct Mixer {
     previous_mono: Vec<f32>,
     previous_bus_mono: Vec<f32>,
     bus_mono: Vec<f32>,
+}
+fn begin_fx_transition(direction: i8, audio: &[Vec<f32>], dry: &mut [Vec<f32>; 2], frames: usize) {
+    if direction != 0 {
+        for side in 0..2 {
+            dry[side][..frames].copy_from_slice(&audio[side][..frames]);
+        }
+    }
+}
+fn finish_fx_transition(
+    direction: &mut i8,
+    audio: &mut [Vec<f32>],
+    dry: &[Vec<f32>; 2],
+    frames: usize,
+) {
+    if *direction == 0 {
+        return;
+    }
+    for side in 0..2 {
+        for frame in 0..frames {
+            let position = (frame + 1) as f32 / frames as f32;
+            let wet = if *direction > 0 {
+                position
+            } else {
+                1.0 - position
+            };
+            audio[side][frame] = dry[side][frame] + (audio[side][frame] - dry[side][frame]) * wet;
+        }
+    }
+    *direction = 0;
 }
 fn prepare_fx(spec: &Fx, rate: u32) -> Result<Box<dyn Plugin>, String> {
     if spec.id.starts_with("native/") {
@@ -332,48 +367,99 @@ impl Mixer {
         c: &Config,
         controls: Arc<Controls>,
         old: &Config,
-        latencies: &[usize],
+        latencies: &[Vec<usize>],
     ) -> Result<Self, String> {
-        if !old.same_device(c) || !old.same_existing_fx(c) {
-            return Err("Detén el motor para cambiar dispositivo, frecuencia, buffer o cadenas VST3 existentes".into());
+        if !old.same_device(c) {
+            return Err("Detén el motor para cambiar dispositivo, frecuencia o buffer".into());
         }
         Self::prepare(c, controls, Some((old, latencies)))
     }
     fn prepare(
         c: &Config,
         controls: Arc<Controls>,
-        old: Option<(&Config, &[usize])>,
+        old: Option<(&Config, &[Vec<usize>])>,
     ) -> Result<Self, String> {
         c.validate()?;
         let channels = c.channels.len();
         let buses = c.buses.len();
-        let mut channel_fx: Vec<Vec<Box<dyn Plugin>>> = (0..channels).map(|_| Vec::new()).collect();
-        let mut bus_fx: Vec<Vec<Box<dyn Plugin>>> = (0..buses).map(|_| Vec::new()).collect();
-        let mut latencies = vec![0; channels + buses];
-        for i in 0..channels {
-            if let Some((previous, old_latencies)) = old {
-                if i < previous.channels.len() {
-                    latencies[i] = old_latencies[i];
-                    continue;
+        let mut channel_fx = Vec::with_capacity(channels);
+        let mut bus_fx = Vec::with_capacity(buses);
+        let mut channel_reuse = Vec::with_capacity(channels);
+        let mut bus_reuse = Vec::with_capacity(buses);
+        let mut fx_latencies = Vec::with_capacity(channels + buses);
+        let mut chain_changed = Vec::with_capacity(channels + buses);
+        for (is_bus, count) in [(false, channels), (true, buses)] {
+            for i in 0..count {
+                let specs: Vec<&Fx> = if is_bus {
+                    c.buses[i].effects().collect()
+                } else {
+                    c.channels[i].effects().collect()
+                };
+                let previous: Vec<&Fx> = old
+                    .map(|(prev, _)| {
+                        if is_bus {
+                            prev.buses
+                                .get(i)
+                                .map(|n| n.effects().collect())
+                                .unwrap_or_default()
+                        } else {
+                            prev.channels
+                                .get(i)
+                                .map(|n| n.effects().collect())
+                                .unwrap_or_default()
+                        }
+                    })
+                    .unwrap_or_default();
+                let previous_latencies = old
+                    .and_then(|(prev, l)| l.get(if is_bus { prev.channels.len() + i } else { i }));
+                let mut used = [false; INSERTS];
+                let mut chain = Vec::with_capacity(specs.len());
+                let mut reuse = Vec::with_capacity(specs.len());
+                let mut latency = Vec::with_capacity(specs.len());
+                for spec in &specs {
+                    // Prefer matching parameters when two instances have the same plugin ID.
+                    let matches = |slot: usize| !used[slot] && previous[slot].same_graph(spec);
+                    let source = (0..previous.len())
+                        .find(|&slot| matches(slot) && previous[slot].params == spec.params)
+                        .or_else(|| (0..previous.len()).find(|&slot| matches(slot)));
+                    if let Some(slot) = source {
+                        let value = previous_latencies
+                            .and_then(|l| l.get(slot))
+                            .copied()
+                            .ok_or("Falta la latencia del insert que se reutiliza")?;
+                        used[slot] = true;
+                        chain.push(None);
+                        reuse.push(Some(slot));
+                        latency.push(value);
+                    } else {
+                        let plugin = prepare_fx(spec, c.sample_rate)?;
+                        latency.push(plugin.latency());
+                        chain.push(Some(plugin));
+                        reuse.push(None);
+                    }
+                }
+                chain_changed.push(
+                    old.is_some()
+                        && (specs.len() != previous.len()
+                            || reuse
+                                .iter()
+                                .enumerate()
+                                .any(|(slot, source)| *source != Some(slot))),
+                );
+                fx_latencies.push(latency);
+                if is_bus {
+                    bus_fx.push(chain);
+                    bus_reuse.push(reuse);
+                } else {
+                    channel_fx.push(chain);
+                    channel_reuse.push(reuse);
                 }
             }
-            for fx in c.channels[i].effects() {
-                channel_fx[i].push(prepare_fx(fx, c.sample_rate)?);
-            }
-            latencies[i] = channel_fx[i].iter().map(|p| p.latency()).sum();
         }
-        for i in 0..buses {
-            if let Some((previous, old_latencies)) = old {
-                if i < previous.buses.len() {
-                    latencies[channels + i] = old_latencies[previous.channels.len() + i];
-                    continue;
-                }
-            }
-            for fx in c.buses[i].effects() {
-                bus_fx[i].push(prepare_fx(fx, c.sample_rate)?);
-            }
-            latencies[channels + i] = bus_fx[i].iter().map(|p| p.latency()).sum();
-        }
+        let latencies = fx_latencies
+            .iter()
+            .map(|slots| slots.iter().sum())
+            .collect();
         Ok(Self {
             diagnostics: None,
             listen: None,
@@ -413,6 +499,12 @@ impl Mixer {
             previous_sends: vec![vec![0.0; buses - 1]; channels],
             previous_bus: vec![0.0; buses],
             latencies,
+            fx_latencies,
+            channel_reuse,
+            bus_reuse,
+            chain_changed,
+            chain_transition: vec![0; channels + buses],
+            fx_dry: std::array::from_fn(|_| vec![0.0; MAX_FRAMES]),
             generators: (0..channels)
                 .map(|i| {
                     std::array::from_fn(|side| {
@@ -439,7 +531,17 @@ impl Mixer {
         })
     }
     /// Request a one-block fade only for nodes that are being removed.
-    pub fn fade_removed(&self, next: &Self) {
+    pub fn fade_removed(&mut self, next: &Self) {
+        for i in 0..next.channel.len().min(self.channel.len()) {
+            if next.chain_changed[i] {
+                self.chain_transition[i] = -1;
+            }
+        }
+        for b in 0..next.buses.len().min(self.buses.len()) {
+            if next.chain_changed[next.channel.len() + b] {
+                self.chain_transition[self.channel.len() + b] = -1;
+            }
+        }
         for i in next.channel.len()..self.channel.len() {
             self.controls.mute[i].store(true, Relaxed);
         }
@@ -449,6 +551,7 @@ impl Mixer {
     }
     /// Audio-thread handover: swaps ownership, never allocates, destroys or prepares plugins.
     pub fn inherit(&mut self, old: &mut Self) {
+        self.controls.performance.inherit(&old.controls.performance);
         self.controls
             .emergency
             .store(old.controls.emergency.load(Relaxed), Relaxed);
@@ -465,7 +568,14 @@ impl Mixer {
             self.controls.channel_meters[i].inherit(&old.controls.channel_meters[i]);
             std::mem::swap(&mut self.channel_comp[i], &mut old.channel_comp[i]);
             std::mem::swap(&mut self.channel_eq[i], &mut old.channel_eq[i]);
-            std::mem::swap(&mut self.channel_fx[i], &mut old.channel_fx[i]);
+            for (slot, source) in self.channel_reuse[i].iter().enumerate() {
+                if let Some(source) = source {
+                    self.channel_fx[i][slot] = old.channel_fx[i][*source].take();
+                }
+            }
+            if self.chain_changed[i] {
+                self.chain_transition[i] = 1;
+            }
             std::mem::swap(&mut self.generators[i], &mut old.generators[i]);
             self.previous[i] = old.previous[i];
             self.previous_mono[i] = old.previous_mono[i];
@@ -481,7 +591,14 @@ impl Mixer {
             self.controls.meters[b].store(old.controls.meters[b].load(Relaxed), Relaxed);
             std::mem::swap(&mut self.bus_comp[b], &mut old.bus_comp[b]);
             std::mem::swap(&mut self.bus_eq[b], &mut old.bus_eq[b]);
-            std::mem::swap(&mut self.bus_fx[b], &mut old.bus_fx[b]);
+            for (slot, source) in self.bus_reuse[b].iter().enumerate() {
+                if let Some(source) = source {
+                    self.bus_fx[b][slot] = old.bus_fx[b][*source].take();
+                }
+            }
+            if self.chain_changed[self.channel.len() + b] {
+                self.chain_transition[self.channel.len() + b] = 1;
+            }
             self.previous_bus[b] = old.previous_bus[b];
             self.previous_bus_mono[b] = old.previous_bus_mono[b];
         }
@@ -652,12 +769,17 @@ impl Mixer {
                 frames,
                 &self.controls.compressor[i],
             );
+            begin_fx_transition(self.chain_transition[i], ch, &mut self.fx_dry, frames);
             for (slot, p) in self.channel_fx[i].iter_mut().enumerate() {
+                let Some(p) = p else {
+                    continue;
+                };
                 self.controls.apply_native(i, slot, &mut **p);
                 if !self.controls.bypass[i][slot].load(Relaxed) {
                     p.process(ch, frames);
                 }
             }
+            finish_fx_transition(&mut self.chain_transition[i], ch, &self.fx_dry, frames);
             // Plugins remain prepared for two lanes. Mono folds their outputs, stereo preserves L/R.
             for f in 0..frames {
                 let left = if ch[0][f].is_finite() { ch[0][f] } else { 0.0 };
@@ -748,13 +870,28 @@ impl Mixer {
                 frames,
                 &self.controls.compressor[self.channel.len() + b],
             );
+            begin_fx_transition(
+                self.chain_transition[self.channel.len() + b],
+                bus,
+                &mut self.fx_dry,
+                frames,
+            );
             for (slot, p) in self.bus_fx[b].iter_mut().enumerate() {
+                let Some(p) = p else {
+                    continue;
+                };
                 self.controls
                     .apply_native(self.channel.len() + b, slot, &mut **p);
                 if !self.controls.bypass[self.channel.len() + b][slot].load(Relaxed) {
                     p.process(bus, frames);
                 }
             }
+            finish_fx_transition(
+                &mut self.chain_transition[self.channel.len() + b],
+                bus,
+                &self.fx_dry,
+                frames,
+            );
             let target = if self.controls.bus_mute[b].load(Relaxed) {
                 0.0
             } else {
@@ -1075,19 +1212,19 @@ mod tests {
             (out[0] - 0.125).abs() < 0.0001,
             "live bypass skips only its own slot"
         );
-        let old_ptr = &*m.channel_fx[0][0] as *const dyn Plugin as *const ();
+        let old_ptr = &**m.channel_fx[0][0].as_ref().unwrap() as *const dyn Plugin as *const ();
         let mut next = c.clone();
         next.channels.push(c.channels[1].clone());
         let mut replacement =
-            Mixer::reconfigure(&next, Controls::new(&next), &c, &m.latencies).unwrap();
+            Mixer::reconfigure(&next, Controls::new(&next), &c, &m.fx_latencies).unwrap();
         assert!(
-            replacement.channel_fx[0].is_empty(),
+            replacement.channel_fx[0].iter().all(Option::is_none),
             "existing VST must not be instantiated again"
         );
         replacement.inherit(&mut m);
         assert_eq!(
             old_ptr,
-            &*replacement.channel_fx[0][0] as *const dyn Plugin as *const ()
+            &**replacement.channel_fx[0][0].as_ref().unwrap() as *const dyn Plugin as *const ()
         );
         assert_eq!(
             replacement.latencies[next.channels.len()],
@@ -1096,6 +1233,102 @@ mod tests {
         );
         replacement.process(&input, &mut out, 64, 10);
         assert!((out[0] - 0.125).abs() < 0.0001);
+    }
+    #[test]
+    fn two_identical_plugins_reorder_by_instance_identity_without_reinstantiation() {
+        let (mut config, _) = setup();
+        config.channels[0].inserts = ["first", "second"]
+            .map(|instance| Fx {
+                id: "native/mda/delay".into(),
+                instance: instance.into(),
+                ..Fx::default()
+            })
+            .to_vec();
+        let mut mixer = Mixer::new(&config, Controls::new(&config)).unwrap();
+        let pointer =
+            |p: &Option<Box<dyn Plugin>>| &**p.as_ref().unwrap() as *const dyn Plugin as *const ();
+        let a = pointer(&mixer.channel_fx[0][0]);
+        let b = pointer(&mixer.channel_fx[0][1]);
+        let mut next = config.clone();
+        next.channels[0].inserts.swap(0, 1);
+        assert!(!config.same_graph(&next));
+        let mut replacement =
+            Mixer::reconfigure(&next, Controls::new(&next), &config, &mixer.fx_latencies).unwrap();
+        crate::test_support::no_heap(|| replacement.inherit(&mut mixer));
+        assert_eq!(pointer(&replacement.channel_fx[0][0]), b);
+        assert_eq!(pointer(&replacement.channel_fx[0][1]), a);
+    }
+    #[test]
+    fn live_chain_reorder_add_remove_preserves_instances_and_failed_preparation_keeps_audio() {
+        let (mut config, _) = setup();
+        config.channels[0].inserts = ["delay", "limiter"]
+            .map(|name| Fx {
+                id: format!("native/mda/{name}"),
+                ..Fx::default()
+            })
+            .to_vec();
+        config.channels[1].inserts.push(Fx {
+            id: "native/mda/delay".into(),
+            ..Fx::default()
+        });
+        let mut mixer = Mixer::new(&config, Controls::new(&config)).unwrap();
+        let pointer =
+            |p: &Option<Box<dyn Plugin>>| &**p.as_ref().unwrap() as *const dyn Plugin as *const ();
+        let first = pointer(&mixer.channel_fx[0][0]);
+        let second = pointer(&mixer.channel_fx[0][1]);
+        let other = pointer(&mixer.channel_fx[1][0]);
+        let mut next = config.clone();
+        next.channels[0].inserts.swap(0, 1);
+        next.channels[0].inserts.push(Fx {
+            id: "native/mda/dither".into(),
+            ..Fx::default()
+        });
+        let mut replacement =
+            Mixer::reconfigure(&next, Controls::new(&next), &config, &mixer.fx_latencies).unwrap();
+        let input = vec![0.1; config.inputs as usize * 64];
+        let mut output = vec![0.0; 640];
+        crate::test_support::no_heap(|| {
+            mixer.fade_removed(&replacement);
+            assert!(mixer.process(&input, &mut output, 64, 10));
+            replacement.inherit(&mut mixer);
+            assert!(replacement.process(&input, &mut output, 64, 10));
+        });
+        assert_eq!(pointer(&replacement.channel_fx[0][0]), second);
+        assert_eq!(pointer(&replacement.channel_fx[0][1]), first);
+        assert_eq!(pointer(&replacement.channel_fx[1][0]), other);
+        assert!(output.iter().all(|v| v.is_finite()));
+        let mut removed = next.clone();
+        removed.channels[0].inserts.remove(0);
+        let mut smaller = Mixer::reconfigure(
+            &removed,
+            Controls::new(&removed),
+            &next,
+            &replacement.fx_latencies,
+        )
+        .unwrap();
+        crate::test_support::no_heap(|| {
+            replacement.fade_removed(&smaller);
+            replacement.process(&input, &mut output, 64, 10);
+            smaller.inherit(&mut replacement);
+            smaller.process(&input, &mut output, 64, 10);
+        });
+        assert_eq!(pointer(&smaller.channel_fx[0][0]), first);
+        let mut invalid = removed.clone();
+        invalid.channels[0].inserts.push(Fx {
+            id: "native/not-an-effect".into(),
+            ..Fx::default()
+        });
+        assert!(
+            Mixer::reconfigure(
+                &invalid,
+                Controls::new(&invalid),
+                &removed,
+                &smaller.fx_latencies
+            )
+            .is_err()
+        );
+        crate::test_support::no_heap(|| assert!(smaller.process(&input, &mut output, 64, 10)));
+        assert_eq!(pointer(&smaller.channel_fx[0][0]), first);
     }
     #[test]
     fn generator_is_per_channel_and_replaces_hardware_before_sends() {
@@ -1362,10 +1595,10 @@ mod diagnostic_delay_tests {
             let control = Controls::new(&c);
             control.bypass[0][0].store(bypass, Relaxed);
             let mut mixer = Mixer::new(&c, control).unwrap();
-            mixer.channel_fx[0].push(Box::new(Delay {
+            mixer.channel_fx[0].push(Some(Box::new(Delay {
                 ring: [[0.0; 37]; 2],
                 position: 0,
-            }));
+            })));
             let hub = Hub::new();
             mixer.diagnostics = Some(hub.tap());
             hub.route_probe(0, 0, 0, 0, "Insert", serde_json::json!({}))

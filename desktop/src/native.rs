@@ -244,7 +244,7 @@ unsafe extern "C" fn callback(
         let input = unsafe { std::slice::from_raw_parts(input, frames * s.inputs) };
         s.scratch[..input.len()].copy_from_slice(input);
     }
-    let replacement = s.exchange.begin(&s.mixer);
+    let replacement = s.exchange.begin(&mut s.mixer);
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         if !s.mixer.process(&s.scratch, output, frames, s.outputs) {
             return false;
@@ -320,7 +320,7 @@ mod tests {
             }
             (state, blocks)
         });
-        let mut latencies = vec![0; c.channels.len() + c.buses.len()];
+        let mut latencies = vec![Vec::new(); c.channels.len() + c.buses.len()];
         for (channels, auxes) in [(16, 9), (MAX_CHANNELS, MAX_AUXES), (1, 0), (8, 4)] {
             let mut next = c.clone();
             next.channels.resize(channels, c.channels[0].clone());
@@ -337,7 +337,36 @@ mod tests {
             let mixer =
                 Mixer::reconfigure(&next, crate::mixer::Controls::new(&next), &c, &latencies)
                     .unwrap();
-            latencies = mixer.latencies.clone();
+            latencies = mixer.fx_latencies.clone();
+            exchange.replace(Box::new(mixer)).unwrap();
+            c = next;
+        }
+        // Exercise the actual callback exchange while inserting, reordering and removing.
+        for stage in 0..4 {
+            let mut next = c.clone();
+            if stage == 0 {
+                next.channels[0].inserts = ["delay", "limiter"]
+                    .map(|name| Fx {
+                        id: format!("native/mda/{name}"),
+                        ..Fx::default()
+                    })
+                    .to_vec();
+                next.buses[0].inserts.push(Fx {
+                    id: "native/mda/dither".into(),
+                    ..Fx::default()
+                });
+            } else if stage == 1 {
+                next.channels[0].inserts.swap(0, 1);
+            } else if stage == 2 {
+                next.channels[0].inserts.remove(0);
+            } else {
+                next.channels[0].inserts.clear();
+                next.buses[0].inserts.clear();
+            }
+            let mixer =
+                Mixer::reconfigure(&next, crate::mixer::Controls::new(&next), &c, &latencies)
+                    .unwrap();
+            latencies = mixer.fx_latencies.clone();
             exchange.replace(Box::new(mixer)).unwrap();
             c = next;
         }

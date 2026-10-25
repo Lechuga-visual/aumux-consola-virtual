@@ -198,7 +198,8 @@ function refreshOpenPanels() {
       fxPanelBase &&
       (!actual ||
         actual.id !== fxPanelBase.id ||
-        actual.path !== fxPanelBase.path)
+        actual.path !== fxPanelBase.path ||
+        actual.instance !== fxPanelBase.instance)
     ) {
       clearTimeout(fxAutoTimer);
       fxAutoTimer = undefined;
@@ -232,6 +233,7 @@ function refreshOpenPanels() {
       actual &&
       actual.id === pendingFx.id &&
       actual.path === pendingFx.path &&
+      actual.instance === pendingFx.instance &&
       fxPanelBase
     ) {
       function merge(target, base, next) {
@@ -263,15 +265,15 @@ function refreshOpenPanels() {
       "vst-directory",
       "vst-search",
     ])
-      document.getElementById(id).disabled = running;
+      document.getElementById(id).disabled = false;
     if (!native) {
       for (const input of document
         .getElementById("params")
         .querySelectorAll("input"))
-        input.disabled = running;
+        input.disabled = !fxParametersEditable();
     }
     document.getElementById("applyfx").disabled =
-      (running && !native) ||
+      !fxParametersEditable() ||
       selectedFx.slot >
         targetOf(selectedFx.type, selectedFx.index).inserts.length;
     renderFxRail();

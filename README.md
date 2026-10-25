@@ -10,13 +10,20 @@ web permite objetivos de búfer de 40/80/120/200 ms (80 ms inicialmente), más e
 su optimización y medición son prioritarias en la
 [hoja de ruta](docs/hoja-de-ruta.md).
 
-**Prueba local:** [descargar Windows x64](dist/AuMux-0.13.2-Windows-x64.zip)
+**Prueba local:** [descargar Windows x64](https://github.com/Lechuga-visual/aumux-consola-virtual/releases/download/v0.13.3/AuMux-0.13.3-Windows-x64.zip)
 e [instrucciones para Windows](docs/probar-en-windows.md).
 La descarga incluye el ejecutable, el receptor de OBS y el código fuente.
-Su checksum está en [SHA-256](dist/AuMux-0.13.2-Windows-x64.zip.sha256).
+Su checksum está en [SHA-256](dist/AuMux-0.13.3-Windows-x64.zip.sha256).
 
 **Capturas:** [galería de la interfaz actual](docs/capturas.md), con consola,
 efectos, preferencias y vistas remotas para tablet y celular.
+
+## Novedades 0.13.3 · efectos en vivo
+
+Puedes añadir, reemplazar, quitar y reordenar inserts nativos/VST3 sin detener
+el motor. Se preparan fuera del hilo de audio y se reutilizan las instancias que
+siguen en la cadena. DEMO también renderiza en un hilo independiente.
+[Funcionamiento y tabla de cambios que requieren detener audio](docs/interfaz-0.13.3.md).
 
 ## Novedades 0.13.2 · navegador de plugins
 
@@ -156,9 +163,10 @@ El cambio de estructura se prepara fuera del callback de audio y se adopta al
 terminar un bloque. Conserva los inserts existentes y devuelve la memoria al
 hilo de control; no reabre el dispositivo. Las salidas ASIO disponibles se
 abren al inicio. Cambiar dispositivo, entradas físicas abiertas o buffer exige
-detener el motor. Agregar, quitar, reordenar o editar parámetros VST3 exige
-detenerlo; parámetros nativos, EQ, bypass, niveles, envíos, formatos y cantidad
-de tiras funcionan en vivo. Los presets de usuario se guardan en
+detener el motor. Agregar, reemplazar, quitar y reordenar inserts funciona en
+vivo; editar parámetros de un VST3 ya activo desde su editor aún exige detenerlo.
+Parámetros nativos, EQ, bypass, niveles, envíos, formatos y cantidad de tiras
+funcionan en vivo. Los presets de usuario se guardan en
 `%LOCALAPPDATA%\MonitorMix\presets.json` en Windows. Se conserva esa carpeta
 interna para seguir encontrando las bibliotecas de versiones anteriores.
 

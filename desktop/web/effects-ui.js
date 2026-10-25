@@ -22,6 +22,18 @@ function descriptorKey(path, id) {
 function fxError(e) {
   $("fxerror").textContent = e.message || e;
 }
+function fxParametersEditable(id = pendingFx?.id) {
+  const old =
+    selectedFx &&
+    targetOf(selectedFx.type, selectedFx.index)?.inserts[selectedFx.slot];
+  return (
+    !running ||
+    id?.startsWith("native/") ||
+    !old ||
+    old.id !== id ||
+    old.path !== pendingFx?.path
+  );
+}
 function nativeEditable() {
   const old =
     selectedFx &&
@@ -43,31 +55,37 @@ async function savePendingFx() {
     old = target.inserts[selectedFx.slot],
     value = structuredClone(pendingFx);
   // VST controls are read-only while running; browsing their chain must remain possible.
-  if (running && old && old.id === value.id && !old.id.startsWith("native/"))
+  if (
+    running &&
+    old &&
+    old.id === value.id &&
+    old.path === value.path &&
+    old.instance === value.instance &&
+    !old.id.startsWith("native/")
+  )
     return;
   if (
     old &&
     old.path === value.path &&
+    old.instance === value.instance &&
     old.id === value.id &&
     old.bypass === value.bypass &&
     Object.keys(old.params).length === Object.keys(value.params).length &&
     Object.entries(old.params).every(([k, v]) => value.params[k] === v)
   )
     return;
-  if (
-    running &&
-    (!old || old.id !== value.id || !value.id.startsWith("native/"))
-  )
-    throw Error(
-      "Detén el motor para modificar la cadena o los parámetros VST3",
-    );
   const before = structuredClone(target.inserts),
     sentValue = structuredClone(value);
   target.inserts[selectedFx.slot] = value;
   try {
     await publish();
     const actual = target.inserts[selectedFx.slot];
-    if (actual?.id === value.id && pendingFx?.id === value.id) {
+    if (
+      actual?.id === value.id &&
+      actual.instance === value.instance &&
+      pendingFx?.id === value.id &&
+      pendingFx.instance === value.instance
+    ) {
       for (const [key, next] of Object.entries(actual.params))
         if (pendingFx.params[key] === sentValue.params[key])
           pendingFx.params[key] = next;
@@ -77,6 +95,7 @@ async function savePendingFx() {
       ? "Aplicado · en vivo"
       : "Cambios guardados";
     renderFxRail();
+    refreshOpenPanels();
   } catch (e) {
     target.inserts = before;
     throw e;
@@ -129,7 +148,7 @@ function renderFxRail() {
     button.onkeydown = (e) => {
       if (e.key === "Delete") {
         e.preventDefault();
-        if (!running) $("removefx").click();
+        $("removefx").click();
       }
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
         e.preventDefault();
@@ -151,14 +170,11 @@ function renderFxRail() {
     $("fx-chain-list").append(el("div", "fx-chain-pending", "+ Nuevo efecto"));
   $("fx-chain-count").textContent =
     `${target.inserts.length} / 4 inserts · Supr para quitar`;
-  $("fx-add").disabled = running || target.inserts.length >= 4;
-  $("removefx").disabled = running || selectedFx.slot >= target.inserts.length;
+  $("fx-add").disabled = target.inserts.length >= 4;
+  $("removefx").disabled = selectedFx.slot >= target.inserts.length;
   $("fxup").disabled =
-    running ||
-    selectedFx.slot === 0 ||
-    selectedFx.slot >= target.inserts.length;
-  $("fxdown").disabled =
-    running || selectedFx.slot >= target.inserts.length - 1;
+    selectedFx.slot === 0 || selectedFx.slot >= target.inserts.length;
+  $("fxdown").disabled = selectedFx.slot >= target.inserts.length - 1;
 }
 function openFx(type, index, slot) {
   if (openDetachedPanel("fx", { type, index, slot })) return;
@@ -200,7 +216,7 @@ function openFx(type, index, slot) {
     "vst-directory",
     "vst-search",
   ])
-    $(id).disabled = running;
+    $(id).disabled = false;
   showFloatingPanel("fx");
   nativeCatalogue()
     .then((list) => {
@@ -225,29 +241,22 @@ function openFx(type, index, slot) {
         .catch(fxError);
     else if (fxMetadata.has(descriptorKey(fx.path, fx.id)))
       setFxDescriptors([fxMetadata.get(descriptorKey(fx.path, fx.id))]);
-    else if (!running) $("inspect").click();
-    else
-      setFxDescriptors([
-        {
-          id: fx.id,
-          name: fxName(fx),
-          params: Object.entries(fx.params).map(([id, value]) => ({
-            id,
-            name: id,
-            min: Math.min(0, value),
-            max: Math.max(1, value),
-            value,
-          })),
-        },
-      ]);
+    else $("inspect").click();
   }
   ensurePluginCatalogue().catch(
     (e) => ($("plugin-library-status").textContent = e.message),
   );
 }
 function setFxDescriptors(list) {
+  const requested =
+    pendingFx?.id ||
+    (selectedFx &&
+      targetOf(selectedFx.type, selectedFx.index)?.inserts[selectedFx.slot]
+        ?.id);
   descriptors = list;
   $("classes").replaceChildren(...list.map((p, i) => new Option(p.name, i)));
+  const selected = list.findIndex((p) => p.id === requested);
+  if (selected >= 0) $("classes").value = String(selected);
   if (!list.length) throw Error("Este bundle no contiene efectos de audio");
   for (const d of list) fxMetadata.set(descriptorKey($("path").value, d.id), d);
   rememberPluginDescriptors($("path").value, list);
@@ -260,6 +269,10 @@ function showParams() {
     selectedFx.slot
   ];
   pendingFx = {
+    instance:
+      old?.id === d.id && old?.path === $("path").value
+        ? old.instance
+        : newPluginInstance(),
     path: $("path").value,
     id: d.id,
     name: d.name,
@@ -288,7 +301,7 @@ function showParams() {
         renderFxControls(d);
         fxParameterChanged();
       },
-      editable: !running || d.id.startsWith("native/"),
+      editable: fxParametersEditable(d.id),
     }),
   );
 }
@@ -355,7 +368,7 @@ function renderFxControls(d) {
       number.value = pendingFx.params[p.id];
       number.setAttribute("aria-label", p.name);
       range.setAttribute("aria-label", `Control ${p.name}`);
-      range.disabled = number.disabled = running;
+      range.disabled = number.disabled = !fxParametersEditable(d.id);
       number.onchange = () => {
         if (number.reportValidity()) {
           pendingFx.params[p.id] = Number(number.value);
@@ -367,7 +380,7 @@ function renderFxControls(d) {
       $("params").append(row);
     }
   }
-  $("applyfx").disabled = running && !d.id.startsWith("native/");
+  $("applyfx").disabled = !fxParametersEditable(d.id);
 }
 $("builtin-fx").onchange = () => {
   if (!$("builtin-fx").value) return;
@@ -418,7 +431,6 @@ $("applyfx").onclick = () => savePendingFx().catch(fxError);
 $("fx-add").onclick = () =>
   chooseFx(targetOf(selectedFx.type, selectedFx.index).inserts.length);
 $("removefx").onclick = async () => {
-  if (running) return;
   clearTimeout(fxAutoTimer);
   fxAutoTimer = undefined;
   const target = targetOf(selectedFx.type, selectedFx.index),
@@ -443,7 +455,6 @@ for (const [id, delta] of [
   ["fxdown", 1],
 ])
   $(id).onclick = async () => {
-    if (running) return;
     let target, before;
     try {
       await savePendingFx();

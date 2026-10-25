@@ -1,6 +1,6 @@
 # AuMux · galería de capturas
 
-Capturas reales de **AuMux 0.13.2** para los selectores de plugins, y de las
+Capturas reales de **AuMux 0.13.3** para los selectores de plugins, y de las
 versiones indicadas para el resto. Las vistas de señal usan **DEMO a 48 kHz** con ocho
 canales, cuatro auxiliares y master. Los generadores internos producen la señal
 que muestran los medidores; no se conectó hardware ASIO. Las vistas se capturaron
@@ -9,17 +9,23 @@ en Chromium sobre Linux.
 Esta galería muestra las funciones actuales. El modo de control de consolas
 digitales X32/M32 y las demás familias comentadas sigue pendiente de implementación.
 
-[Descargar para Windows](../dist/AuMux-0.13.2-Windows-x64.zip) ·
+[Descargar para Windows](https://github.com/Lechuga-visual/aumux-consola-virtual/releases/download/v0.13.3/AuMux-0.13.3-Windows-x64.zip) ·
 [Guía de prueba](probar-en-windows.md) · [Volver al README](../README.md)
 
-## Plugins por categorías 0.13.2
+## Efectos en vivo 0.13.3
+
+La cadena se puede modificar con el motor activo. [Funcionamiento y límites](interfaz-0.13.3.md).
+
+![Agregar un efecto con DEMO activo](aumux-0.13.3-fx-en-vivo.png)
+
+## Plugins por categorías 0.13.3
 
 Menú rápido desde cada tira y navegador completo en la ventana FX independiente.
 [Uso, favoritos y clasificación VST3](interfaz-0.13.2.md).
 
-![Menú rápido de plugins en la consola](screenshots/0.13.2/01-menu-rapido.png)
+![Menú rápido de plugins en la consola](screenshots/0.13.3/01-menu-rapido.png)
 
-![Navegador completo de plugins](screenshots/0.13.2/02-navegador-plugins.png)
+![Navegador completo de plugins](screenshots/0.13.3/02-navegador-plugins.png)
 
 ## Ventanas independientes 0.13.1
 

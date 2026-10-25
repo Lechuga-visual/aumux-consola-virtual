@@ -46,7 +46,7 @@ impl Exchange {
             std::thread::sleep(Duration::from_millis(1));
         }
     }
-    pub fn begin(&self, old: &Mixer) -> Option<Box<Mixer>> {
+    pub fn begin(&self, old: &mut Mixer) -> Option<Box<Mixer>> {
         if !self.retired.is_empty() {
             return None;
         }
