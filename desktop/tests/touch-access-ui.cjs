@@ -79,17 +79,18 @@ const assert = require("node:assert/strict");
     });
     await operator.locator("#network-settings").click();
     assert(
-      await operator.locator("#pref-network").isVisible(),
-      "networks is the initial preferences category",
+      await operator.locator("#pref-general").isVisible(),
+      "General is the initial preferences category",
     );
     assert.equal(
       await operator
         .locator(".preferences-nav [role=tab]")
         .first()
         .getAttribute("id"),
-      "pref-tab-network",
-      "networks comes first",
+      "pref-tab-general",
+      "General comes first",
     );
+    await operator.locator("#pref-tab-network").click();
     await operator.waitForFunction(
       () => document.querySelector("#network-interface").options.length > 1,
     );
@@ -313,7 +314,7 @@ const assert = require("node:assert/strict");
       "touch must be explicitly enabled even on a tablet",
     );
     await full.locator("#tools-menu > summary").click();
-    await full.locator("#touch-mode").selectOption("on");
+    await full.locator("#touch-mode").selectOption("on", { force: true });
     await full.waitForFunction(() =>
       document.body.classList.contains("touch-mode"),
     );
@@ -409,7 +410,7 @@ const assert = require("node:assert/strict");
     await full.screenshot({ path: "docs/aumux-0.13-main-touch.png" });
     // The local console's explicit Touch switch also works with a mouse-only desktop.
     await operator.locator("#tools-menu > summary").click();
-    await operator.locator("#touch-mode").selectOption("on");
+    await operator.locator("#touch-mode").selectOption("on", { force: true });
     assert(
       await operator
         .locator("body")
@@ -425,7 +426,7 @@ const assert = require("node:assert/strict");
     );
     await operator.setViewportSize({ width: 1600, height: 980 });
     await operator.locator("#tools-menu > summary").click();
-    await operator.locator("#touch-mode").selectOption("off");
+    await operator.locator("#touch-mode").selectOption("off", { force: true });
     assert(
       !(await operator
         .locator("body")

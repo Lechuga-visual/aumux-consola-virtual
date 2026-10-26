@@ -2084,7 +2084,7 @@ function openEq(type, index) {
   flushEq();
   eqTarget = { type, index };
   eqBandIndex = 0;
-  $("eq-title").textContent = `FreeEQ8 · ${targetOf(type, index).name}`;
+  $("eq-title").textContent = `Ecualizador Grafico de 8 bandas · ${targetOf(type, index).name}`;
   $("eq-edit-status").textContent = "Cambios en vivo";
   const svg = svgEl("svg", {
     viewBox: "0 0 900 310",
@@ -2330,7 +2330,7 @@ function openEq(type, index) {
   );
   selectEqBand(0);
   renderEqPresets();
-  setBuiltInHelp("eq-dialog", "eq", "FreeEQ8");
+  setBuiltInHelp("eq-dialog", "eq", "Ecualizador Grafico de 8 bandas");
   showFloatingPanel("eq-dialog");
   attachEqSpectrum();
 }

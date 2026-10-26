@@ -749,9 +749,9 @@ function updateWorkspaceStatus(s) {
   }
 }
 $("network-settings").onclick = () => {
-  if (openDetachedPanel("network-dialog", { tab: "network" })) return;
+  if (openDetachedPanel("network-dialog", { tab: "general" })) return;
   showFloatingPanel("network-dialog");
-  showPreference("network");
+  showPreference("general");
   $("network-host").value =
     lastStatus?.remote?.host || lastStatus?.listen?.host || "";
   if (lastStatus) updateWorkspaceStatus(lastStatus);

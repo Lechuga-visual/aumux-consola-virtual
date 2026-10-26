@@ -261,9 +261,9 @@ function parameterHelpText(descriptor, param) {
   // VST3 parameter enumeration does not supply a manual or semantic descriptions.
   return `Control expuesto por el plugin. Rango comunicado: ${param.min}–${param.max}${param.units ? " " + param.units : ""}. El fabricante no proporciona una descripción mediante esta interfaz; consulta su manual. Una escala 0–1 puede ser normalizada.`;
 }
-let pluginHelpEnabled = true;
+let pluginHelpEnabled = false;
 try {
-  pluginHelpEnabled = localStorage.getItem("aumux-plugin-help") !== "off";
+  pluginHelpEnabled = localStorage.getItem("aumux-plugin-help") === "on";
 } catch {}
 const pluginHelpPanels = new Map();
 function applyPluginHelpPreference(enabled) {
@@ -344,6 +344,6 @@ document
   });
 window.addEventListener("storage", (event) => {
   if (event.key === "aumux-plugin-help" || event.key === null)
-    applyPluginHelpPreference(event.key === null || event.newValue !== "off");
+    applyPluginHelpPreference(event.key !== null && event.newValue === "on");
 });
 applyPluginHelpPreference(pluginHelpEnabled);

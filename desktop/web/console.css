@@ -3946,3 +3946,103 @@ body.detached-panel #network-dialog.detached-active {
   font-size: 9px;
   padding-top: 4px;
 }
+
+/* Compact editors keep their controls together; assistance is optional. */
+#eq-graph > svg {
+  min-height: 150px;
+  max-height: 220px;
+}
+.eq-editor-bottom {
+  padding: 10px 12px;
+  gap: 10px;
+}
+.eq-knobs .rotary-dial {
+  width: 64px;
+  height: 64px;
+}
+#compressor-dialog .compressor-top {
+  margin-bottom: 8px;
+}
+#compressor-dialog .comp-knobs {
+  margin: 8px 0;
+}
+.plugin-description {
+  display: block;
+  color: #91a7b6;
+  font-size: 10px;
+  font-weight: normal;
+  line-height: 1.4;
+  white-space: normal;
+  grid-column: 1 / -1;
+  text-align: left;
+}
+.quick-fx-plugin {
+  flex-wrap: wrap;
+}
+.quick-fx-plugin .plugin-description {
+  flex: 1 0 100%;
+}
+.app:not(.hide-meters):not(.touch-mode .app) {
+  grid-template-rows: 36px 36px var(--meter-height, 126px) minmax(0, 1fr) 24px;
+}
+.meter-height-control {
+  width: 90px;
+}
+.tools-dropdown {
+  padding: 4px;
+  gap: 0;
+}
+.tools-dropdown button,
+.tools-submenu > summary {
+  text-align: left;
+  border: 0;
+  background: transparent;
+  border-radius: 0;
+  padding: 7px 12px;
+  font-size: 12px;
+}
+.tools-dropdown button:hover,
+.tools-dropdown button:focus-visible,
+.tools-submenu > summary:hover {
+  background: #36596d;
+}
+.tools-submenu > summary {
+  list-style: none;
+  display: flex;
+  justify-content: space-between;
+}
+.tools-submenu > summary::after {
+  content: "›";
+  padding-left: 18px;
+}
+.tools-submenu > div[popover] {
+  position: fixed;
+  margin: 0;
+  padding: 4px;
+  width: 280px;
+  max-height: calc(100dvh - 16px);
+  overflow: auto;
+  background: #202832;
+  color: #d6dfe7;
+  border: 1px solid #586878;
+  box-shadow: 0 8px 20px #0008;
+}
+.tools-submenu > div[popover]:popover-open {
+  display: grid;
+}
+.tools-submenu > div[popover] button {
+  text-align: left;
+  padding: 8px 12px;
+  background: transparent;
+  border: 0;
+  color: inherit;
+}
+.tools-submenu > div[popover] button:hover {
+  background: #36596d;
+}
+.tools-separator {
+  border: 0;
+  border-top: 1px solid #45515d;
+  margin: 4px 0;
+  width: 100%;
+}

@@ -1,11 +1,11 @@
 "use strict";
 // Each detached panel is another surface of the same service, never another audio process.
 const panelDefinitions = {
-  "eq-dialog": [820, 580],
+  "eq-dialog": [860, 760],
   fx: [800, 580],
   "recording-dialog": [780, 600],
-  "compressor-dialog": [700, 540],
-  "network-dialog": [540, 740],
+  "compressor-dialog": [780, 700],
+  "network-dialog": [780, 740],
   "audio-settings": [520, 580],
   "latency-dialog": [660, 540],
   "calculator-dialog": [520, 420],
@@ -55,18 +55,23 @@ function panelWindowSize(
   const prefs = id === "network-dialog" || id === "audio-settings";
   // A phone needs its width for controls, rather than a desktop percentage.
   const narrow = availableWidth < 720;
+  const complete = [
+    "eq-dialog",
+    "compressor-dialog",
+    "network-dialog",
+  ].includes(id);
   return [
     Math.round(
       Math.min(
         availableWidth - 16,
-        availableWidth * (narrow ? 1 : prefs ? 0.3 : 0.45),
+        availableWidth * (narrow ? 1 : complete ? 0.9 : prefs ? 0.3 : 0.45),
         fallbackWidth,
       ),
     ),
     Math.round(
       Math.min(
         availableHeight - 48,
-        availableHeight * (narrow ? 0.85 : prefs ? 0.8 : 0.6),
+        availableHeight * (narrow ? 0.9 : complete ? 0.9 : prefs ? 0.8 : 0.6),
         fallbackHeight,
       ),
     ),
@@ -162,7 +167,7 @@ function currentPanelState(id) {
     return { type: "channel", index: routingChannel };
   if (id === "diagnostic-dialog") return { tool: diagnosticTool };
   if (id === "network-dialog")
-    return { tab: document.getElementById(id).dataset.category || "network" };
+    return { tab: document.getElementById(id).dataset.category || "general" };
   return {};
 }
 function startDetachedPanel(id, state) {
@@ -232,7 +237,7 @@ function refreshOpenPanels() {
   if (panelTextEditing()) return;
   if (document.getElementById("eq-dialog").open && eqTarget) {
     document.getElementById("eq-title").textContent =
-      `FreeEQ8 · ${targetOf(eqTarget.type, eqTarget.index).name}`;
+      `Ecualizador Grafico de 8 bandas · ${targetOf(eqTarget.type, eqTarget.index).name}`;
     refreshEq();
   }
   if (document.getElementById("compressor-dialog").open && compTarget) {

@@ -32,6 +32,39 @@ const nativePluginGroups = {
   beatbox: "tools",
   shepard: "tools",
 };
+const pluginDescriptions = {
+  ambience: "Reverberación de sala para añadir ambiente y profundidad.",
+  bandisto:
+    "Distorsión multibanda con control independiente de graves, medios y agudos.",
+  beatbox: "Detecta transitorios y los transforma en sonidos de percusión.",
+  degrade:
+    "Reduce bits y frecuencia de muestreo para crear texturas digitales.",
+  delay: "Ecos estéreo con realimentación y ajuste tonal.",
+  detune: "Doblaje y ensanchamiento mediante pequeñas desafinaciones.",
+  dither: "Ruido de dither y cuantización para probar resoluciones de bits.",
+  dynamics: "Compresor, limitador y puerta de ruido.",
+  envelope: "Seguidor de envolvente para modificar la dinámica.",
+  image: "Control de imagen estéreo y conversión medio/lateral.",
+  limiter: "Controla los picos de señal mediante limitación.",
+  loudness: "Compensación tonal según el nivel de escucha.",
+  overdrive: "Saturación con control de carácter y tono.",
+  rezfilter: "Filtro resonante modulado por envolvente y LFO.",
+  ringmod: "Modulación en anillo para texturas metálicas.",
+  shepard: "Efecto de movimiento tonal continuo.",
+  splitter: "Separa la señal por frecuencia y nivel.",
+  stereo: "Ensanchamiento estéreo mediante retardo y modulación.",
+  subsynth: "Generación y refuerzo de subgraves.",
+  testtone: "Generador de tonos, ruido y barridos de prueba.",
+  freevox8: "Vocoder y banco de filtros para transformar voces y texturas.",
+};
+function pluginDescription(entry) {
+  if (entry.format === "native")
+    return (
+      pluginDescriptions[entry.id.split("/").at(-1)] ||
+      "Procesador de audio nativo."
+    );
+  return `${pluginCategoryLabel(entry)} · ${entry.vendor || "VST3"}. Plugin externo; consulta su manual para sus funciones específicas.`;
+}
 const pluginStorageKey = "aumux-plugin-library-v1";
 let pluginPrefs = readPluginPrefs(),
   pluginEntries = [],
@@ -394,11 +427,12 @@ function renderQuickFx() {
     const button = el("button", "quick-fx-plugin");
     button.type = "button";
     button.dataset.pluginId = entry.id || "";
-    button.title = `${entry.name} · ${entry.vendor}`;
+    button.title = `${entry.name} · ${pluginDescription(entry)}`;
     button.append(
       el("span", "", (isFavoritePlugin(entry) ? "★ " : "") + entry.name),
       el("span", "plugin-tag", entry.format === "native" ? "NATIVO" : "VST3"),
     );
+    button.append(el("small", "plugin-description", pluginDescription(entry)));
     button.disabled = pluginBusy;
     button.onclick = async () => {
       const context = quickFxContext;
@@ -499,6 +533,7 @@ function renderPluginLibrary() {
         `${pluginCategoryLabel(entry)} · ${entry.vendor} · ${entry.format === "native" ? "Nativo" : "VST3"}`,
       ),
     );
+    button.append(el("small", "plugin-description", pluginDescription(entry)));
     button.onclick = () => {
       browserPluginKey = pluginKey(entry);
       for (const other of root.querySelectorAll(".plugin-result-name"))

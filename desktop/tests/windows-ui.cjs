@@ -44,6 +44,11 @@ const fs = require("node:fs/promises");
     await main.goto(url);
     await main.waitForSelector("#mixer .strip");
     assert.equal(await main.evaluate(() => panelMode), "windows");
+    assert.equal(await main.evaluate(() => pluginHelpEnabled), false);
+    await main.evaluate(() => {
+      localStorage.setItem("aumux-plugin-help", "on");
+      applyPluginHelpPreference(true);
+    });
     await main.evaluate(async () => {
       if (![...cfg.channels, ...cfg.buses].every((n) => n.gain_db === 0))
         throw Error("new scene faders must start at unity");
@@ -368,21 +373,21 @@ const fs = require("node:fs/promises");
       !(await main.locator("#eq-dialog").evaluate((d) => d.matches(":modal"))),
     );
     const before = await main.locator("#eq-dialog").boundingBox();
-    assert(before.width <= 720 && before.height <= 580);
+    assert(before.width <= 860 && before.height <= 760);
     await main.locator("#eq-dialog").evaluate((d) => {
       d.style.width = "1200px";
       d.style.height = "850px";
     });
     await main.locator("#eq-dialog .panel-compact").click();
     const restored = await main.locator("#eq-dialog").boundingBox();
-    assert(restored.width <= 720 && restored.height <= 580);
+    assert(restored.width <= 860 && restored.height <= 760);
     assert.equal(
       await main
         .locator(".eq-editor-bottom")
         .evaluate(
           (e) => getComputedStyle(e).gridTemplateColumns.split(" ").length,
         ),
-      2,
+      3,
     );
     await main.locator('#eq-dialog [data-help-parameter="q"] input').focus();
     await main.screenshot({
@@ -404,14 +409,14 @@ const fs = require("node:fs/promises");
     await main.locator('[data-close="eq-dialog"]').click();
     await main.evaluate(() => $("network-settings").click());
     const floatingPrefs = await main.locator("#network-dialog").boundingBox();
-    assert(floatingPrefs.width <= 480 && floatingPrefs.height <= 740);
+    assert(floatingPrefs.width <= 780 && floatingPrefs.height <= 740);
     assert.equal(
       await main
         .locator(".preferences-layout")
         .evaluate(
           (e) => getComputedStyle(e).gridTemplateColumns.split(" ").length,
         ),
-      1,
+      2,
     );
     await main.locator('[data-close="network-dialog"]').click();
     await main.evaluate(() => {

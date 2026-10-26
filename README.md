@@ -10,13 +10,20 @@ web permite objetivos de búfer de 40/80/120/200 ms (80 ms inicialmente), más e
 su optimización y medición son prioritarias en la
 [hoja de ruta](docs/hoja-de-ruta.md).
 
-**Prueba local:** [descargar Windows x64](https://github.com/Lechuga-visual/aumux-consola-virtual/releases/download/v0.14.1/AuMux-0.14.1-Windows-x64.zip)
+**Prueba local:** [descargar Windows x64](https://github.com/Lechuga-visual/aumux-consola-virtual/releases/download/v0.14.2/AuMux-0.14.2-Windows-x64.zip)
 e [instrucciones para Windows](docs/probar-en-windows.md).
 La descarga incluye el ejecutable, el receptor de OBS y el código fuente.
-Su checksum está en [SHA-256](dist/AuMux-0.14.1-Windows-x64.zip.sha256).
+Su checksum está en [SHA-256](dist/AuMux-0.14.2-Windows-x64.zip.sha256).
 
 **Capturas:** [galería de la interfaz actual](docs/capturas.md), con consola,
 efectos, preferencias y vistas remotas para tablet y celular.
+
+## Novedades 0.14.2 · editores y menús
+
+Ayuda apagada inicialmente, General primero, categorías laterales y altura de
+medidores ajustable. Menú de Herramientas con submenús laterales, descripciones
+en selectores de plugins y tamaños de EQ/compresor que priorizan sus controles.
+[Guía y capturas](docs/interfaz-0.14.2.md).
 
 ## Novedades 0.14.1 · analizador y espacio de trabajo
 

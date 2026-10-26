@@ -66,6 +66,7 @@ python3 desktop/tests/network-smoke.py
 python3 desktop/tests/local-http-smoke.py
 if command -v chromium >/dev/null; then
   npm_config_cache=/workspace/scratch/npm-cache npm install --prefix /workspace/scratch/monitor-ui playwright-core@1.56.1 --no-audit --no-fund
+  NODE_PATH=/workspace/scratch/monitor-ui/node_modules node desktop/tests/editor-layout-ui.cjs
   NODE_PATH=/workspace/scratch/monitor-ui/node_modules node desktop/tests/studio-ui.cjs
   NODE_PATH=/workspace/scratch/monitor-ui/node_modules node desktop/tests/eq-spectrum-ui.cjs
   NODE_PATH=/workspace/scratch/monitor-ui/node_modules node desktop/tests/plugin-browser-ui.cjs

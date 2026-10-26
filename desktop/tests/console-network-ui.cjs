@@ -196,7 +196,7 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
         cfg.channels[0].name === "Voz recuperada",
     );
     await page.locator("#tools-menu > summary").click();
-    await page.locator("#touch-mode").selectOption("on");
+    await page.locator("#touch-mode").selectOption("on", { force: true });
     await page.locator("#tools-menu > summary").click();
     await page.screenshot({ path: "docs/aumux-0.13-console-mobile.png" });
     await context.close();

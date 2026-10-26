@@ -20,7 +20,7 @@
             height="30"
           />
           <strong>Au<span>Mux</span></strong>
-          <span class="version">0.14.1</span>
+          <span class="version">0.14.2</span>
         </div>
         <div class="scene-title">
           CONSOLA DE MONITOREO <span>•</span>
@@ -674,15 +674,6 @@
           aria-orientation="vertical"
         >
           <button
-            id="pref-tab-network"
-            role="tab"
-            data-preference="network"
-            aria-controls="pref-network"
-            aria-selected="true"
-          >
-            Redes y servidores
-          </button>
-          <button
             id="pref-tab-general"
             role="tab"
             data-preference="general"
@@ -692,6 +683,16 @@
           >
             General
           </button>
+          <button
+            id="pref-tab-network"
+            role="tab"
+            data-preference="network"
+            aria-controls="pref-network"
+            aria-selected="true"
+          >
+            Redes y servidores
+          </button>
+
           <button
             id="pref-tab-console"
             role="tab"
@@ -742,8 +743,8 @@
           >
             <h3>Ayuda y espacio de trabajo</h3>
             <label
-              ><input id="show-plugin-help" type="checkbox" checked /> Mostrar
-              ayuda de parámetros en los plugins</label
+              ><input id="show-plugin-help" type="checkbox" /> Mostrar ayuda de
+              parámetros en los plugins</label
             >
             <p class="hint">
               Muestra una descripción al pie de EQ, compresor y FX al tocar o

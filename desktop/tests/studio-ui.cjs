@@ -335,12 +335,12 @@ const { chromium } = require("playwright-core"),
       ],
     }));
     assert.deepEqual(calls.sizes[0], [800, 580]);
-    assert(calls.sizes[1][0] <= 576 && calls.sizes[1][1] <= 864);
+    assert(calls.sizes[1][0] <= 780 && calls.sizes[1][1] <= 864);
     for (const call of calls.calls) {
       const width = Number(call.features.match(/width=(\d+)/)[1]),
         height = Number(call.features.match(/height=(\d+)/)[1]);
-      assert(width <= calls.width * 0.45 + 1);
-      assert(height <= calls.height * 0.8 + 1);
+      assert(width <= calls.width * 0.9 + 1);
+      assert(height <= calls.height * 0.9 + 1);
     }
     await page.evaluate(async () => {
       cfg.channels[1].inserts = Array.from({ length: 8 }, (_, i) => ({

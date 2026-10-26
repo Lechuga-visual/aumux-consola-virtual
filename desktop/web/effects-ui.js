@@ -248,7 +248,13 @@ function openFx(type, index, slot) {
       if (sequence !== fxSequence) return;
       $("builtin-fx").replaceChildren(
         new Option("Seleccionar efecto nativo…", ""),
-        ...list.map((p) => new Option(p.name, p.id)),
+        ...list.map(
+          (p) =>
+            new Option(
+              `${p.name} — ${pluginDescription({ ...p, format: "native" })}`,
+              p.id,
+            ),
+        ),
       );
     })
     .catch(fxError);

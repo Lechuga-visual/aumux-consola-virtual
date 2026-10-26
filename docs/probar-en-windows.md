@@ -1,4 +1,4 @@
-# AuMux 0.14.1 · prueba local en Windows x64
+# AuMux 0.14.2 · prueba local en Windows x64
 
 Miniapp de mezcla con canales y auxiliares configurables y master estéreo, a 48 kHz. Reutiliza DSP
 y host VST3 de SoundCraft de Artcraft, con una superficie y un ruteo propios.
@@ -8,7 +8,7 @@ Es un prototipo para pruebas; todavía no está validado para una sesión en viv
 
 ## Probar sonido sin ASIO ni interfaz externa
 
-1. Extrae **todo** `AuMux-0.14.1-Windows-x64.zip` y ejecuta `AuMux.exe`.
+1. Extrae **todo** `AuMux-0.14.2-Windows-x64.zip` y ejecuta `AuMux.exe`.
    Cierra la versión anterior antes de abrir esta.
 2. Pulsa **AUDIO PC**. Usa los parlantes/audífonos predeterminados de Windows
    mediante WASAPI, sin controlador ASIO ni interfaz externa.
@@ -61,7 +61,7 @@ son entradas separadas. [Guía para preparar y registrar las pruebas](interfaz-0
 
 1. Cierra OBS y la instancia anterior de AuMux. Extrae todo el ZIP nuevo.
 2. Ejecuta `Instalar-receptor-OBS.cmd` como administrador para actualizar la DLL.
-3. Abre `AuMux.exe`. La marca debe mostrar **0.14.1**.
+3. Abre `AuMux.exe`. La marca debe mostrar **0.14.2**.
 4. En OBS, agrega **AuMux Audio**, o reutiliza tu fuente existente.
 5. Abre sus propiedades y pulsa **Configurar AuMux Audio…**.
 
@@ -388,7 +388,7 @@ Grabación multipista selectiva disponible desde 0.14; OSC/Mackie pendiente.
 
 Si no aparecen **+ Canal**, **+ Aux** y **Canales y auxiliares**, cierra el
 proceso anterior y abre el ejecutable del ZIP nuevo: la marca superior debe
-mostrar **AuMux 0.14.1**. Se prueba en Windows extrayendo todo el ZIP; no mezcles
+mostrar **AuMux 0.14.2**. Se prueba en Windows extrayendo todo el ZIP; no mezcles
 archivos de varias versiones.
 
 Las novedades de dinámica, superficie adaptativa y escucha LAN se describen en

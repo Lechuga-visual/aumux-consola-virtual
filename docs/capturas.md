@@ -9,8 +9,20 @@ en Chromium sobre Linux.
 Esta galería muestra las funciones actuales. El modo de control de consolas
 digitales X32/M32 y las demás familias comentadas sigue pendiente de implementación.
 
-[Descargar para Windows](https://github.com/Lechuga-visual/aumux-consola-virtual/releases/download/v0.14.1/AuMux-0.14.1-Windows-x64.zip) ·
+[Descargar para Windows](https://github.com/Lechuga-visual/aumux-consola-virtual/releases/download/v0.14.2/AuMux-0.14.2-Windows-x64.zip) ·
 [Guía de prueba](probar-en-windows.md) · [Volver al README](../README.md)
+
+## Editores y preferencias · 0.14.2
+
+[Guía actual](interfaz-0.14.2.md)
+
+![General con navegación lateral](screenshots/0.14.2/00-general-lateral.png)
+
+![Ecualizador con controles completos](screenshots/0.14.2/01-eq.png)
+
+![Compresor con controles completos](screenshots/0.14.2/02-compresor.png)
+
+![Menú de herramientas con submenús laterales](screenshots/0.14.2/03-herramientas.png)
 
 ## Ayuda y paneles compactos · 0.14.1
 

@@ -451,3 +451,145 @@ function updateAudioNetwork(s) {
       : "Desactivado";
   }
 }
+
+// Standard cascading menus: retain existing select handlers as the source of truth.
+for (const id of ["panel-mode", "touch-mode"]) {
+  const select = $(id),
+    label = select.closest("label"),
+    details = el("details", "tools-submenu"),
+    summary = el(
+      "summary",
+      "",
+      id === "panel-mode" ? "Ventanas y paneles" : "Interfaz táctil",
+    ),
+    list = el("div");
+  details.append(summary, list);
+  label.replaceWith(details);
+  select.hidden = true;
+  details.append(select);
+  const renderOptions = () => {
+    list.replaceChildren(
+      ...[...select.options].map((option) => {
+        const b = el(
+          "button",
+          "",
+          `${select.value === option.value ? "✓ " : ""}${option.text}`,
+        );
+        b.onclick = () => {
+          select.value = option.value;
+          select.dispatchEvent(new Event("change"));
+          renderOptions();
+          $("tools-menu").open = false;
+        };
+        return b;
+      }),
+    );
+  };
+  details.addEventListener("toggle", renderOptions);
+  renderOptions();
+}
+const meterLabel = el("label", "", "Altura de medidores"),
+  meterHeight = el("input", "meter-height-control");
+meterHeight.type = "range";
+meterHeight.min = 90;
+meterHeight.max = 360;
+meterHeight.step = 10;
+meterHeight.setAttribute("aria-label", "Altura vertical de los medidores");
+try {
+  meterHeight.value = localStorage.getItem("aumux-meter-height") || "126";
+} catch {
+  meterHeight.value = 126;
+}
+function setMeterHeight() {
+  const value = Math.max(
+    90,
+    Math.min(Number(meterHeight.value), Math.min(360, innerHeight * 0.45)),
+  );
+  document.documentElement.style.setProperty("--meter-height", value + "px");
+}
+meterHeight.oninput = () => {
+  setMeterHeight();
+  try {
+    localStorage.setItem("aumux-meter-height", meterHeight.value);
+  } catch {}
+};
+setMeterHeight();
+window.addEventListener("resize", setMeterHeight);
+meterLabel.append(meterHeight);
+$("pref-general").append(meterLabel);
+for (const detail of toolsPanel.querySelectorAll(".tools-submenu")) {
+  const list = detail.querySelector("div"),
+    summary = detail.querySelector("summary");
+  list.setAttribute("popover", "manual");
+  const position = () => {
+    const r = summary.getBoundingClientRect();
+    list.style.left =
+      Math.max(
+        8,
+        Math.min(
+          r.right + 290 < innerWidth ? r.right + 3 : r.left - 283,
+          innerWidth - 290,
+        ),
+      ) + "px";
+    list.style.top =
+      Math.max(8, Math.min(r.top, innerHeight - list.offsetHeight - 8)) + "px";
+  };
+  detail.addEventListener("toggle", () => {
+    if (detail.open && $("tools-menu").open) {
+      for (const other of toolsPanel.querySelectorAll(".tools-submenu"))
+        if (other !== detail) other.open = false;
+      list.showPopover();
+      position();
+    } else list.hidePopover();
+  });
+  summary.onclick = (event) => {
+    event.preventDefault();
+    detail.open = true;
+  };
+  summary.onmouseenter = () => {
+    if (matchMedia("(pointer:fine)").matches && $("tools-menu").open)
+      detail.open = true;
+  };
+  list.addEventListener("click", (e) => {
+    if (e.target.closest("button")) $("tools-menu").open = false;
+  });
+}
+$("tools-menu").addEventListener("toggle", () => {
+  if (!$("tools-menu").open)
+    for (const d of toolsPanel.querySelectorAll(".tools-submenu"))
+      d.open = false;
+});
+toolsPanel.insertBefore(el("hr", "tools-separator"), $("diagnostics-menu"));
+toolsPanel.insertBefore(el("hr", "tools-separator"), $("open-feedback"));
+toolsPanel.addEventListener("keydown", (e) => {
+  const scope = e.target.closest("[popover]") || toolsPanel;
+  const items = [...scope.querySelectorAll("button,summary")].filter(
+    (n) =>
+      n.getClientRects().length &&
+      !n.disabled &&
+      n.closest("[popover]") === scope,
+  );
+  const i = items.indexOf(document.activeElement);
+  if (["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) {
+    e.preventDefault();
+    items[
+      e.key === "Home"
+        ? 0
+        : e.key === "End"
+          ? items.length - 1
+          : (i + (e.key === "ArrowUp" ? items.length - 1 : 1)) % items.length
+    ]?.focus();
+  } else if (e.key === "ArrowRight" && e.target.matches("summary")) {
+    e.preventDefault();
+    e.target.parentElement.open = true;
+    setTimeout(
+      () => e.target.parentElement.querySelector("button")?.focus(),
+      0,
+    );
+  } else if (e.key === "ArrowLeft" && scope !== toolsPanel) {
+    e.preventDefault();
+    const d = scope.parentElement;
+    d.open = false;
+    d.querySelector("summary").focus();
+  }
+});
