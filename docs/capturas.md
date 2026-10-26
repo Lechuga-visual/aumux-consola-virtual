@@ -1,6 +1,6 @@
 # AuMux · galería de capturas
 
-Capturas reales de **AuMux 0.14.0** para controles, preferencias y grabación, y de 0.13.3 para los selectores de plugins, y de las
+Capturas reales de **AuMux 0.14.1 y 0.14.0** para controles, preferencias y grabación, y de 0.13.3 para los selectores de plugins, y de las
 versiones indicadas para el resto. Las vistas de señal usan **DEMO a 48 kHz** con ocho
 canales, cuatro auxiliares y master. Los generadores internos producen la señal
 que muestran los medidores; no se conectó hardware ASIO. Las vistas se capturaron
@@ -9,8 +9,24 @@ en Chromium sobre Linux.
 Esta galería muestra las funciones actuales. El modo de control de consolas
 digitales X32/M32 y las demás familias comentadas sigue pendiente de implementación.
 
-[Descargar para Windows](https://github.com/Lechuga-visual/aumux-consola-virtual/releases/download/v0.14.0/AuMux-0.14.0-Windows-x64.zip) ·
+[Descargar para Windows](https://github.com/Lechuga-visual/aumux-consola-virtual/releases/download/v0.14.1/AuMux-0.14.1-Windows-x64.zip) ·
 [Guía de prueba](probar-en-windows.md) · [Volver al README](../README.md)
+
+## Ayuda y paneles compactos · 0.14.1
+
+![Ayuda de parámetros en el editor FX](screenshots/0.14.1/00-ayuda-fx.png)
+
+![General: mostrar u ocultar la ayuda](screenshots/0.14.1/01-preferencias-general.png)
+
+![EQ flotante compacto sobre la consola](screenshots/0.14.1/02-panel-flotante-compacto.png)
+
+![Analizador A: compacto](screenshots/0.14.1/03-espectro-compacto.png)
+
+![Analizador B: PRE/POST](screenshots/0.14.1/04-espectro-comparacion.png)
+
+![Analizador C: historial](screenshots/0.14.1/05-espectro-historial.png)
+
+[Guía](interfaz-0.14.1.md) · [Propuestas conceptuales del analizador](propuestas/analizador-eq.md).
 
 ## Ocho FX, compresor y grabación 0.14
 

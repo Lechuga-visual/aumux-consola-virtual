@@ -190,7 +190,7 @@ impl Default for Config {
                     } else {
                         format!("Monitor {i}")
                     },
-                    gain_db: -12.0,
+                    gain_db: 0.0,
                     mute: false,
                     format: if i == 0 { Format::Stereo } else { Format::Mono },
                     output: None,

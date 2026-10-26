@@ -2,11 +2,16 @@ const { chromium } = require("playwright-core");
 const { spawn } = require("node:child_process");
 const assert = require("node:assert/strict");
 const path = require("node:path");
+const fs = require("node:fs/promises");
 (async () => {
+  const data = await fs.mkdtemp("/workspace/scratch/aumux-windows-ui-");
   const app = spawn(
     process.env.MONITOR_BINARY || path.resolve("desktop/target/debug/aumux"),
     ["--no-browser"],
-    { env: process.env, stdio: ["ignore", "pipe", "pipe"] },
+    {
+      env: { ...process.env, MONITOR_MIX_DATA_DIR: data },
+      stdio: ["ignore", "pipe", "pipe"],
+    },
   );
   let browser;
   try {
@@ -39,6 +44,28 @@ const path = require("node:path");
     await main.goto(url);
     await main.waitForSelector("#mixer .strip");
     assert.equal(await main.evaluate(() => panelMode), "windows");
+    await main.evaluate(async () => {
+      if (![...cfg.channels, ...cfg.buses].every((n) => n.gain_db === 0))
+        throw Error("new scene faders must start at unity");
+      cfg.buses[0].gain_db = -3;
+      cfg.buses[1].gain_db = -7;
+      await publish();
+      await resizeStructure(9, 5);
+      if (cfg.channels[8].gain_db !== 0 || cfg.buses[5].gain_db !== 0)
+        throw Error("new channel and auxiliary must start at unity");
+      if (cfg.buses[0].gain_db !== -3 || cfg.buses[1].gain_db !== -7)
+        throw Error("existing gains must be preserved");
+      await resizeStructure(8, 4);
+      cfg.buses[0].gain_db = cfg.buses[1].gain_db = 0;
+      await publish();
+      const catalogue = await nativeCatalogue();
+      for (const d of catalogue)
+        for (const p of d.params) {
+          const text = parameterHelpText(d, p);
+          if (text.includes("consulta su documentación"))
+            throw Error(`missing native help: ${d.id} / ${p.id}`);
+        }
+    });
     await main.evaluate(async () => {
       cfg.channels[0].generator = {
         signal: "sine",
@@ -78,6 +105,21 @@ const path = require("node:path");
     console.log("Checking native FX popup and cross-window parameters");
     const fx = await popup(() => openFx("channel", 0, 0));
     await fx.waitForSelector("#params .rotary-control");
+    await fx.setViewportSize({ width: 800, height: 580 });
+    await fx.locator("#params .rotary-dial").first().focus();
+    assert(
+      (await fx.locator(".plugin-help strong").innerText()).includes(" · "),
+    );
+    assert(
+      !(await fx.locator(".plugin-help p").innerText()).includes(
+        "Toca o enfoca",
+      ),
+    );
+    await fx.locator(".plugin-help summary").click();
+    assert((await fx.locator(".plugin-help dt").count()) > 1);
+    await fx.locator(".plugin-help summary").click();
+    await fs.mkdir("docs/screenshots/0.14.1", { recursive: true });
+    await fx.screenshot({ path: "docs/screenshots/0.14.1/00-ayuda-fx.png" });
     const values = await fx.evaluate(() => {
       const d = descriptors[Number($("classes").value)];
       return d.params.slice(0, 2).map((p) => ({
@@ -181,6 +223,43 @@ const path = require("node:path");
     );
     const preferences = await popup(() =>
       document.getElementById("network-settings").click(),
+    );
+    await preferences.locator("#pref-tab-general").click();
+    await preferences.locator("#show-plugin-help").uncheck();
+    for (const p of [fx, eq, eq2, comp])
+      await p.waitForFunction(
+        () => document.querySelector(".plugin-help").hidden,
+      );
+    await preferences.reload();
+    await preferences.waitForSelector("#network-dialog[open]");
+    await preferences.locator("#pref-tab-general").click();
+    assert.equal(
+      await preferences.locator("#show-plugin-help").isChecked(),
+      false,
+    );
+    await preferences.locator("#show-plugin-help").check();
+    await preferences.setViewportSize({ width: 540, height: 740 });
+    await preferences.screenshot({
+      path: "docs/screenshots/0.14.1/01-preferencias-general.png",
+    });
+    await eq.getByLabel("EQ banda 3 frequency", { exact: true }).focus();
+    await eq.waitForFunction(
+      () => !document.querySelector(".plugin-help").hidden,
+    );
+    assert(
+      (await eq.locator(".plugin-help p").innerText()).includes(
+        "Frecuencia central",
+      ),
+    );
+    assert(
+      (
+        await preferences.evaluate(() =>
+          parameterHelpText(
+            { id: "external" },
+            { name: "Unusual", min: 0, max: 1 },
+          ),
+        )
+      ).includes("normalizada"),
     );
     await preferences.locator("#pref-tab-mix").click();
     await main.evaluate(async () => {
@@ -289,6 +368,26 @@ const path = require("node:path");
       !(await main.locator("#eq-dialog").evaluate((d) => d.matches(":modal"))),
     );
     const before = await main.locator("#eq-dialog").boundingBox();
+    assert(before.width <= 720 && before.height <= 580);
+    await main.locator("#eq-dialog").evaluate((d) => {
+      d.style.width = "1200px";
+      d.style.height = "850px";
+    });
+    await main.locator("#eq-dialog .panel-compact").click();
+    const restored = await main.locator("#eq-dialog").boundingBox();
+    assert(restored.width <= 720 && restored.height <= 580);
+    assert.equal(
+      await main
+        .locator(".eq-editor-bottom")
+        .evaluate(
+          (e) => getComputedStyle(e).gridTemplateColumns.split(" ").length,
+        ),
+      2,
+    );
+    await main.locator('#eq-dialog [data-help-parameter="q"] input').focus();
+    await main.screenshot({
+      path: "docs/screenshots/0.14.1/02-panel-flotante-compacto.png",
+    });
     const heading = main.locator("#eq-dialog .dialog-heading h2");
     const h = await heading.boundingBox();
     await main.mouse.move(h.x + 30, h.y + 10);
@@ -303,6 +402,18 @@ const path = require("node:path");
       await publish();
     });
     await main.locator('[data-close="eq-dialog"]').click();
+    await main.evaluate(() => $("network-settings").click());
+    const floatingPrefs = await main.locator("#network-dialog").boundingBox();
+    assert(floatingPrefs.width <= 480 && floatingPrefs.height <= 740);
+    assert.equal(
+      await main
+        .locator(".preferences-layout")
+        .evaluate(
+          (e) => getComputedStyle(e).gridTemplateColumns.split(" ").length,
+        ),
+      1,
+    );
+    await main.locator('[data-close="network-dialog"]').click();
     await main.evaluate(() => {
       const old = window.open;
       window.open = () => null;
@@ -336,7 +447,7 @@ const path = require("node:path");
     await main.evaluate(async () => await api("remote", { action: "stop" }));
     assert.deepEqual(errors, []);
     console.log(
-      "PASS: independent EQ/FX/compressor/preferences/tools, live faders, draft preservation, shared engine and local/remote sync, stale-chain protection, capture ownership, window reuse and popup fallback",
+      "PASS: independent panels, unity defaults/new strips with preserved gains, complete native parameter help, cross-window opt-out, compact floating panels, shared engine and local/remote sync, window reuse and popup fallback",
     );
   } finally {
     await browser?.close();

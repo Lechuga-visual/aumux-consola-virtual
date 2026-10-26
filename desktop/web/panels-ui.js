@@ -1,16 +1,16 @@
 "use strict";
 // Each detached panel is another surface of the same service, never another audio process.
 const panelDefinitions = {
-  "eq-dialog": [980, 760],
-  fx: [1120, 820],
-  "recording-dialog": [900, 720],
-  "compressor-dialog": [900, 740],
-  "network-dialog": [1080, 850],
-  "audio-settings": [700, 620],
-  "latency-dialog": [880, 750],
-  "calculator-dialog": [800, 640],
-  "diagnostic-dialog": [1100, 850],
-  "routing-dialog": [860, 720],
+  "eq-dialog": [820, 580],
+  fx: [800, 580],
+  "recording-dialog": [780, 600],
+  "compressor-dialog": [700, 540],
+  "network-dialog": [540, 740],
+  "audio-settings": [520, 580],
+  "latency-dialog": [660, 540],
+  "calculator-dialog": [520, 420],
+  "diagnostic-dialog": [800, 600],
+  "routing-dialog": [640, 520],
 };
 const panelQuery = new URLSearchParams(location.search);
 const detachedPanelId = Object.hasOwn(panelDefinitions, panelQuery.get("panel"))
@@ -53,22 +53,49 @@ function panelWindowSize(
 ) {
   const [fallbackWidth, fallbackHeight] = panelDefinitions[id];
   const prefs = id === "network-dialog" || id === "audio-settings";
+  // A phone needs its width for controls, rather than a desktop percentage.
+  const narrow = availableWidth < 720;
   return [
     Math.round(
       Math.min(
         availableWidth - 16,
-        availableWidth * (prefs ? 0.3 : 0.45),
+        availableWidth * (narrow ? 1 : prefs ? 0.3 : 0.45),
         fallbackWidth,
       ),
     ),
     Math.round(
       Math.min(
         availableHeight - 48,
-        availableHeight * (prefs ? 0.8 : 0.6),
+        availableHeight * (narrow ? 0.85 : prefs ? 0.8 : 0.6),
         fallbackHeight,
       ),
     ),
   ];
+}
+function compactPanel(id) {
+  const dialog = document.getElementById(id);
+  if (detachedPanelId === id) {
+    const [width, height] = panelWindowSize(id);
+    // resizeTo uses the outer window dimensions, including browser chrome.
+    // Browsers may ignore this on mobile or when a popup opens as a tab.
+    window.resizeTo(width, height);
+    return;
+  }
+  const [width, height] = panelWindowSize(id, innerWidth, innerHeight);
+  Object.assign(dialog.style, {
+    boxSizing: "border-box",
+    minWidth: "0",
+    width: width + "px",
+    height: "auto",
+    maxWidth: "calc(100vw - 16px)",
+    maxHeight: "calc(100dvh - 16px)",
+  });
+  if (dialog.getBoundingClientRect().height > height)
+    dialog.style.height = height + "px";
+  const rect = dialog.getBoundingClientRect();
+  dialog.style.left = Math.max(8, (innerWidth - rect.width) / 2) + "px";
+  dialog.style.top = Math.max(8, (innerHeight - rect.height) / 2) + "px";
+  dialog.dataset.positioned = "true";
 }
 function openDetachedPanel(id, state = {}) {
   if (detachedPanelId === id || panelMode === "floating") return false;
@@ -119,11 +146,12 @@ function showFloatingPanel(id) {
       resize: "none",
     });
     detachedTitle();
+    if (!dialog.dataset.positioned) {
+      compactPanel(id);
+      dialog.dataset.positioned = "true";
+    }
   } else if (!dialog.dataset.positioned) {
-    const rect = dialog.getBoundingClientRect();
-    dialog.style.left = Math.max(8, (innerWidth - rect.width) / 2) + "px";
-    dialog.style.top = Math.max(8, (innerHeight - rect.height) / 2) + "px";
-    dialog.dataset.positioned = "true";
+    compactPanel(id);
   }
 }
 function currentPanelState(id) {
@@ -167,9 +195,14 @@ function startDetachedPanel(id, state) {
   else if (id === "network-dialog") {
     document.getElementById("network-settings").click();
     if (
-      ["network", "console", "mix", "listen", "audio-network"].includes(
-        state.tab,
-      )
+      [
+        "general",
+        "network",
+        "console",
+        "mix",
+        "listen",
+        "audio-network",
+      ].includes(state.tab)
     )
       showPreference(state.tab);
   } else if (id === "recording-dialog") openRecording();
@@ -312,6 +345,14 @@ for (const id of Object.keys(panelDefinitions)) {
   const dialog = document.getElementById(id),
     heading = dialog.querySelector(".dialog-heading");
   if (!heading) continue;
+  const compact = document.createElement("button");
+  compact.type = "button";
+  compact.className = "panel-compact";
+  compact.textContent = "▣";
+  compact.title = "Restablecer tamaño compacto";
+  compact.setAttribute("aria-label", compact.title);
+  compact.onclick = () => compactPanel(id);
+  heading.insertBefore(compact, heading.lastElementChild);
   const button = document.createElement("button");
   button.type = "button";
   button.className = "panel-detach";
@@ -448,8 +489,10 @@ window.addEventListener("resize", () => {
     "dialog.floating-panel[open]",
   )) {
     const r = dialog.getBoundingClientRect();
-    dialog.style.left = Math.max(0, Math.min(r.left, innerWidth - 80)) + "px";
-    dialog.style.top = Math.max(0, Math.min(r.top, innerHeight - 40)) + "px";
+    dialog.style.left =
+      Math.max(8, Math.min(r.left, innerWidth - r.width - 8)) + "px";
+    dialog.style.top =
+      Math.max(8, Math.min(r.top, innerHeight - r.height - 8)) + "px";
   }
 });
 

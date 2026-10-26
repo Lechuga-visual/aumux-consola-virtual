@@ -20,7 +20,7 @@
             height="30"
           />
           <strong>Au<span>Mux</span></strong>
-          <span class="version">0.14.0</span>
+          <span class="version">0.14.1</span>
         </div>
         <div class="scene-title">
           CONSOLA DE MONITOREO <span>•</span>
@@ -372,6 +372,7 @@
           ><label
             >Tipo de filtro<select
               id="eq-kind"
+              data-help-parameter="kind"
               aria-label="Tipo de filtro de la banda"
             ></select></label
           ><button id="eq-reset-band">Restablecer banda</button>
@@ -379,7 +380,12 @@
         <div id="eq-bands" class="eq-knobs"></div>
         <div class="eq-global">
           <label class="eq-bypass-label"
-            ><input id="eq-bypass" type="checkbox" /> Bypass</label
+            ><input
+              id="eq-bypass"
+              type="checkbox"
+              data-help-parameter="bypass"
+            />
+            Bypass</label
           ><button id="eq-reset-all">Restablecer EQ</button
           ><span>48 kHz · fase mínima</span>
         </div>
@@ -392,8 +398,9 @@
       </div>
       <p class="hint eq-scope">
         Núcleo FreeEQ8 · ocho bandas antes de los inserts. La gráfica muestra la
-        respuesta del EQ; no incluye analizador de espectro ni las funciones de
-        dinámica del plugin original.
+        respuesta del EQ y el espectro real PRE/POST. Clic derecho en la gráfica
+        para cambiar vista o apagar el analizador. No incluye la dinámica del
+        plugin original.
       </p>
     </dialog>
     <dialog id="fx">
@@ -628,11 +635,21 @@
           <span>REDUCCIÓN DE GANANCIA</span>
           <div class="gr-track"><i id="comp-gr-fill"></i></div>
           <strong id="comp-gr-value">0.0 dB</strong
-          ><label><input id="comp-bypass" type="checkbox" /> Bypass</label>
+          ><label
+            ><input
+              id="comp-bypass"
+              type="checkbox"
+              data-help-parameter="bypass"
+            />
+            Bypass</label
+          >
         </div>
       </div>
       <label class="sidechain-label"
-        >Detector / sidechain<select id="comp-source"></select
+        >Detector / sidechain<select
+          id="comp-source"
+          data-help-parameter="source"
+        ></select
       ></label>
       <div id="comp-knobs" class="comp-knobs"></div>
       <p class="hint">
@@ -664,6 +681,16 @@
             aria-selected="true"
           >
             Redes y servidores
+          </button>
+          <button
+            id="pref-tab-general"
+            role="tab"
+            data-preference="general"
+            aria-controls="pref-general"
+            aria-selected="false"
+            tabindex="-1"
+          >
+            General
           </button>
           <button
             id="pref-tab-console"
@@ -707,6 +734,23 @@
           </button>
         </nav>
         <div class="preferences-content">
+          <section
+            id="pref-general"
+            role="tabpanel"
+            aria-labelledby="pref-tab-general"
+            hidden
+          >
+            <h3>Ayuda y espacio de trabajo</h3>
+            <label
+              ><input id="show-plugin-help" type="checkbox" checked /> Mostrar
+              ayuda de parámetros en los plugins</label
+            >
+            <p class="hint">
+              Muestra una descripción al pie de EQ, compresor y FX al tocar o
+              enfocar sus controles. Desactívala para liberar espacio. Se guarda
+              en este navegador y se aplica a sus ventanas abiertas.
+            </p>
+          </section>
           <section
             id="pref-audio-network"
             role="tabpanel"
@@ -1108,7 +1152,7 @@
         calibrado.
       </p>
       <p>
-        Hasta cuatro efectos nativos o VST3 por canal y salida. Las escenas 0.1
+        Hasta ocho efectos nativos o VST3 por canal y salida. Las escenas 0.1
         siguen siendo compatibles. Se guardan parámetros numéricos, no el estado
         binario de presets. Todavía no hay compensación de latencia ni editor
         gráfico nativo VST3.
@@ -1120,6 +1164,8 @@
       </p>
     </dialog>
     <script src="/panels-ui.js"></script>
+    <script src="/plugin-help.js"></script>
+    <script src="/eq-spectrum.js"></script>
     <script src="/console.js"></script>
     <script src="/effects-ui.js"></script>
     <script src="/recording-ui.js"></script>

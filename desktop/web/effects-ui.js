@@ -222,6 +222,11 @@ function openFx(type, index, slot) {
   $("fx-location").textContent = `${target.name} · CADENA FX`;
   $("fx").classList.remove("vox-editor");
   $("fx-browser").open = !fx;
+  setPluginHelp("fx", {
+    id: "",
+    name: fx ? fxName(fx) : "Añadir efecto",
+    params: [],
+  });
   renderFxRail();
   for (const id of [
     "builtin-fx",
@@ -327,6 +332,7 @@ function showParams() {
 }
 function renderFxControls(d) {
   $("params").replaceChildren();
+  setPluginHelp("fx", d);
   $("fx").classList.toggle("vox-editor", d.id === "native/freevox8");
   if (d.id === "native/freevox8") {
     renderFreevox(d);
@@ -344,6 +350,7 @@ function renderFxControls(d) {
         control = rotary({
           label: p.name,
           inputLabel: p.name,
+          helpId: p.id,
           value: pendingFx.params[p.id],
           defaultValue: p.value,
           min: p.min,
@@ -381,6 +388,7 @@ function renderFxControls(d) {
           },
         ),
         number = el("input");
+      bindParameterHelp(row, p.id);
       number.type = "number";
       number.min = p.min;
       number.max = p.max;

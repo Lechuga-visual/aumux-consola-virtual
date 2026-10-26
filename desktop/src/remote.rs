@@ -522,6 +522,8 @@ impl Remote {
                 | "/plugin-browser.js"
                 | "/recording-ui.js"
                 | "/tools-ui.js"
+                | "/plugin-help.js"
+                | "/eq-spectrum.js"
                 | "/panels-ui.js"
                 | "/diagnostics-ui.js"
         ) {
@@ -537,6 +539,8 @@ impl Remote {
                     ("text/javascript", include_str!("../web/diagnostics-ui.js"))
                 }
                 "/tools-ui.js" => ("text/javascript", include_str!("../web/tools-ui.js")),
+                "/plugin-help.js" => ("text/javascript", include_str!("../web/plugin-help.js")),
+                "/eq-spectrum.js" => ("text/javascript", include_str!("../web/eq-spectrum.js")),
                 "/recording-ui.js" => ("text/javascript", include_str!("../web/recording-ui.js")),
                 "/plugin-browser.js" => {
                     ("text/javascript", include_str!("../web/plugin-browser.js"))

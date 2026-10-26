@@ -1662,12 +1662,14 @@ function rotary({
   onChange,
   onCommit,
   inputLabel = label,
+  helpId,
 }) {
   const root = el("div", "rotary-control"),
     caption = el("span", "rotary-label", label),
     dial = el("div", "rotary-dial"),
     number = el("input", "rotary-value"),
     suffix = el("span", "rotary-unit", unit);
+  if (helpId) bindParameterHelp(root, helpId);
   root.style.setProperty("--knob-colour", colour);
   dial.tabIndex = 0;
   dial.setAttribute("role", "slider");
@@ -1835,6 +1837,7 @@ function renderFreevox(descriptor) {
   );
   panel.append(heading);
   const modes = el("div", "vox-modes");
+  bindParameterHelp(modes, "Mode");
   modes.setAttribute("aria-label", "Modo FreeVox8");
   ["Vocoder", "Mask", "Ghost", "Morph"].forEach((name, i) => {
     const button = el("button", "", name);
@@ -1899,6 +1902,7 @@ function renderFreevox(descriptor) {
       const control = rotary({
         label: names[id],
         inputLabel: `FreeVox8 ${id}`,
+        helpId: id,
         value: pendingFx.params[id],
         defaultValue: p.value,
         min: p.min,
@@ -2326,7 +2330,9 @@ function openEq(type, index) {
   );
   selectEqBand(0);
   renderEqPresets();
+  setBuiltInHelp("eq-dialog", "eq", "FreeEQ8");
   showFloatingPanel("eq-dialog");
+  attachEqSpectrum();
 }
 function selectEqBand(index) {
   eqBandIndex = index;
@@ -2342,6 +2348,7 @@ function selectEqBand(index) {
     rotary({
       label: `EQ banda ${index + 1} ${label.toLowerCase()}`,
       inputLabel: `EQ banda ${index + 1} ${key}`,
+      helpId: key,
       value: band[key],
       defaultValue: defaultEq().bands[index][key],
       min,
@@ -2534,7 +2541,7 @@ async function resizeStructure(
       candidate.buses.push({
         name: `Monitor ${candidate.buses.length}`,
         format: auxFormat,
-        gain_db: -12,
+        gain_db: 0,
         mute: false,
         output: null,
         inserts: [],

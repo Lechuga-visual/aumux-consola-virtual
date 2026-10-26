@@ -258,6 +258,8 @@ pub struct Mixer {
     pub listen: Option<Arc<crate::listen::Hub>>,
     pub audio_network: Option<Arc<crate::audio_network::Hub>>,
     pub recording: Option<Arc<crate::recording::Tap>>,
+    pub spectrum: Option<Arc<crate::spectrum::Hub>>,
+    spectrum_pre: [Vec<f32>; 2],
     record_pre: Vec<Vec<Vec<f32>>>,
     record_post: Vec<Vec<Vec<f32>>>,
     pub controls: Arc<Controls>,
@@ -488,6 +490,8 @@ impl Mixer {
             listen: None,
             audio_network: None,
             recording: None,
+            spectrum: None,
+            spectrum_pre: std::array::from_fn(|_| vec![0.0; MAX_FRAMES]),
             record_pre: Vec::new(),
             record_post: Vec::new(),
             keys: (0..channels)
@@ -793,7 +797,22 @@ impl Mixer {
             }
             self.generator_blend[i] = blend;
             self.generator_level[i] = noise_gain;
+            let spectral = self.spectrum.as_ref().and_then(|h| h.wants(i));
+            if spectral.is_some() {
+                for side in 0..2 {
+                    self.spectrum_pre[side][..frames].copy_from_slice(&ch[side][..frames]);
+                }
+            }
             self.channel_eq[i].process(ch, frames, &self.controls.eq[i], self.rate);
+            if let Some(generation) = spectral {
+                self.spectrum.as_ref().unwrap().capture(
+                    i,
+                    generation,
+                    &self.spectrum_pre,
+                    ch,
+                    frames,
+                );
+            }
             for side in 0..2 {
                 self.keys[i][side][..frames].copy_from_slice(&ch[side][..frames]);
             }
@@ -907,12 +926,28 @@ impl Mixer {
                 continue;
             }
             let bus = &mut self.buses[b];
+            let spectral_node = MAX_CHANNELS + b;
+            let spectral = self.spectrum.as_ref().and_then(|h| h.wants(spectral_node));
+            if spectral.is_some() {
+                for side in 0..2 {
+                    self.spectrum_pre[side][..frames].copy_from_slice(&bus[side][..frames]);
+                }
+            }
             self.bus_eq[b].process(
                 bus,
                 frames,
                 &self.controls.eq[self.channel.len() + b],
                 self.rate,
             );
+            if let Some(generation) = spectral {
+                self.spectrum.as_ref().unwrap().capture(
+                    spectral_node,
+                    generation,
+                    &self.spectrum_pre,
+                    bus,
+                    frames,
+                );
+            }
             self.bus_comp[b].process(
                 bus,
                 &self.keys,
@@ -1692,5 +1727,28 @@ mod diagnostic_delay_tests {
             );
             hub.cancel();
         }
+    }
+}
+
+#[cfg(test)]
+mod spectrum_tests {
+    use super::*;
+    #[test]
+    fn live_eq_spectrum_copy_keeps_the_entire_callback_free_of_rust_allocations() {
+        let mut config = Config::default();
+        config.normalise();
+        config.channels[0].generator.signal = Signal::Sine;
+        let hub = crate::spectrum::Hub::new();
+        hub.request(0, 3, true).unwrap();
+        let mut mixer = Mixer::new(&config, Controls::new(&config)).unwrap();
+        mixer.spectrum = Some(hub);
+        let input = vec![0.0; 256 * config.inputs as usize];
+        let mut output = vec![0.0; 512];
+        crate::test_support::no_heap(|| {
+            for _ in 0..20 {
+                assert!(mixer.process(&input, &mut output, 256, 2));
+            }
+        });
+        assert!(output.iter().all(|x| x.is_finite()));
     }
 }

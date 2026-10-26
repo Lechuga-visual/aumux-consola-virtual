@@ -50,6 +50,9 @@ shutil.copy2(root/'README.md',source/'README.md')
 if (root/'docs/screenshots').is_dir():
     shutil.copytree(root/'docs/screenshots', stage/'screenshots', dirs_exist_ok=True)
     shutil.copytree(root/'docs/screenshots', source/'docs/screenshots', dirs_exist_ok=True)
+if (root/'docs/propuestas').is_dir():
+    shutil.copytree(root/'docs/propuestas', stage/'propuestas', dirs_exist_ok=True)
+    shutil.copytree(root/'docs/propuestas', source/'docs/propuestas', dirs_exist_ok=True)
 metadata = json.loads(Path("/workspace/scratch/monitor-cargo-metadata.json").read_text())
 licenses = stage / "licenses"
 for package in metadata["packages"]:

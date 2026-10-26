@@ -127,6 +127,7 @@ function openCompressor(type, index) {
   flushComp();
   compTarget = { type, index };
   const c = currentComp();
+  setBuiltInHelp("compressor-dialog", "compressor", "Compresor AuMux");
   $("compressor-title").textContent =
     `Compresor · ${targetOf(type, index).name}`;
   $("comp-bypass").checked = c.bypass;
@@ -158,6 +159,7 @@ function openCompressor(type, index) {
     rotary({
       label,
       inputLabel: `Compresor ${key}`,
+      helpId: key,
       value: c[key],
       defaultValue: defaultCompressor()[key],
       min,
@@ -449,6 +451,7 @@ function showContextActions(title, entries, x, y) {
     menu.append(button);
   }
   menu.hidden = false;
+  menu.style.zIndex = String(++panelZ);
   menu.style.left =
     Math.max(0, Math.min(x, innerWidth - menu.offsetWidth - 6)) + "px";
   menu.style.top =

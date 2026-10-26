@@ -19,6 +19,7 @@ mod network;
 mod presets;
 mod recording;
 mod remote;
+mod spectrum;
 mod telemetry;
 #[cfg(test)]
 mod test_support;
@@ -37,6 +38,7 @@ use tiny_http::{Header, Method, Request, Response, Server};
 
 struct App {
     config: Config,
+    spectrum: Arc<spectrum::Hub>,
     diagnostics: Arc<diagnostics::Hub>,
     benchmark: Option<diagnostics::bench::Job>,
     bench_results: Vec<Value>,
@@ -67,6 +69,7 @@ impl App {
         let listen = listen::Hub::new()?;
         listen.configure(&config);
         Ok(Self {
+            spectrum: spectrum::Hub::new(),
             listen,
             diagnostics: diagnostics::Hub::new(),
             benchmark: None,
@@ -92,6 +95,7 @@ impl App {
         })
     }
     fn stop(&mut self) {
+        self.spectrum.reset();
         self.diagnostics.cancel();
         if self.probe_restore {
             self.controls.update(&self.config);
@@ -148,6 +152,7 @@ impl App {
             &self.fx_latencies,
         )?;
         next.diagnostics = Some(self.diagnostics.tap());
+        next.spectrum = Some(self.spectrum.clone());
         next.listen = Some(self.listen.clone());
         next.audio_network = Some(self.audio_network.clone());
         next.attach_recording(tap);
@@ -361,6 +366,7 @@ impl App {
         self.controls.clipped.store(0, Relaxed);
         let mut mixer = Mixer::new(&self.config, self.controls.clone())?;
         mixer.diagnostics = Some(self.diagnostics.tap());
+        mixer.spectrum = Some(self.spectrum.clone());
         mixer.listen = Some(self.listen.clone());
         mixer.audio_network = Some(self.audio_network.clone());
         self.latencies = mixer.latencies.clone();
@@ -448,6 +454,22 @@ impl App {
         }
     }
     fn api(&mut self, path: &str, body: &str) -> Result<Value, String> {
+        if path == "/api/spectrum" {
+            let v: Value = serde_json::from_str(body).map_err(|e| e.to_string())?;
+            let index = v["index"].as_u64().ok_or("Índice espectral inválido")? as usize;
+            let node = match v["type"].as_str() {
+                Some("channel") if index < self.config.channels.len() => index,
+                Some("bus") if index < self.config.buses.len() => MAX_CHANNELS + index,
+                _ => return Err("Fuente espectral inválida".into()),
+            };
+            let mask = match v["trace"].as_str() {
+                Some("pre") => 1,
+                Some("post") => 2,
+                Some("both") => 3,
+                _ => return Err("Traza espectral inválida".into()),
+            };
+            return self.spectrum.request(node, mask, self.live || self.demo.is_some());
+        }
         if self.diagnostics.probing()
             && !matches!(path, "/api/diagnostics/cancel" | "/api/stop" | "/api/panic")
         {
@@ -653,6 +675,7 @@ impl App {
                     let mut next =
                         Mixer::reconfigure(&c, controls.clone(), &self.config, &self.fx_latencies)?;
                     next.diagnostics = Some(self.diagnostics.tap());
+                    next.spectrum = Some(self.spectrum.clone());
                     next.listen = Some(self.listen.clone());
                     next.audio_network = Some(self.audio_network.clone());
                     next.attach_recording(self.recorder.as_ref().map(|r| r.tap()));
@@ -698,6 +721,9 @@ impl App {
                 }
                 if c.device != self.config.device {
                     self.device_name = None;
+                }
+                if topology_changed {
+                    self.spectrum.reset();
                 }
                 self.config = c;
                 self.remote.refresh(
@@ -1046,6 +1072,8 @@ fn run() -> Result<(), String> {
                 ),
                 "/workspace-ui.js" => reply(req,200,"text/javascript; charset=utf-8",include_str!("../web/workspace-ui.js").into()),
                 "/tools-ui.js" => reply(req,200,"text/javascript; charset=utf-8",include_str!("../web/tools-ui.js").into()),
+                "/plugin-help.js" => reply(req,200,"text/javascript; charset=utf-8",include_str!("../web/plugin-help.js").into()),
+                "/eq-spectrum.js" => reply(req,200,"text/javascript; charset=utf-8",include_str!("../web/eq-spectrum.js").into()),
                 "/api/sync-state" => reply(req,200,"application/json",json!({"revision":app.remote.status()["revision"],"config":app.config}).to_string()),
                 "/api/diagnostics/report" => reply(req,200,"application/json",app.diagnostics_report().to_string()),
                 "/api/diagnostics/live" => reply(req,200,"application/json",app.diagnostics.live_status().to_string()),

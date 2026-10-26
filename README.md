@@ -10,13 +10,24 @@ web permite objetivos de búfer de 40/80/120/200 ms (80 ms inicialmente), más e
 su optimización y medición son prioritarias en la
 [hoja de ruta](docs/hoja-de-ruta.md).
 
-**Prueba local:** [descargar Windows x64](https://github.com/Lechuga-visual/aumux-consola-virtual/releases/download/v0.14.0/AuMux-0.14.0-Windows-x64.zip)
+**Prueba local:** [descargar Windows x64](https://github.com/Lechuga-visual/aumux-consola-virtual/releases/download/v0.14.1/AuMux-0.14.1-Windows-x64.zip)
 e [instrucciones para Windows](docs/probar-en-windows.md).
 La descarga incluye el ejecutable, el receptor de OBS y el código fuente.
-Su checksum está en [SHA-256](dist/AuMux-0.14.0-Windows-x64.zip.sha256).
+Su checksum está en [SHA-256](dist/AuMux-0.14.1-Windows-x64.zip.sha256).
 
 **Capturas:** [galería de la interfaz actual](docs/capturas.md), con consola,
 efectos, preferencias y vistas remotas para tablet y celular.
+
+## Novedades 0.14.1 · analizador y espacio de trabajo
+
+Espectro real PRE/POST en el EQ: compacto por defecto y comparación/historial
+desde el menú contextual. Análisis fuera del callback, sin añadir un búfer de audio.
+Ayuda de parámetros en EQ, compresor y FX, con interruptor en **Preferencias →
+General**. Ventanas y paneles flotantes más compactos, botón para restablecer su
+tamaño y controles adaptados al ancho del panel. Canales, auxiliares y master
+nuevos empiezan a 0 dB; se conservan los niveles de escenas existentes.
+[Uso y capturas](docs/interfaz-0.14.1.md) ·
+[Tres propuestas para el analizador del EQ](docs/propuestas/analizador-eq.md).
 
 ## Novedades 0.14 · control y multipista
 

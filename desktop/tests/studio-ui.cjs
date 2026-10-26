@@ -334,7 +334,7 @@ const { chromium } = require("playwright-core"),
         panelWindowSize("network-dialog", 1920, 1080),
       ],
     }));
-    assert.deepEqual(calls.sizes[0], [864, 648]);
+    assert.deepEqual(calls.sizes[0], [800, 580]);
     assert(calls.sizes[1][0] <= 576 && calls.sizes[1][1] <= 864);
     for (const call of calls.calls) {
       const width = Number(call.features.match(/width=(\d+)/)[1]),

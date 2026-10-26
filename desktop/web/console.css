@@ -3284,6 +3284,7 @@ body.touch-mode {
 
 /* Floating panels remain modeless; detached panels get their own OS window. */
 dialog.floating-panel {
+  container-type: inline-size;
   position: fixed;
   margin: 0;
   resize: both;
@@ -3298,10 +3299,153 @@ dialog.floating-panel .dialog-heading {
   user-select: none;
 }
 .panel-detach {
-  margin-left: auto;
   margin-right: 12px;
   flex-shrink: 0;
   min-width: 30px;
+}
+.panel-compact {
+  margin-left: auto;
+  flex-shrink: 0;
+  min-width: 30px;
+}
+.plugin-help {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  padding: 9px 12px;
+  background: #1b232d;
+  border-top: 1px solid #435364;
+  font-size: 11px;
+  line-height: 1.4;
+  clear: both;
+}
+.plugin-help[hidden] {
+  display: none;
+}
+.plugin-help strong {
+  color: #9ed4df;
+}
+.plugin-help p {
+  margin: 3px 0 5px;
+}
+.plugin-help summary {
+  cursor: pointer;
+  color: #b0bdc9;
+}
+.plugin-help dl {
+  max-height: 130px;
+  overflow: auto;
+  margin: 7px 0 0;
+}
+.plugin-help dt {
+  font-weight: bold;
+  color: #d8e1e9;
+}
+.plugin-help dd {
+  margin: 0 0 7px;
+  color: #b6c2cf;
+}
+/* Floating panels use their own width, even on a large console viewport. */
+@container (max-width: 850px) {
+  .eq-editor-bottom {
+    grid-template-columns: 135px minmax(0, 1fr);
+    gap: 12px;
+    padding: 12px;
+  }
+  .eq-global {
+    grid-column: 1 / -1;
+    border: 0;
+    border-top: 1px solid #292b3b;
+    padding: 10px 0 0;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .eq-knobs {
+    gap: 6px;
+  }
+  .eq-editor-footer {
+    flex-direction: column;
+    gap: 3px;
+  }
+  .fx-workspace {
+    grid-template-columns: 135px minmax(0, 1fr);
+    gap: 8px;
+  }
+  .generic-knob-bank {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .freevox-panel {
+    grid-template-columns: 1fr;
+  }
+  .vox-group:nth-child(4) {
+    border: 0;
+    padding: 0;
+  }
+  .vox-knob-bank,
+  .vox-group:nth-child(4) .vox-knob-bank {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .plugin-library-columns {
+    grid-template-columns: 108px minmax(0, 1fr);
+  }
+  .comp-knobs {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+@container (max-width: 600px) {
+  .preferences-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .preferences-nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+    max-height: 150px;
+    border-right: 0;
+    border-bottom: 1px solid #46515e;
+  }
+  .preferences-nav button {
+    flex: 1 1 110px;
+    padding: 6px;
+    min-height: 36px;
+  }
+}
+@container (max-width: 560px) {
+  .eq-editor-bottom {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .eq-band-selector {
+    border: 0;
+    padding: 0;
+  }
+  .eq-knobs .rotary-dial {
+    width: 64px;
+    height: 64px;
+  }
+  .comp-knobs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .fx-workspace {
+    grid-template-columns: 105px minmax(0, 1fr);
+  }
+  .generic-knob-bank {
+    grid-template-columns: 1fr;
+  }
+  .plugin-library-toolbar,
+  .plugin-library-filters {
+    flex-wrap: wrap;
+  }
+  .plugin-library-columns {
+    grid-template-columns: 92px minmax(0, 1fr);
+  }
+  #params .generic-parameter {
+    grid-template-columns: minmax(50px, 1fr) minmax(0, 1fr) 60px;
+    gap: 6px;
+  }
+  #params .generic-parameter input[type="number"] {
+    width: 60px;
+  }
 }
 body.detached-panel {
   height: 100dvh;
@@ -3739,4 +3883,66 @@ body.detached-panel #network-dialog.detached-active {
 
 .touch-mode .insert-rack {
   touch-action: none;
+}
+
+/* Spectral data has its own right-hand dBFS scale; EQ gain remains on the left. */
+.eq-spectrum-traces {
+  pointer-events: none;
+}
+.eq-spectrum-pre {
+  stroke: #93a0ae;
+  stroke-width: 1.2;
+  fill: none;
+}
+.eq-spectrum-post {
+  stroke: #45c3d6;
+  stroke-width: 1.5;
+  fill: none;
+}
+.eq-spectrum-peaks {
+  stroke: #c5b36e;
+  stroke-width: 1;
+  fill: none;
+  stroke-dasharray: 3 3;
+}
+.eq-spectrum-axis {
+  pointer-events: none;
+}
+.eq-spectrum-axis text {
+  fill: #66a9b8;
+  font-size: 9px;
+}
+.eq-spectrum-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px 12px;
+  padding: 5px 12px;
+  border-top: 1px solid #2a3644;
+}
+.eq-spectrum-bar button {
+  font-size: 10px;
+  padding: 4px 7px;
+}
+.eq-spectrum-bar span {
+  color: #8fabbc;
+  font-size: 10px;
+}
+.eq-spectrum-history {
+  padding: 0 2.7% 5px 4.7%;
+}
+.eq-spectrum-history[hidden] {
+  display: none;
+}
+.eq-spectrum-history canvas {
+  width: 100%;
+  height: 85px;
+  display: block;
+  background: #101828;
+}
+.eq-spectrum-history span {
+  display: block;
+  color: #8ba3b4;
+  font-size: 9px;
+  padding-top: 4px;
 }
