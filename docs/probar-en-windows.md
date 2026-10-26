@@ -1,4 +1,4 @@
-# AuMux 0.13.3 · prueba local en Windows x64
+# AuMux 0.14.0 · prueba local en Windows x64
 
 Miniapp de mezcla con canales y auxiliares configurables y master estéreo, a 48 kHz. Reutiliza DSP
 y host VST3 de SoundCraft de Artcraft, con una superficie y un ruteo propios.
@@ -8,7 +8,7 @@ Es un prototipo para pruebas; todavía no está validado para una sesión en viv
 
 ## Probar sonido sin ASIO ni interfaz externa
 
-1. Extrae **todo** `AuMux-0.13.3-Windows-x64.zip` y ejecuta `AuMux.exe`.
+1. Extrae **todo** `AuMux-0.14.0-Windows-x64.zip` y ejecuta `AuMux.exe`.
    Cierra la versión anterior antes de abrir esta.
 2. Pulsa **AUDIO PC**. Usa los parlantes/audífonos predeterminados de Windows
    mediante WASAPI, sin controlador ASIO ni interfaz externa.
@@ -35,11 +35,11 @@ con una entrada gradual de un bloque. **DETENER** libera el dispositivo. Cerrar 
 de AuMux no detiene el proceso ni el audio. Usa **Cerrar servicio** desde la bandeja
 y confirma con **Sí** para terminar el motor y los servidores.
 
-## Novedades 0.13.3 · ventanas
+## Novedades 0.14.0 · ventanas
 
 Los paneles de herramientas, plugins, EQ y preferencias permiten seguir usando
 la consola. Ventanas independientes por defecto; modo flotante desde
-**Herramientas → Paneles**. [Guía de ventanas](interfaz-0.13.3.md).
+**Herramientas → Paneles**. [Guía de ventanas](interfaz-0.14.md).
 
 ## Novedades 0.13 · pruebas de hardware
 
@@ -52,7 +52,7 @@ son entradas separadas. [Guía para preparar y registrar las pruebas](interfaz-0
 
 1. Cierra OBS y la instancia anterior de AuMux. Extrae todo el ZIP nuevo.
 2. Ejecuta `Instalar-receptor-OBS.cmd` como administrador para actualizar la DLL.
-3. Abre `AuMux.exe`. La marca debe mostrar **0.13.3**.
+3. Abre `AuMux.exe`. La marca debe mostrar **0.14.0**.
 4. En OBS, agrega **AuMux Audio**, o reutiliza tu fuente existente.
 5. Abre sus propiedades y pulsa **Configurar AuMux Audio…**.
 
@@ -147,7 +147,7 @@ Más detalles y capturas en [interfaz-0.7.md](interfaz-0.7.md).
 ## La consola
 
 - Tiras de canal y salida con faders de recorrido graduado, nombres editables,
-  panorama, mute, EQ nativo y cuatro inserts nativos/VST3 visibles.
+  panorama, mute, EQ nativo y ocho inserts nativos/VST3 visibles.
 - Inspector a la derecha con generador y envíos pre/post del canal seleccionado.
 - **Fader Flip → Main Level** controla los faders principales; **Aux 1…N**
   convierte los faders de entrada en controles de envío al monitor elegido.
@@ -251,7 +251,7 @@ filtros por fabricante y formato. Los bundles VST3 con varias clases permiten
 elegir el efecto. La tira muestra su nombre real.
 
 El navegador ofrece **FreeVox8 (filterbank)** y los **20 efectos
-MDA** integrados. No necesitas instalar sus VST3. Comparten los cuatro slots
+MDA** integrados. No necesitas instalar sus VST3. Comparten los ocho slots
 con VST3 externos y se procesan en serie; el EQ no consume slots. El panel
 ofrece perillas para MDA y un panel propio para FreeVox8. Los parámetros
 nativos se ajustan en vivo. FreeVox8 es un vocoder creativo con
@@ -267,7 +267,7 @@ seleccionado. El nombre inicial es el del bundle; al leerlo se muestran los
 nombres reales de sus clases. Se mantiene la entrada manual para ubicaciones
 especiales. Los VST2 no aparecen ni se alojan en esta versión.
 
-Hay hasta **cuatro inserts en serie por canal, auxiliar y master**. La lista
+Hay hasta **ocho inserts en serie por canal, auxiliar y master**. La lista
 lateral selecciona el efecto mostrado. **+ FX** añade otro desde esa ventana;
 **Quitar** o Supr con la lista enfocada lo elimina. ↑/↓ cambia el orden.
 Los cambios de parámetros se guardan al aplicar, cambiar de efecto o cerrar.
@@ -275,7 +275,7 @@ Los parámetros nativos existentes se actualizan automáticamente en vivo;
 los VST3 requieren detener el audio para editarse y usan un panel genérico de
 deslizadores y valores, sin abrir su ventana gráfica propia. Las casillas de
 la lista controlan bypass en vivo. Agregar, reemplazar, quitar y reordenar
-funciona en vivo desde 0.13.3.
+funciona en vivo desde 0.14.0.
 
 El selector **Presets** ofrece los valores iniciales y tus presets guardados.
 Escribe un nombre y pulsa Guardar; elige uno para recuperarlo. También puedes
@@ -375,11 +375,11 @@ buffer. La conexión ASIO usa ahora una ABI abierta basada en WineASIO, sin SDK
 propietario; compilada para Windows x64, pendiente de prueba con tu driver.
 
 La aplicación combinada desde 0.5 es GPL-3.0-only; fuentes y licencias incluidas.
-Grabación multipista y OSC/Mackie pendientes.
+Grabación multipista selectiva disponible desde 0.14; OSC/Mackie pendiente.
 
 Si no aparecen **+ Canal**, **+ Aux** y **Canales y auxiliares**, cierra el
 proceso anterior y abre el ejecutable del ZIP nuevo: la marca superior debe
-mostrar **AuMux 0.13.3**. Se prueba en Windows extrayendo todo el ZIP; no mezcles
+mostrar **AuMux 0.14.0**. Se prueba en Windows extrayendo todo el ZIP; no mezcles
 archivos de varias versiones.
 
 Las novedades de dinámica, superficie adaptativa y escucha LAN se describen en
@@ -389,4 +389,10 @@ latencia quedan en [la hoja de ruta](hoja-de-ruta.md).
 ## Cambiar efectos mientras suena
 
 Desde 0.13.3 puedes añadir, reemplazar, quitar y reordenar inserts en vivo.
-[Detalles y cambios que todavía requieren detener el motor](interfaz-0.13.3.md).
+[Detalles y cambios que todavía requieren detener el motor](interfaz-0.14.md).
+
+## Grabación multipista
+
+Desde Herramientas puedes seleccionar pistas y PRE/POST por canal; master y
+auxiliares seleccionados se graban procesados postfader.
+[Guía, carpeta de destino y límites de grabación](interfaz-0.14.md).

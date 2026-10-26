@@ -91,7 +91,7 @@ const fs = require("node:fs/promises");
       .locator(".strip[data-strip=c0] .comp-module")
       .click({ button: "right" });
     await page
-      .getByRole("menuitem", { name: "Compresor / sidechain", exact: true })
+      .getByRole("menuitem", { name: "Abrir compresor", exact: true })
       .click();
     await page.waitForSelector("#compressor-dialog[open]");
     assert.equal(await page.locator("#comp-knobs [role=slider]").count(), 8);
@@ -173,7 +173,7 @@ const fs = require("node:fs/promises");
       path: "/workspace/scratch/monitor-mix-workspace.png",
     });
     await page
-      .locator(".strip[data-strip=c0] .comp-module")
+      .locator(".strip[data-strip=c0] .strip-header")
       .click({ button: "right" });
     await page.getByRole("menuitem", { name: "Desfijar", exact: true }).click();
     await page.waitForFunction(() => cfg.channels[0].pin === "none");

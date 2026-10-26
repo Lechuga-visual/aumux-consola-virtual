@@ -17,6 +17,7 @@ mod native;
 mod native_fx;
 mod network;
 mod presets;
+mod recording;
 mod remote;
 mod telemetry;
 #[cfg(test)]
@@ -54,6 +55,8 @@ struct App {
     live: bool,
     latencies: Vec<usize>,
     fx_latencies: Vec<Vec<usize>>,
+    recorder: Option<recording::Session>,
+    record_last: Value,
     system: telemetry::Telemetry,
 }
 impl App {
@@ -83,6 +86,8 @@ impl App {
             live: false,
             latencies: vec![0; DEFAULT_CHANNELS + DEFAULT_AUXES + 1],
             fx_latencies: vec![Vec::new(); DEFAULT_CHANNELS + DEFAULT_AUXES + 1],
+            recorder: None,
+            record_last: json!({"active":false,"session_open":false,"state":"idle","tracks":[]}),
             system: telemetry::Telemetry::new(),
         })
     }
@@ -100,6 +105,53 @@ impl App {
         self.system_live = false;
         self.demo = None;
         self.live = false;
+        if let Some(recorder) = self.recorder.take() {
+            self.record_last = recorder.finish();
+        }
+    }
+    fn recording_status(&self) -> Value {
+        let mut status = self
+            .recorder
+            .as_ref()
+            .map_or_else(|| self.record_last.clone(), |r| r.status());
+        status["default_directory"] = json!(recording::default_directory());
+        status
+    }
+    fn replace_active_mixer(&mut self, next: Mixer) -> Result<(), String> {
+        let controls = next.controls.clone();
+        let latencies = next.latencies.clone();
+        let fx_latencies = next.fx_latencies.clone();
+        let result = if let Some(demo) = &self.demo {
+            demo.replace_mixer(next)
+        } else if self.system_live {
+            self.system_audio
+                .as_mut()
+                .ok_or("System audio unavailable")?
+                .replace_mixer(next)
+        } else {
+            self.audio.replace_mixer(next)
+        };
+        if let Err(error) = result {
+            self.stop();
+            return Err(error);
+        }
+        self.controls = controls;
+        self.latencies = latencies;
+        self.fx_latencies = fx_latencies;
+        Ok(())
+    }
+    fn recording_mixer(&self, tap: Option<Arc<recording::Tap>>) -> Result<Mixer, String> {
+        let mut next = Mixer::reconfigure(
+            &self.config,
+            Controls::new(&self.config),
+            &self.config,
+            &self.fx_latencies,
+        )?;
+        next.diagnostics = Some(self.diagnostics.tap());
+        next.listen = Some(self.listen.clone());
+        next.audio_network = Some(self.audio_network.clone());
+        next.attach_recording(tap);
+        Ok(next)
     }
     fn restore_probe(&mut self) {
         if self.probe_restore && !self.diagnostics.busy() {
@@ -124,6 +176,13 @@ impl App {
             }
         }
         let mut status = self.status();
+        if let Some(recording) = status["recording"].as_object_mut() {
+            for key in ["directory", "default_directory"] {
+                if recording.contains_key(key) {
+                    recording.insert(key.into(), json!("Ruta de grabación omitida"));
+                }
+            }
+        }
         if let Some(remote) = status["remote"].as_object_mut() {
             remote.remove("sessions");
         }
@@ -278,7 +337,7 @@ impl App {
             "remote":self.remote.status(),
             "latency":self.latency(),
             "system":self.system.cached(),"performance":self.controls.performance.snapshot(),
-            "bridge_drops":self.bridge.dropped.load(Relaxed),"bridge":self.bridge.status(),"latencies":self.latencies,"actual_buffer":actual_buffer})
+            "bridge_drops":self.bridge.dropped.load(Relaxed),"bridge":self.bridge.status(),"latencies":self.latencies,"recording":self.recording_status(),"actual_buffer":actual_buffer})
     }
     fn start(&mut self, mode: &str) -> Result<Value, String> {
         if mode != "demo" && mode != "asio" && mode != "system" {
@@ -374,7 +433,7 @@ impl App {
             "/api/presets" => presets::load().map(|p| json!(p)),
             "/api/native" => Ok(json!(native_fx::registry())),
             "/api/limits" => Ok(
-                json!({"channels":MAX_CHANNELS,"auxes":MAX_AUXES,"inputs":MAX_IO,"outputs":MAX_IO}),
+                json!({"channels":MAX_CHANNELS,"auxes":MAX_AUXES,"inputs":MAX_IO,"outputs":MAX_IO,"inserts":INSERTS}),
             ),
             "/api/sync-state" => {
                 Ok(json!({"revision":self.remote.status()["revision"],"config":self.config}))
@@ -383,6 +442,7 @@ impl App {
             "/api/diagnostics/live" => Ok(self.diagnostics.live_status()),
             "/api/diagnostics" => Ok(self.diagnostics_status()),
             "/api/latency" => Ok(self.latency()),
+            "/api/recording" => Ok(self.recording_status()),
             "/api/addresses" => Ok(network::addresses()),
             _ => Err("API no disponible".into()),
         }
@@ -461,6 +521,11 @@ impl App {
                 Ok(self.diagnostics.status())
             }
             "/api/diagnostics/probe" => {
+                if self.recorder.is_some() {
+                    return Err(
+                        "Finaliza la grabación antes de emitir una prueba de loopback".into(),
+                    );
+                }
                 if !self.live || self.system_live {
                     return Err(
                         "El loopback físico requiere el motor ASIO activo con entradas y salidas"
@@ -551,6 +616,9 @@ impl App {
                     if structure && json!(base) != json!(self.config) {
                         return Err("La mezcla cambió; espera la sincronización antes de modificar la estructura".into());
                     }
+                    if remote::chains_conflict(&base, &c, &self.config) {
+                        return Err("La cadena FX cambió desde otra ventana; vuelve a seleccionar el efecto".into());
+                    }
                     c = serde_json::from_value(remote::merge_values(
                         &json!(base),
                         &json!(c),
@@ -561,6 +629,13 @@ impl App {
                 let topology_changed = c.channels.len() != self.config.channels.len()
                     || c.buses.len() != self.config.buses.len();
                 c.validate()?;
+                if self
+                    .recorder
+                    .as_ref()
+                    .is_some_and(|r| !r.tap().compatible(&c))
+                {
+                    return Err("Finaliza la grabación antes de cambiar cantidad o formato de canales/auxiliares".into());
+                }
                 let active = self.live || self.demo.is_some();
                 if active && !self.config.same_device(&c) {
                     return Err("Detén el motor para cambiar dispositivo, entradas ASIO abiertas, frecuencia o buffer".into());
@@ -580,6 +655,7 @@ impl App {
                     next.diagnostics = Some(self.diagnostics.tap());
                     next.listen = Some(self.listen.clone());
                     next.audio_network = Some(self.audio_network.clone());
+                    next.attach_recording(self.recorder.as_ref().map(|r| r.tap()));
                     let latencies = next.latencies.clone();
                     let fx_latencies = next.fx_latencies.clone();
                     if let Some(demo) = &self.demo {
@@ -714,6 +790,51 @@ impl App {
                     self.listen.stop();
                     Ok(self.listen.status())
                 }
+            }
+            "/api/recording" => {
+                let v: Value = serde_json::from_str(body).map_err(|e| e.to_string())?;
+                match v["action"].as_str().unwrap_or("status") {
+                    "start" => {
+                        if self.recorder.is_some() {
+                            return Err("Finaliza la grabación anterior antes de abrir otra".into());
+                        }
+                        if (!self.live && self.demo.is_none()) || self.controls.failed.load(Relaxed)
+                        {
+                            return Err("Inicia un motor de audio operativo antes de grabar".into());
+                        }
+                        if self.diagnostics.probing() {
+                            return Err("Finaliza el loopback antes de iniciar la grabación".into());
+                        }
+                        let channels: Vec<recording::Selection> =
+                            serde_json::from_value(v["channels"].clone())
+                                .map_err(|e| e.to_string())?;
+                        let buses: Vec<usize> = serde_json::from_value(v["buses"].clone())
+                            .map_err(|e| e.to_string())?;
+                        let directory = v["directory"].as_str();
+                        if directory.is_some_and(|p| p.len() > 4096) {
+                            return Err("Ruta de grabación demasiado larga".into());
+                        }
+                        let session =
+                            recording::Session::start(&self.config, directory, &channels, &buses)?;
+                        let next = self.recording_mixer(Some(session.tap()))?;
+                        self.replace_active_mixer(next)?;
+                        self.recorder = Some(session);
+                    }
+                    "stop" => {
+                        if self.recorder.is_some() {
+                            if self.live || self.demo.is_some() {
+                                let next = self.recording_mixer(None)?;
+                                self.replace_active_mixer(next)?;
+                            }
+                            if let Some(session) = self.recorder.take() {
+                                self.record_last = session.finish();
+                            }
+                        }
+                    }
+                    "status" => {}
+                    _ => return Err("Acción de grabación desconocida".into()),
+                }
+                Ok(self.recording_status())
             }
             "/api/presets" => presets::command(body),
             "/api/inspect" => {
@@ -931,9 +1052,11 @@ fn run() -> Result<(), String> {
                 "/api/diagnostics" => reply(req,200,"application/json",app.diagnostics_status().to_string()),
                 "/panels-ui.js" => reply(req,200,"text/javascript; charset=utf-8",include_str!("../web/panels-ui.js").into()),
                 "/diagnostics-ui.js" => reply(req,200,"text/javascript; charset=utf-8",include_str!("../web/diagnostics-ui.js").into()),
+                "/api/recording" => reply(req,200,"application/json",app.recording_status().to_string()),
                 "/api/latency" => reply(req,200,"application/json",app.latency().to_string()),
                 "/api/addresses" => reply(req,200,"application/json",network::addresses().to_string()),
                 "/effects-ui.js" => reply(req,200,"text/javascript; charset=utf-8",include_str!("../web/effects-ui.js").into()),
+                "/recording-ui.js" => reply(req,200,"text/javascript; charset=utf-8",include_str!("../web/recording-ui.js").into()),
                 "/plugin-browser.js" => reply(req,200,"text/javascript; charset=utf-8",include_str!("../web/plugin-browser.js").into()),
                 "/api/mix-state" => reply(req,200,"application/json",json!({"revision":app.remote.status()["revision"],"channels":app.config.channels.iter().map(|ch|json!({"sends_db":ch.sends_db,"send_mute":ch.send_mute,"pre":ch.pre})).collect::<Vec<_>>()}).to_string()),
                 "/api/config" => reply(
@@ -946,7 +1069,7 @@ fn run() -> Result<(), String> {
                 "/api/status" => reply(req, 200, "application/json", app.status().to_string()),
                 "/api/presets" => match presets::load() {Ok(p)=>reply(req,200,"application/json",serde_json::json!(p).to_string()),Err(e)=>reply(req,400,"application/json",serde_json::json!({"error":e}).to_string())},
                 "/api/native" => reply(req,200,"application/json",serde_json::to_string(native_fx::registry()).map_err(|e|e.to_string())?),
-                "/api/limits" => reply(req, 200, "application/json", json!({"channels":MAX_CHANNELS,"auxes":MAX_AUXES,"inputs":MAX_IO,"outputs":MAX_IO}).to_string()),
+                "/api/limits" => reply(req, 200, "application/json", json!({"channels":MAX_CHANNELS,"auxes":MAX_AUXES,"inputs":MAX_IO,"outputs":MAX_IO,"inserts":INSERTS}).to_string()),
                 _ => reply(req, 404, "text/plain", "Not found".into()),
             }
             continue;

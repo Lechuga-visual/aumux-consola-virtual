@@ -10,13 +10,22 @@ web permite objetivos de búfer de 40/80/120/200 ms (80 ms inicialmente), más e
 su optimización y medición son prioritarias en la
 [hoja de ruta](docs/hoja-de-ruta.md).
 
-**Prueba local:** [descargar Windows x64](https://github.com/Lechuga-visual/aumux-consola-virtual/releases/download/v0.13.3/AuMux-0.13.3-Windows-x64.zip)
+**Prueba local:** [descargar Windows x64](https://github.com/Lechuga-visual/aumux-consola-virtual/releases/download/v0.14.0/AuMux-0.14.0-Windows-x64.zip)
 e [instrucciones para Windows](docs/probar-en-windows.md).
 La descarga incluye el ejecutable, el receptor de OBS y el código fuente.
-Su checksum está en [SHA-256](dist/AuMux-0.13.3-Windows-x64.zip.sha256).
+Su checksum está en [SHA-256](dist/AuMux-0.14.0-Windows-x64.zip.sha256).
 
 **Capturas:** [galería de la interfaz actual](docs/capturas.md), con consola,
 efectos, preferencias y vistas remotas para tablet y celular.
+
+## Novedades 0.14 · control y multipista
+
+Ocho inserts por tira, botón de eliminar en cada FX y menús contextuales según
+el control señalado. El compresor muestra curva, estado y reducción real; las
+ventanas se dimensionan según el monitor. Grabación multipista selectiva a 48 kHz:
+PRE o POST por canal, master/auxiliares procesados postfader, WAV Float32/RF64 y
+escritura fuera del callback. Se actualizan DSP, host VST3 y audio I/O de SoundCraft.
+[Uso, límites y capturas](docs/interfaz-0.14.md).
 
 ## Novedades 0.13.3 · efectos en vivo
 
@@ -104,7 +113,7 @@ completa no fallen por `WouldBlock`. Ver [corrección de consola remota](docs/in
 - Salidas físicas mono o pares estéreo independientes y stream dúplex RtAudio/ASIO.
 - EQ paramétrico nativo por canal, auxiliar y master: ocho bandas FreeEQ8, seis tipos, fase mínima.
 - EQ con curva interactiva, ocho puntos de color y perillas de frecuencia, ganancia y Q.
-- Cadena FX con lista lateral, selección, agregar, quitar con Supr y reordenar; cuatro inserts por tira.
+- Cadena FX con lista lateral, selección, agregar, quitar con Supr y reordenar; ocho inserts por tira.
 - FreeVox8 y MDA con perillas; VST3 con editor genérico de deslizadores y valores.
 - Parámetros nativos y bypass editables en vivo; presets de usuario persistentes, importación/exportación JSON.
 - Ventana **Envíos ↗** por canal: master, pan y envíos PRE/POST con controles gráficos.
@@ -171,7 +180,7 @@ funcionan en vivo. Los presets de usuario se guardan en
 interna para seguir encontrando las bibliotecas de versiones anteriores.
 
 Es un prototipo: no hay compensación de latencia, editor nativo VST3 ni
-estado binario de presets; se admiten cuatro inserts por tira. Faltan las pruebas
+estado binario de presets; se admiten ocho inserts por tira. Faltan las pruebas
 de ASIO real, compatibilidad de efectos, sincronía con video y sesiones largas.
 La guía detalla estas limitaciones y la prueba paso a paso.
 
@@ -198,13 +207,13 @@ Licencias y procedencia: [desktop/THIRD_PARTY.md](desktop/THIRD_PARTY.md).
 La integración nativa usa el núcleo de fase mínima de FreeEQ8 y el motor
 filterbank de FreeVox8; no incorpora todas las funciones de esos plugins.
 MDA incluye sus 20 efectos de audio. Los instrumentos virtuales quedan fuera
-del alcance. La grabación multipista y OSC/Mackie quedan pendientes.
+del alcance. La grabación multipista selectiva está disponible desde 0.14; OSC/Mackie queda pendiente.
 La aplicación combinada desde 0.5 se distribuye bajo GPL-3.0-only, con fuentes,
 licencias y procedencia en el ZIP.
 
 [Touch, accesos unificados, consola remota y latencia 0.9](docs/interfaz-0.9.md).
 
 [Hoja de ruta](docs/hoja-de-ruta.md): otros dispositivos y subsistemas Windows,
-optimización de escucha de baja latencia, grabación multipista y control OSC/Mackie.
+optimización de escucha de baja latencia, ampliación de la grabación multipista y control OSC/Mackie.
 
 [AuMux, auxiliares WebSocket, preferencias y bandeja 0.11](docs/interfaz-0.11.md).

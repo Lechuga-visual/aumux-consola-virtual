@@ -1,9 +1,9 @@
 # Componentes reutilizados
 
-- **SoundCraft DSP y host VST3**, revisión
-  `3a28a657692c1b98b28c276d8f61df9471074f0f` de
+- **SoundCraft DSP, host VST3 y audio I/O**, revisión
+  `cf0f4d2f6a2629b48a1dfbed858ac8c5f227bc42` de
   https://github.com/storytold/soundcraft — MIT OR Apache-2.0.
-  Se enlazan esos dos crates; no se ha bifurcado ni renombrado el DAW completo.
+  Se enlazan esos tres crates; no se ha bifurcado ni renombrado el DAW completo.
   La superficie y el ruteo de AuMux son propios.
 - **RtAudio 6.0.1**, revisión `b4f04903312e0e0efffbe77655172e0f060dc085`
   de https://github.com/thestk/rtaudio — licencia en `vendor/rtaudio/LICENSE`.

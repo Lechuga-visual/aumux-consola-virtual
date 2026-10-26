@@ -520,6 +520,7 @@ impl Remote {
                 | "/workspace-ui.js"
                 | "/effects-ui.js"
                 | "/plugin-browser.js"
+                | "/recording-ui.js"
                 | "/tools-ui.js"
                 | "/panels-ui.js"
                 | "/diagnostics-ui.js"
@@ -536,6 +537,7 @@ impl Remote {
                     ("text/javascript", include_str!("../web/diagnostics-ui.js"))
                 }
                 "/tools-ui.js" => ("text/javascript", include_str!("../web/tools-ui.js")),
+                "/recording-ui.js" => ("text/javascript", include_str!("../web/recording-ui.js")),
                 "/plugin-browser.js" => {
                     ("text/javascript", include_str!("../web/plugin-browser.js"))
                 }
@@ -959,18 +961,80 @@ fn read_body(
 }
 
 /// Three-way merge for simultaneous operator consoles: untouched fields follow the current server.
+pub fn chains_conflict(
+    base: &crate::config::Config,
+    candidate: &crate::config::Config,
+    current: &crate::config::Config,
+) -> bool {
+    fn identity(chain: &[crate::config::Fx]) -> Vec<(&str, &str, &str)> {
+        chain
+            .iter()
+            .map(|fx| (fx.instance.as_str(), fx.id.as_str(), fx.path.as_str()))
+            .collect()
+    }
+    let old = base
+        .channels
+        .iter()
+        .map(|n| &n.inserts)
+        .chain(base.buses.iter().map(|n| &n.inserts));
+    let next = candidate
+        .channels
+        .iter()
+        .map(|n| &n.inserts)
+        .chain(candidate.buses.iter().map(|n| &n.inserts));
+    let now = current
+        .channels
+        .iter()
+        .map(|n| &n.inserts)
+        .chain(current.buses.iter().map(|n| &n.inserts));
+    old.zip(next).zip(now).any(|((b, n), c)| {
+        identity(n) != identity(b) && identity(c) != identity(b) && identity(n) != identity(c)
+    })
+}
 pub fn merge_values(base: &Value, candidate: &Value, current: &Value) -> Value {
     if candidate == base {
         return current.clone();
     }
-    // Insert instances are atomic when their identity changes: stale parameter
-    // edits must never migrate into a replacement, even of the same plugin class.
+    // Treat replacement instances as one unit; parameters belong to their instance.
     if base["id"].is_string() && base["path"].is_string() && base["instance"].is_string() {
-        if candidate["instance"] != base["instance"] {
+        let different = |a: &Value, b: &Value| {
+            ["instance", "id", "path"]
+                .iter()
+                .any(|key| a[*key] != b[*key])
+        };
+        if different(candidate, base) {
             return candidate.clone();
         }
-        if current["instance"] != base["instance"] {
+        if different(current, base) {
             return current.clone();
+        }
+    }
+    if let (Some(b), Some(n), Some(c)) = (base.as_array(), candidate.as_array(), current.as_array())
+    {
+        if b.first().is_some_and(|fx| {
+            fx["instance"].is_string() && fx["id"].is_string() && fx["path"].is_string()
+        }) {
+            let identity = |items: &Vec<Value>| {
+                items
+                    .iter()
+                    .map(|fx| (fx["instance"].clone(), fx["id"].clone(), fx["path"].clone()))
+                    .collect::<Vec<_>>()
+            };
+            let order = if identity(n) != identity(b) { n } else { c };
+            return Value::Array(
+                order
+                    .iter()
+                    .map(|fx| {
+                        let old = b.iter().find(|old| old["instance"] == fx["instance"]);
+                        let candidate = n.iter().find(|next| next["instance"] == fx["instance"]);
+                        let current = c.iter().find(|now| now["instance"] == fx["instance"]);
+                        match (old, candidate, current) {
+                            (Some(old), Some(next), Some(now)) => merge_values(old, next, now),
+                            _ => fx.clone(),
+                        }
+                    })
+                    .collect(),
+            );
         }
     }
     match (base, candidate, current) {
@@ -1004,6 +1068,36 @@ pub fn merge_values(base: &Value, candidate: &Value, current: &Value) -> Value {
 #[cfg(test)]
 mod merge_operator_tests {
     use super::*;
+    #[test]
+    fn reorder_preserves_concurrent_parameters_by_instance_and_conflicting_orders_are_rejected() {
+        let a = json!({"instance":"a","id":"native/a","path":"","params":{"gain":1}});
+        let b = json!({"instance":"b","id":"native/b","path":"","params":{"gain":2}});
+        let base = json!([a, b]);
+        let reordered = json!([b, a]);
+        let mut changed = base.clone();
+        changed[0]["params"]["gain"] = json!(3);
+        let result = merge_values(&base, &reordered, &changed);
+        assert_eq!(result[1]["params"]["gain"], 3);
+        assert_eq!(result[0]["instance"], "b");
+        let mut original = crate::config::Config::default();
+        original.channels[0].inserts = serde_json::from_value(base).unwrap();
+        let mut next = original.clone();
+        next.channels[0].inserts.reverse();
+        let mut current = original.clone();
+        current.channels[0].inserts.pop();
+        assert!(chains_conflict(&original, &next, &current));
+    }
+
+    #[test]
+    fn stale_parameter_edits_never_resurrect_a_deleted_insert() {
+        let a = json!({"instance":"a","id":"native/a","path":"","params":{"gain":1}});
+        let b = json!({"instance":"b","id":"native/b","path":"","params":{"gain":1}});
+        let base = json!([a, b]);
+        let mut edited = base.clone();
+        edited[1]["params"]["gain"] = json!(2);
+        assert_eq!(merge_values(&base, &edited, &json!([a])), json!([a]));
+    }
+
     #[test]
     fn stale_plugin_parameters_never_migrate_into_a_replacement_instance() {
         let base = json!({"path":"native:delay","id":"native/mda/delay","instance":"original","params":{"time":1}});

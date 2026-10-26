@@ -8,7 +8,7 @@ pub const MAX_CHANNELS: usize = 64;
 pub const MAX_AUXES: usize = 32;
 pub const MAX_IO: usize = 64;
 pub const MAX_FRAMES: usize = 8192;
-pub const INSERTS: usize = 4;
+pub const INSERTS: usize = 8;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Default)]
 pub struct Fx {

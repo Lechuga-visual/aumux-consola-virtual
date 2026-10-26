@@ -257,6 +257,9 @@ pub struct Mixer {
     pub diagnostics: Option<crate::diagnostics::Tap>,
     pub listen: Option<Arc<crate::listen::Hub>>,
     pub audio_network: Option<Arc<crate::audio_network::Hub>>,
+    pub recording: Option<Arc<crate::recording::Tap>>,
+    record_pre: Vec<Vec<Vec<f32>>>,
+    record_post: Vec<Vec<Vec<f32>>>,
     pub controls: Arc<Controls>,
     channel: Vec<Vec<Vec<f32>>>,
     pub buses: Vec<Vec<Vec<f32>>>,
@@ -345,6 +348,26 @@ fn prepare_fx(spec: &Fx, rate: u32) -> Result<Box<dyn Plugin>, String> {
     Ok(p)
 }
 impl Mixer {
+    pub fn attach_recording(&mut self, tap: Option<Arc<crate::recording::Tap>>) {
+        let banks = |point| {
+            (0..self.channel.len())
+                .map(|i| {
+                    (0..2)
+                        .map(|_| {
+                            if tap.as_ref().is_some_and(|t| t.wants(i, point)) {
+                                vec![0.0; MAX_FRAMES]
+                            } else {
+                                Vec::new()
+                            }
+                        })
+                        .collect()
+                })
+                .collect()
+        };
+        self.record_pre = banks(crate::recording::Point::Pre);
+        self.record_post = banks(crate::recording::Point::Post);
+        self.recording = tap;
+    }
     /// Windows PC monitoring auditions one post-fader bus on the stereo device,
     /// independently of saved ASIO output assignments.
     pub fn copy_monitor(&self, output: &mut [f32], frames: usize, bus: usize) -> bool {
@@ -464,6 +487,9 @@ impl Mixer {
             diagnostics: None,
             listen: None,
             audio_network: None,
+            recording: None,
+            record_pre: Vec::new(),
+            record_post: Vec::new(),
             keys: (0..channels)
                 .map(|_| vec![vec![0.0; MAX_FRAMES]; 2])
                 .collect(),
@@ -642,6 +668,15 @@ impl Mixer {
             for c in &self.controls.compressor {
                 c.reduction.store(0.0_f32.to_bits(), Relaxed);
             }
+            if let Some(tap) = &self.recording {
+                tap.capture(
+                    &self.record_pre,
+                    &self.record_post,
+                    &self.buses,
+                    frames,
+                    true,
+                );
+            }
             if let Some(hub) = &self.listen {
                 hub.publish(&self.buses, frames);
             }
@@ -747,6 +782,15 @@ impl Mixer {
                     }
                 }
             }
+            if self
+                .recording
+                .as_ref()
+                .is_some_and(|tap| tap.active() && tap.wants(i, crate::recording::Point::Pre))
+            {
+                for side in 0..2 {
+                    self.record_pre[i][side][..frames].copy_from_slice(&ch[side][..frames]);
+                }
+            }
             self.generator_blend[i] = blend;
             self.generator_level[i] = noise_gain;
             self.channel_eq[i].process(ch, frames, &self.controls.eq[i], self.rate);
@@ -806,11 +850,18 @@ impl Mixer {
             } else {
                 1.0
             };
+            let record_post = self
+                .recording
+                .as_ref()
+                .is_some_and(|tap| tap.active() && tap.wants(i, crate::recording::Point::Post));
             let mut channel_peak = [0.0f32; 2];
             let mut channel_energy = [0.0f64; 2];
             for f in 0..frames {
                 let g = ramp(self.previous[i], target, f, frames);
                 for (side, pan) in [left, right].into_iter().enumerate() {
+                    if record_post {
+                        self.record_post[i][side][f] = ch[side][f] * g;
+                    }
                     if !ch[side][f].is_finite() {
                         ch[side][f] = 0.0;
                     }
@@ -953,6 +1004,15 @@ impl Mixer {
                     side[..frames].fill(0.0);
                 }
             }
+        }
+        if let Some(tap) = &self.recording {
+            tap.capture(
+                &self.record_pre,
+                &self.record_post,
+                &self.buses,
+                frames,
+                false,
+            );
         }
         if let Some(hub) = &self.listen {
             hub.publish(&self.buses, frames);
@@ -1529,7 +1589,7 @@ mod tests {
         }
     }
     #[test]
-    fn old_scenes_migrate_and_reject_a_fifth_insert() {
+    fn old_scenes_migrate_accept_eight_and_reject_a_ninth_insert() {
         let mut value = serde_json::to_value(Config::default()).unwrap();
         value.as_object_mut().unwrap().remove("pc_monitor");
         for c in value["channels"].as_array_mut().unwrap() {
@@ -1543,7 +1603,19 @@ mod tests {
         assert_eq!(c.channels[0].generator.signal, Signal::Off);
         assert!(c.channels[0].fx.is_none());
         assert_eq!(c.channels[0].inserts.len(), 1);
-        c.channels[0].inserts = vec![Fx::default(); 5];
+        c.channels[0].inserts = (0..INSERTS)
+            .map(|i| Fx {
+                id: "native/mda/dither".into(),
+                instance: format!("limit-{i}"),
+                ..Fx::default()
+            })
+            .collect();
+        c.validate().unwrap();
+        c.channels[0].inserts.push(Fx {
+            id: "native/mda/dither".into(),
+            instance: "ninth".into(),
+            ..Fx::default()
+        });
         assert!(c.validate().is_err());
     }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "aumux"
-version = "0.13.3"
+version = "0.14.0"
 edition = "2024"
 rust-version = "1.95"
 license = "GPL-3.0-only"
@@ -16,8 +16,10 @@ pbkdf2 = "0.12"
 sha2 = "0.10"
 if-addrs = "0.13"
 tungstenite = { version = "=0.28.0", default-features = false, features = ["handshake"] }
-soundcraft-dsp = { git = "https://github.com/storytold/soundcraft", rev = "3a28a657692c1b98b28c276d8f61df9471074f0f" }
-soundcraft-vst3-host = { git = "https://github.com/storytold/soundcraft", rev = "3a28a657692c1b98b28c276d8f61df9471074f0f" }
+soundcraft-dsp = { git = "https://github.com/storytold/soundcraft", rev = "cf0f4d2f6a2629b48a1dfbed858ac8c5f227bc42" }
+soundcraft-vst3-host = { git = "https://github.com/storytold/soundcraft", rev = "cf0f4d2f6a2629b48a1dfbed858ac8c5f227bc42" }
+
+soundcraft-audio-io = { git = "https://github.com/storytold/soundcraft", rev = "cf0f4d2f6a2629b48a1dfbed858ac8c5f227bc42" }
 
 [build-dependencies]
 cc = "1"

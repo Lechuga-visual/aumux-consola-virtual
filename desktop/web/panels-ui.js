@@ -3,6 +3,7 @@
 const panelDefinitions = {
   "eq-dialog": [980, 760],
   fx: [1120, 820],
+  "recording-dialog": [900, 720],
   "compressor-dialog": [900, 740],
   "network-dialog": [1080, 850],
   "audio-settings": [700, 620],
@@ -45,6 +46,30 @@ function detachedTitle() {
   if (d)
     document.title = `AuMux · ${d.querySelector("h2")?.textContent || "Panel"}`;
 }
+function panelWindowSize(
+  id,
+  availableWidth = screen.availWidth || innerWidth,
+  availableHeight = screen.availHeight || innerHeight,
+) {
+  const [fallbackWidth, fallbackHeight] = panelDefinitions[id];
+  const prefs = id === "network-dialog" || id === "audio-settings";
+  return [
+    Math.round(
+      Math.min(
+        availableWidth - 16,
+        availableWidth * (prefs ? 0.3 : 0.45),
+        fallbackWidth,
+      ),
+    ),
+    Math.round(
+      Math.min(
+        availableHeight - 48,
+        availableHeight * (prefs ? 0.8 : 0.6),
+        fallbackHeight,
+      ),
+    ),
+  ];
+}
 function openDetachedPanel(id, state = {}) {
   if (detachedPanelId === id || panelMode === "floating") return false;
   const key = panelIdentity(id, state),
@@ -59,11 +84,11 @@ function openDetachedPanel(id, state = {}) {
   url.hash = "";
   url.searchParams.set("panel", id);
   url.searchParams.set("panel-state", JSON.stringify(state));
-  const [width, height] = panelDefinitions[id];
+  const [width, height] = panelWindowSize(id);
   const child = window.open(
     url.href,
     "_blank",
-    `popup=yes,width=${Math.min(width, screen.availWidth || width)},height=${Math.min(height, screen.availHeight || height)},resizable=yes,scrollbars=yes`,
+    `popup=yes,width=${width},height=${height},resizable=yes,scrollbars=yes`,
   );
   if (!child) {
     document.getElementById("error").textContent =
@@ -133,7 +158,9 @@ function startDetachedPanel(id, state) {
     openFx(
       state.type,
       state.index,
-      Number.isInteger(state.slot) ? Math.max(0, Math.min(3, state.slot)) : 0,
+      Number.isInteger(state.slot)
+        ? Math.max(0, Math.min((limits.inserts || 8) - 1, state.slot))
+        : 0,
     );
   else if (id === "compressor-dialog") openCompressor(state.type, state.index);
   else if (id === "routing-dialog") openRouting(state.index);
@@ -145,7 +172,8 @@ function startDetachedPanel(id, state) {
       )
     )
       showPreference(state.tab);
-  } else if (id === "latency-dialog") openLatency();
+  } else if (id === "recording-dialog") openRecording();
+  else if (id === "latency-dialog") openLatency();
   else if (id === "calculator-dialog")
     document.getElementById("open-calculator").click();
   else if (id === "audio-settings") document.getElementById("settings").click();
@@ -240,7 +268,7 @@ function refreshOpenPanels() {
         for (const [k, n] of Object.entries(next)) {
           if (n && typeof n === "object" && target[k] && base?.[k])
             merge(target[k], base[k], n);
-          else if (JSON.stringify(target[k]) === JSON.stringify(base?.[k]))
+          else if (configEqual(target[k], base?.[k]))
             target[k] = structuredClone(n);
         }
       }
@@ -402,10 +430,7 @@ window.addEventListener("beforeunload", () => {
     if (document.getElementById("fx").open && pendingFx)
       savePendingFx().catch(() => {});
     const body = JSON.stringify({ config: cfg, base: serverConfig });
-    if (
-      body.length < 60000 &&
-      JSON.stringify(cfg) !== JSON.stringify(serverConfig)
-    )
+    if (body.length < 60000 && !configEqual(cfg, serverConfig))
       fetch("/api/config", {
         method: "POST",
         headers: {

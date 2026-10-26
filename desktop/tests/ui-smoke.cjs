@@ -85,8 +85,8 @@ const path = require("node:path");
     await page.waitForSelector("#mixer .strip");
     assert.equal(await page.locator("#mixer .strip").count(), 8);
     assert.equal(await page.locator("#buses .strip").count(), 5);
-    assert.equal(await page.locator("#mixer .insert-row").count(), 32);
-    assert.equal(await page.locator("#buses .insert-row").count(), 20);
+    assert.equal(await page.locator("#mixer .insert-row").count(), 64);
+    assert.equal(await page.locator("#buses .insert-row").count(), 40);
     const assertConsoleAlignment = async () => {
       assert(
         await page.evaluate(() => {
@@ -897,7 +897,7 @@ const path = require("node:path");
     }
     assert.deepEqual(errors, []);
     console.log(
-      "PASS: aligned console modules and meter bridge, full/small layouts, panel toggles, exact printed and numeric faders, installed VST3 discovery, compact DAW strips, 52 insert slots, independent generators, stereo meters, monitor sends, live VST3 bypass, PC audition selection, emergency silence and resume, live graph growth/shrink, mono/stereo, pan reset, MAIN return, interactive EQ curve and rotary controls, FreeVox rotary persistence, direct channel/aux buttons, native insert selection, chain navigation/add/delete, preset save/recall/export/import, graphical sends, live native parameters, legacy scenes, export and responsive layout",
+      "PASS: aligned console modules and meter bridge, full/small layouts, panel toggles, exact printed and numeric faders, installed VST3 discovery, compact DAW strips, 104 insert slots, independent generators, stereo meters, monitor sends, live VST3 bypass, PC audition selection, emergency silence and resume, live graph growth/shrink, mono/stereo, pan reset, MAIN return, interactive EQ curve and rotary controls, FreeVox rotary persistence, direct channel/aux buttons, native insert selection, chain navigation/add/delete, preset save/recall/export/import, graphical sends, live native parameters, legacy scenes, export and responsive layout",
     );
   } finally {
     if (browser) await browser.close();

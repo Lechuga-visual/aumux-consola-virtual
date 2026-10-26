@@ -126,6 +126,8 @@ async function chooseFx(slot) {
 function renderFxRail() {
   if (!selectedFx) return;
   const target = targetOf(selectedFx.type, selectedFx.index);
+  const focused = document.activeElement?.closest(".fx-chain-name"),
+    focusedSlot = focused ? Number(focused.dataset.slot) : null;
   $("fx-chain-list").replaceChildren();
   target.inserts.forEach((fx, slot) => {
     const row = el("div", "fx-chain-row"),
@@ -146,10 +148,6 @@ function renderFxRail() {
     button.title = fxName(fx);
     button.onclick = () => chooseFx(slot);
     button.onkeydown = (e) => {
-      if (e.key === "Delete") {
-        e.preventDefault();
-        $("removefx").click();
-      }
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
         e.preventDefault();
         chooseFx(
@@ -163,18 +161,37 @@ function renderFxRail() {
         );
       }
     };
-    row.append(bypass, button);
+    const remove = el("button", "fx-chain-delete", "✕");
+    remove.title = `Eliminar ${fxName(fx)}`;
+    remove.setAttribute("aria-label", `Eliminar FX ${slot + 1}: ${fxName(fx)}`);
+    remove.onclick = () =>
+      deleteInsert(selectedFx.type, selectedFx.index, slot, fx.instance).catch(
+        fxError,
+      );
+    row.append(bypass, button, remove);
     $("fx-chain-list").append(row);
   });
   if (selectedFx.slot >= target.inserts.length)
     $("fx-chain-list").append(el("div", "fx-chain-pending", "+ Nuevo efecto"));
   $("fx-chain-count").textContent =
-    `${target.inserts.length} / 4 inserts · Supr para quitar`;
-  $("fx-add").disabled = target.inserts.length >= 4;
+    `${target.inserts.length} / ${limits.inserts || 8} inserts · Supr para quitar`;
+  $("fx-add").disabled = target.inserts.length >= (limits.inserts || 8);
   $("removefx").disabled = selectedFx.slot >= target.inserts.length;
   $("fxup").disabled =
     selectedFx.slot === 0 || selectedFx.slot >= target.inserts.length;
   $("fxdown").disabled = selectedFx.slot >= target.inserts.length - 1;
+  if (
+    focusedSlot === null &&
+    document.activeElement === document.body &&
+    $("fx").open
+  )
+    $("fx").focus({ preventScroll: true });
+  if (focusedSlot !== null)
+    $("fx-chain-list")
+      .querySelector(
+        `[data-slot="${Math.min(focusedSlot, target.inserts.length - 1)}"]`,
+      )
+      ?.focus({ preventScroll: true });
 }
 function openFx(type, index, slot) {
   if (openDetachedPanel("fx", { type, index, slot })) return;
@@ -217,7 +234,10 @@ function openFx(type, index, slot) {
     "vst-search",
   ])
     $(id).disabled = false;
+  $("fx").tabIndex = -1;
   showFloatingPanel("fx");
+  if (!$("fx").contains(document.activeElement))
+    $("fx").focus({ preventScroll: true });
   nativeCatalogue()
     .then((list) => {
       if (sequence !== fxSequence) return;
@@ -430,26 +450,105 @@ $("fx").addEventListener("cancel", (e) => {
 $("applyfx").onclick = () => savePendingFx().catch(fxError);
 $("fx-add").onclick = () =>
   chooseFx(targetOf(selectedFx.type, selectedFx.index).inserts.length);
-$("removefx").onclick = async () => {
-  clearTimeout(fxAutoTimer);
-  fxAutoTimer = undefined;
-  const target = targetOf(selectedFx.type, selectedFx.index),
-    before = structuredClone(target.inserts);
-  target.inserts.splice(selectedFx.slot, 1);
-  pendingFx = null;
+async function deleteInsert(type, index, slot, instance) {
+  const target = targetOf(type, index),
+    editing = selectedFx?.type === type && selectedFx?.index === index;
+  if (editing && selectedFx.slot !== slot) {
+    await flushNativeFx();
+    await savePendingFx();
+  }
+  const current = target?.inserts[slot];
+  if (!current || (instance && current.instance !== instance))
+    throw Error("El insert cambió; vuelve a seleccionarlo");
+  const selectedIdentity = editing
+    ? target.inserts[selectedFx.slot]?.instance
+    : null;
+  const editorBefore = editing
+    ? {
+        pending: structuredClone(pendingFx),
+        base: structuredClone(fxPanelBase),
+      }
+    : null;
+  if (editing) {
+    clearTimeout(fxAutoTimer);
+    fxAutoTimer = undefined;
+    ++fxSequence;
+    pendingFx = null;
+    fxPanelBase = null;
+  }
+  const before = structuredClone(target.inserts);
+  target.inserts.splice(slot, 1);
+  const sameEditor = () =>
+    editing &&
+    selectedFx?.type === type &&
+    selectedFx?.index === index &&
+    $("fx").open;
   try {
     await publish();
-    openFx(
-      selectedFx.type,
-      selectedFx.index,
-      Math.max(0, Math.min(selectedFx.slot, target.inserts.length - 1)),
-    );
+    if (sameEditor() && !pendingFx) {
+      const retained = selectedIdentity
+        ? target.inserts.findIndex((fx) => fx.instance === selectedIdentity)
+        : -1;
+      openFx(
+        type,
+        index,
+        retained >= 0
+          ? retained
+          : Math.max(0, Math.min(slot, target.inserts.length - 1)),
+      );
+    }
     render();
   } catch (e) {
     target.inserts = before;
-    fxError(e);
+    if (sameEditor() && !pendingFx) {
+      pendingFx = editorBefore.pending;
+      fxPanelBase = editorBefore.base;
+      renderFxRail();
+      refreshOpenPanels();
+      if (!descriptors.length) openFx(type, index, selectedFx.slot);
+    }
+    throw e;
   }
+}
+$("removefx").onclick = () => {
+  if (selectedFx)
+    deleteInsert(
+      selectedFx.type,
+      selectedFx.index,
+      selectedFx.slot,
+      targetOf(selectedFx.type, selectedFx.index).inserts[selectedFx.slot]
+        ?.instance,
+    ).catch(fxError);
 };
+$("fx").addEventListener("pointerdown", (e) => {
+  if (!e.target.closest('button,input,textarea,select,[role="slider"]'))
+    $("fx").focus({ preventScroll: true });
+});
+$("fx").addEventListener("keydown", (e) => {
+  if (
+    e.key !== "Delete" ||
+    e.repeat ||
+    e.target.closest('input,textarea,select,[contenteditable="true"]')
+  )
+    return;
+  if (
+    !selectedFx ||
+    selectedFx.slot >=
+      targetOf(selectedFx.type, selectedFx.index).inserts.length
+  )
+    return;
+  e.preventDefault();
+  e.stopPropagation();
+  const slot = Number(
+    e.target.closest(".fx-chain-name")?.dataset.slot ?? selectedFx.slot,
+  );
+  deleteInsert(
+    selectedFx.type,
+    selectedFx.index,
+    slot,
+    targetOf(selectedFx.type, selectedFx.index).inserts[slot]?.instance,
+  ).catch(fxError);
+});
 for (const [id, delta] of [
   ["fxup", -1],
   ["fxdown", 1],

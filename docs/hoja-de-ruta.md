@@ -69,10 +69,11 @@ se miden separados del retardo del audio; la API de administración sigue local.
 
 ## Grabación multipista
 
-Grabar todos los canales y, opcionalmente, main/aux en WAV a 48 kHz, con elección
-pre/post procesamiento, nombres y selección de pistas. Escritura fuera del
-callback, cola acotada y avisos claros de disco lleno o pérdida de bloques.
-Definir segmentación/RF64 para sesiones largas y recuperación de archivos.
+Disponible desde 0.14: selección de canales PRE/POST y master/aux postfader,
+WAV Float32 a 48 kHz, nombres y manifiesto, escritor separado del callback,
+cola acotada, errores de disco explícitos y cabeceras RF64 actualizadas.
+Pendiente: explorador y reproducción de tomas, edición y automatización.
+[Alcance y puntos exactos de captura](interfaz-0.14.md).
 
 ## Herramientas de señal
 
@@ -101,3 +102,10 @@ destinos, broadcast LAN, receptor OBS con puerto compartido, búfer y delay por
 fuente, editor Win32 y editor Qt6 probado con libobs Linux. Ver
 [la guía 0.12](interfaz-0.12.md). Pendientes: validación física prolongada,
 macOS nativo y distribución Flatpak. El control X32/M32 sigue pendiente.
+
+## Base multipista disponible en 0.14
+
+Grabación selectiva PRE/POST por canal y buses postfader, WAV Float32/RF64 a 48 kHz,
+con escritor separado y manifiesto. Quedan para ampliar: explorador/reproducción
+de tomas, edición y automatización; no se incorporan instrumentos virtuales.
+[Alcance implementado](interfaz-0.14.md).

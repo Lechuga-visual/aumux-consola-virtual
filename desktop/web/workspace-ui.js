@@ -34,10 +34,56 @@ function compressorButton(type, index) {
     "aria-label",
     `Compresor ${type === "channel" ? "canal" : "bus"} ${index + 1}`,
   );
-  button.append(el("span", "", "DYN"), el("i", "comp-mini-gr"));
+  button.append(
+    el("span", "", "DYN"),
+    compressorMini(c),
+    el("small", "comp-strip-gr", "0.0"),
+    el("i", "comp-mini-gr"),
+  );
+  button.classList.toggle("modified", compressorModified(c));
+  button.setAttribute("aria-pressed", !c.bypass);
   button.title = "Compresor con sidechain · abrir";
   button.onclick = () => openCompressor(type, index);
   return button;
+}
+function compressorModified(c) {
+  return Object.entries(defaultCompressor()).some(
+    ([key, value]) => key !== "bypass" && !configEqual(c[key], value),
+  );
+}
+function compTransfer(c, db) {
+  return (
+    db +
+    20 *
+      Math.log10(
+        Math.max(
+          1e-12,
+          1 - c.mix + c.mix * 10 ** ((c.makeup - compReduction(c, db)) / 20),
+        ),
+      )
+  );
+}
+function compressorMini(c) {
+  const svg = svgEl("svg", { viewBox: "0 0 70 28", "aria-hidden": "true" });
+  svg.append(svgEl("path", { d: "M2 26 L68 2", class: "comp-unity" }));
+  let path = "";
+  for (let db = -60; db <= 0; db += 1) {
+    const out = compTransfer(c, db);
+    path += `${db === -60 ? "M" : "L"}${2 + ((db + 60) / 60) * 66} ${Math.max(1, Math.min(27, 26 - ((out + 60) / 60) * 24))} `;
+  }
+  svg.append(svgEl("path", { d: path, class: "comp-response" }));
+  return svg;
+}
+function refreshCompressorStrip(type, index) {
+  const c = targetOf(type, index).compressor;
+  document
+    .querySelectorAll(`.comp-module[data-comp="${keyOf(type, index)}"]`)
+    .forEach((button) => {
+      button.classList.toggle("off", c.bypass);
+      button.classList.toggle("modified", compressorModified(c));
+      button.setAttribute("aria-pressed", !c.bypass);
+      button.querySelector("svg")?.replaceWith(compressorMini(c));
+    });
 }
 function currentComp() {
   return targetOf(compTarget.type, compTarget.index).compressor;
@@ -70,7 +116,7 @@ function compGraph() {
   let path = "";
   for (let i = 0; i <= 120; i++) {
     const db = -60 + i * 0.5,
-      out = db - compReduction(c, db) + c.makeup;
+      out = compTransfer(c, db);
     path += `${i ? "L" : "M"}${25 + ((db + 60) / 60) * 350} ${Math.max(10, Math.min(195, 195 - ((out + 60) / 60) * 175))} `;
   }
   svg.append(svgEl("path", { d: path, class: "comp-response" }));
@@ -180,11 +226,7 @@ function compChanged() {
   compGraph();
   $("comp-status").textContent = "Aplicando…";
   if (!compTimer) compTimer = setTimeout(flushComp, 40);
-  document
-    .querySelectorAll(
-      `.comp-module[data-comp="${keyOf(compTarget.type, compTarget.index)}"]`,
-    )
-    .forEach((b) => b.classList.toggle("off", currentComp().bypass));
+  refreshCompressorStrip(compTarget.type, compTarget.index);
 }
 function flushComp() {
   if (!compTimer) return;
@@ -280,7 +322,7 @@ $("mixer-stage").addEventListener(
 $("mixer-stage").addEventListener(
   "wheel",
   (e) => {
-    if (e.target.closest("input,select,[role=slider]")) return;
+    if (e.target.closest("input,select,[role=slider],.insert-rack")) return;
     if ($("mixer-stage").scrollWidth <= $("mixer-stage").clientWidth) return;
     e.preventDefault();
     $("mixer-stage").scrollLeft +=
@@ -386,38 +428,251 @@ function openContext(card, x, y) {
       index ===
       (type === "channel" ? cfg.channels.length : cfg.buses.length) - 1;
     entries.push([
-      "Eliminar",
+      type === "channel" ? "Eliminar canal" : "Eliminar auxiliar",
       () => removeStrip(type, index),
       (running && !last) || (type === "channel" && cfg.channels.length === 1),
     ]);
   }
+  showContextActions(node.name, entries, x, y);
+}
+function showContextActions(title, entries, x, y) {
+  const menu = $("strip-context");
+  menu.replaceChildren(el("strong", "", title));
   for (const [text, action, disabled] of entries) {
-    const b = el("button", "", text);
-    b.setAttribute("role", "menuitem");
-    b.disabled = !!disabled;
-    b.onclick = () => {
+    const button = el("button", "", text);
+    button.setAttribute("role", "menuitem");
+    button.disabled = !!disabled;
+    button.onclick = () => {
       hideContext();
       Promise.resolve().then(action).catch(error);
     };
-    menu.append(b);
+    menu.append(button);
   }
   menu.hidden = false;
   menu.style.left =
     Math.max(0, Math.min(x, innerWidth - menu.offsetWidth - 6)) + "px";
   menu.style.top =
     Math.max(0, Math.min(y, innerHeight - menu.offsetHeight - 6)) + "px";
-  menu.querySelector("button")?.focus();
+  menu.querySelector("button:not(:disabled)")?.focus();
+}
+function openTargetContext(target, card, x, y) {
+  const key = card.dataset.strip,
+    type = key[0] === "c" ? "channel" : "bus",
+    index = Number(key.slice(1)),
+    node = targetOf(type, index);
+  const fxrow = target.closest(".insert-row");
+  if (fxrow) {
+    const slot = Number(fxrow.dataset.fxSlot),
+      fx = node.inserts[slot];
+    if (!fx)
+      return showContextActions(
+        `${node.name} · FX ${slot + 1}`,
+        [
+          [
+            "Añadir efecto…",
+            () => openQuickFx(fxrow.querySelector("button"), type, index, slot),
+            slot > node.inserts.length,
+          ],
+          [
+            "Navegador de plugins…",
+            () => openFx(type, index, slot),
+            slot > node.inserts.length,
+          ],
+        ],
+        x,
+        y,
+      );
+    const identity = fx.instance;
+    const reorder = async (delta) => {
+      if (node.inserts[slot]?.instance !== identity)
+        throw Error("El insert cambió");
+      const old = structuredClone(node.inserts);
+      [node.inserts[slot], node.inserts[slot + delta]] = [
+        node.inserts[slot + delta],
+        node.inserts[slot],
+      ];
+      try {
+        await publish();
+        render();
+      } catch (e) {
+        node.inserts = old;
+        throw e;
+      }
+    };
+    return showContextActions(
+      `${node.name} · ${fxName(fx)}`,
+      [
+        ["Abrir efecto", () => openFx(type, index, slot)],
+        [
+          fx.bypass ? "Activar FX" : "Bypass del FX",
+          async () => {
+            if (node.inserts[slot]?.instance !== identity)
+              throw Error("El insert cambió");
+            fx.bypass = !fx.bypass;
+            await publish();
+            render();
+          },
+        ],
+        ["Mover FX antes", () => reorder(-1), slot === 0],
+        [
+          "Mover FX después",
+          () => reorder(1),
+          slot === node.inserts.length - 1,
+        ],
+        [
+          `Eliminar FX: ${fxName(fx)}`,
+          () => deleteInsert(type, index, slot, identity),
+        ],
+      ],
+      x,
+      y,
+    );
+  }
+  if (target.closest(".insert-rack"))
+    return showContextActions(
+      `${node.name} · Cadena FX`,
+      [
+        ["Abrir cadena FX", () => openFx(type, index, 0)],
+        [
+          "Añadir efecto…",
+          () => openFx(type, index, node.inserts.length),
+          node.inserts.length >= (limits.inserts || 8),
+        ],
+      ],
+      x,
+      y,
+    );
+  if (target.closest(".eq-module"))
+    return showContextActions(
+      `${node.name} · EQ`,
+      [
+        ["Abrir EQ", () => openEq(type, index)],
+        [
+          node.eq.bypass ? "Activar EQ" : "Bypass del EQ",
+          async () => {
+            node.eq.bypass = !node.eq.bypass;
+            await publish();
+            render();
+          },
+        ],
+        [
+          "Restablecer EQ",
+          async () => {
+            node.eq = defaultEq();
+            await publish();
+            render();
+          },
+        ],
+      ],
+      x,
+      y,
+    );
+  if (target.closest(".comp-module"))
+    return showContextActions(
+      `${node.name} · Compresor`,
+      [
+        ["Abrir compresor", () => openCompressor(type, index)],
+        [
+          node.compressor.bypass ? "Activar compresor" : "Bypass del compresor",
+          async () => {
+            node.compressor.bypass = !node.compressor.bypass;
+            await publish();
+            render();
+          },
+        ],
+        [
+          "Restablecer compresor",
+          async () => {
+            node.compressor = defaultCompressor();
+            await publish();
+            render();
+          },
+        ],
+      ],
+      x,
+      y,
+    );
+  const send = target.closest("[data-send]");
+  if (send) {
+    const [channel, aux] = send.dataset.send.split(":").map(Number),
+      ch = cfg.channels[channel];
+    return showContextActions(
+      `${ch.name} → ${cfg.buses[aux + 1].name}`,
+      [
+        ["Abrir envíos", () => openRouting(channel)],
+        [
+          ch.send_mute[aux] ? "Activar envío" : "Silenciar envío",
+          async () => {
+            ch.send_mute[aux] = !ch.send_mute[aux];
+            await publish();
+            render();
+          },
+        ],
+        [
+          ch.pre[aux] ? "Cambiar a POST" : "Cambiar a PRE",
+          async () => {
+            ch.pre[aux] = !ch.pre[aux];
+            await publish();
+            render();
+          },
+        ],
+      ],
+      x,
+      y,
+    );
+  }
+  if (target.closest(".pan-row"))
+    return showContextActions(
+      `${node.name} · Pan`,
+      [
+        [
+          "Centrar paneo",
+          async () => {
+            node.pan = 0;
+            await publish();
+            render();
+          },
+        ],
+      ],
+      x,
+      y,
+    );
+  if (target.closest(".fader-section,.level-readout"))
+    return showContextActions(
+      `${node.name} · Fader`,
+      [
+        [
+          "Unidad · 0 dB",
+          async () => {
+            node.gain_db = 0;
+            await publish();
+            render();
+          },
+        ],
+        [
+          "Silenciar salida",
+          async () => {
+            node.mute = true;
+            await publish();
+            render();
+          },
+        ],
+      ],
+      x,
+      y,
+    );
+  openContext(card, x, y);
 }
 document.addEventListener("contextmenu", (e) => {
   if (
     e.target.closest(
-      'input,textarea,select,[contenteditable="true"],.selectable',
+      'input:not([type=range]):not([type=checkbox]),textarea,select,[contenteditable="true"],.selectable',
     )
   )
     return;
   e.preventDefault();
   const card = e.target.closest(".strip");
-  if (card) openContext(card, e.clientX, e.clientY);
+  if (card) openTargetContext(e.target, card, e.clientX, e.clientY);
   else hideContext();
 });
 document.addEventListener("pointerdown", (e) => {
@@ -430,7 +685,7 @@ document.addEventListener("keydown", (e) => {
     if (card && !e.target.closest("input,select,textarea")) {
       e.preventDefault();
       const r = card.getBoundingClientRect();
-      openContext(card, r.left, r.top + 25);
+      openTargetContext(e.target, card, r.left, r.top + 25);
     }
   }
   if (!$("strip-context").hidden && ["ArrowDown", "ArrowUp"].includes(e.key)) {
@@ -454,7 +709,13 @@ function updateWorkspaceStatus(s) {
           : cfg.channels.length + Number(key.slice(1)),
       gr = s.gain_reduction_db?.[index] || 0;
     b.querySelector("i").style.width = Math.min(100, (gr / 30) * 100) + "%";
-    b.title = `Compresor · reducción ${gr.toFixed(1)} dB`;
+    const node =
+      key[0] === "c"
+        ? cfg.channels[Number(key.slice(1))]
+        : cfg.buses[Number(key.slice(1))];
+    b.querySelector(".comp-strip-gr").textContent = gr.toFixed(1);
+    b.classList.toggle("reducing", gr > 0.1 && !node.compressor.bypass);
+    b.title = `Compresor ${node.compressor.bypass ? "apagado" : "activo"}${b.classList.contains("modified") ? " · ajustes modificados" : ""} · reducción ${gr.toFixed(1)} dB`;
   });
   if (compTarget && $("compressor-dialog").open) {
     const i =
@@ -567,7 +828,7 @@ async function syncRemoteMix(s) {
       incoming.config.channels.length !== cfg.channels.length ||
       incoming.config.buses.length !== cfg.buses.length;
     if (structure) {
-      if (JSON.stringify(cfg) !== JSON.stringify(serverConfig))
+      if (!configEqual(cfg, serverConfig))
         error(
           "La estructura cambió desde otra consola; se recuperó el estado del servidor y se descartaron ajustes sin publicar.",
         );

@@ -78,6 +78,7 @@ const fmtMs = (v) =>
     : "Sin dato";
 let lastSystemMetricsUpdate = -Infinity;
 function updateSystemMetrics(s) {
+  updateRecordingStatus(s.recording);
   const now = performance.now();
   if (now - lastSystemMetricsUpdate < 1000) return;
   lastSystemMetricsUpdate = now;

@@ -241,13 +241,13 @@ function togglePluginFavorite(p) {
 }
 function pluginContext(type, index, slot) {
   const node = targetOf(type, index);
-  if (!node || slot > node.inserts.length || slot >= 4)
+  if (!node || slot > node.inserts.length || slot >= (limits.inserts || 8))
     throw Error("La cadena no tiene un espacio disponible");
-  return { type, index, slot, chain: JSON.stringify(node.inserts) };
+  return { type, index, slot, chain: structuredClone(node.inserts) };
 }
 function checkPluginContext(context) {
   const node = targetOf(context.type, context.index);
-  if (!node || JSON.stringify(node.inserts) !== context.chain)
+  if (!node || !configEqual(node.inserts, context.chain))
     throw Error(
       "La cadena cambió desde otra ventana. Vuelve a abrir el selector.",
     );
@@ -292,11 +292,11 @@ async function insertCataloguePlugin(entry, context) {
       bypass: false,
       params: Object.fromEntries(d.params.map((p) => [p.id, p.value])),
     };
-    const sent = JSON.stringify(node.inserts);
+    const sent = structuredClone(node.inserts);
     try {
       await publish();
     } catch (e) {
-      if (JSON.stringify(node.inserts) === sent) node.inserts = before;
+      if (configEqual(node.inserts, sent)) node.inserts = before;
       throw e;
     }
     const key = pluginKey({ path: entry.path, id: d.id });

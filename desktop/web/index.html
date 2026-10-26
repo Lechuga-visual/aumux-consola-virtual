@@ -20,7 +20,7 @@
             height="30"
           />
           <strong>Au<span>Mux</span></strong>
-          <span class="version">0.13.3</span>
+          <span class="version">0.14.0</span>
         </div>
         <div class="scene-title">
           CONSOLA DE MONITOREO <span>•</span>
@@ -30,6 +30,7 @@
           <details id="tools-menu" class="tools-menu">
             <summary>Herramientas</summary>
             <div class="tools-dropdown">
+              <button id="open-recording">Grabación multipista</button>
               <button id="open-calculator">Calculadora de latencia</button>
               <details id="diagnostics-menu" class="tools-submenu">
                 <summary>Latencia y diagnóstico</summary>
@@ -233,6 +234,13 @@
           class="system-metrics"
           aria-label="Estado del proceso AuMux"
         >
+          <button
+            id="recording-indicator"
+            hidden
+            title="Abrir grabación multipista"
+          >
+            ● REC
+          </button>
           <span
             id="system-cpu"
             title="CPU del proceso AuMux respecto de la capacidad total del PC. No incluye el navegador."
@@ -529,6 +537,63 @@
           </p>
         </section>
       </div>
+    </dialog>
+    <dialog id="recording-dialog">
+      <div class="dialog-heading">
+        <div>
+          <span class="eyebrow">48 kHz · WAV Float32 / RF64</span>
+          <h2>Grabación multipista</h2>
+        </div>
+        <button data-close="recording-dialog">✕</button>
+      </div>
+      <label
+        >Carpeta de destino<input
+          id="recording-directory"
+          type="text"
+          spellcheck="false"
+          placeholder="Carpeta absoluta; vacía usa la carpeta predeterminada"
+      /></label>
+      <div class="recording-toolbar">
+        <button id="recording-all">Todos</button
+        ><button id="recording-none">Ninguno</button
+        ><label
+          >Aplicar punto a todos los canales<select id="recording-point">
+            <option value="pre">PRE · antes de EQ / comp / FX</option>
+            <option value="post">POST · después de procesos y fader</option>
+          </select></label
+        >
+      </div>
+      <p class="hint">
+        Selecciona qué pistas grabar. PRE conserva la entrada antes de los
+        procesos y del mute. POST incluye EQ, compresor, FX, fader y mute, antes
+        del paneo. Master y auxiliares: siempre postfader y procesados.
+      </p>
+      <div class="recording-track-scroll">
+        <table class="recording-tracks">
+          <thead>
+            <tr>
+              <th>Grabar</th>
+              <th>Pista</th>
+              <th>Formato</th>
+              <th>Punto de captura</th>
+            </tr>
+          </thead>
+          <tbody id="recording-tracks"></tbody>
+        </table>
+      </div>
+      <div class="dialog-footer">
+        <button id="recording-start" class="accent-button">
+          ● Iniciar grabación</button
+        ><button id="recording-stop">■ Detener grabación</button>
+      </div>
+      <p id="recording-status" role="status"></p>
+      <p id="recording-path" class="selectable hint"></p>
+      <p class="hint">
+        Un WAV por pista seleccionada y un archivo session.json con nombres,
+        puntos y resultado. Durante la grabación se conserva cantidad y formato
+        de canales; niveles y FX siguen disponibles en vivo. Detener el motor
+        finaliza los archivos.
+      </p>
     </dialog>
     <dialog id="routing-dialog">
       <div class="dialog-heading">
@@ -1057,6 +1122,7 @@
     <script src="/panels-ui.js"></script>
     <script src="/console.js"></script>
     <script src="/effects-ui.js"></script>
+    <script src="/recording-ui.js"></script>
     <script src="/plugin-browser.js"></script>
     <script src="/workspace-ui.js"></script>
     <script src="/tools-ui.js"></script>

@@ -1,6 +1,6 @@
 # AuMux · galería de capturas
 
-Capturas reales de **AuMux 0.13.3** para los selectores de plugins, y de las
+Capturas reales de **AuMux 0.14.0** para controles, preferencias y grabación, y de 0.13.3 para los selectores de plugins, y de las
 versiones indicadas para el resto. Las vistas de señal usan **DEMO a 48 kHz** con ocho
 canales, cuatro auxiliares y master. Los generadores internos producen la señal
 que muestran los medidores; no se conectó hardware ASIO. Las vistas se capturaron
@@ -9,8 +9,20 @@ en Chromium sobre Linux.
 Esta galería muestra las funciones actuales. El modo de control de consolas
 digitales X32/M32 y las demás familias comentadas sigue pendiente de implementación.
 
-[Descargar para Windows](https://github.com/Lechuga-visual/aumux-consola-virtual/releases/download/v0.13.3/AuMux-0.13.3-Windows-x64.zip) ·
+[Descargar para Windows](https://github.com/Lechuga-visual/aumux-consola-virtual/releases/download/v0.14.0/AuMux-0.14.0-Windows-x64.zip) ·
 [Guía de prueba](probar-en-windows.md) · [Volver al README](../README.md)
+
+## Ocho FX, compresor y grabación 0.14
+
+[Guía de la versión](interfaz-0.14.md) · [Actualización de SoundCraft](soundcraft-engine-0.14.md).
+
+![Ocho inserts y controles individuales de eliminación](screenshots/0.14.0/00-ocho-inserts.png)
+
+![Consola con curva y estado del compresor](screenshots/0.14.0/01-consola-compresor.png)
+
+![Grabación de pistas seleccionadas, PRE/POST y master procesado](screenshots/0.14.0/02-grabacion-multipista.png)
+
+![Preferencias compactas con navegación adaptada](screenshots/0.14.0/03-preferencias-compactas.png)
 
 ## Efectos en vivo 0.13.3
 

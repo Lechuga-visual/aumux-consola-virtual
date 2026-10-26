@@ -29,7 +29,7 @@ let vstCatalogue = [],
 const faderTicks = [6, 0, -6, -12, -24, -36, -60];
 const meterStates = new Map(),
   lastSignal = [];
-let limits = { channels: 64, auxes: 32, inputs: 64, outputs: 64 };
+let limits = { channels: 64, auxes: 32, inputs: 64, outputs: 64, inserts: 8 };
 let eqTarget,
   eqBandIndex = 0,
   eqKnobs = [],
@@ -130,6 +130,23 @@ async function api(route, body = {}, options = {}) {
     if (configCall) configRequests--;
   }
 }
+function configEqual(a, b) {
+  if (a === b) return true;
+  if (
+    !a ||
+    !b ||
+    typeof a !== "object" ||
+    typeof b !== "object" ||
+    Array.isArray(a) !== Array.isArray(b) ||
+    (Array.isArray(a) && a.length !== b.length)
+  )
+    return false;
+  const keys = Object.keys(a);
+  return (
+    keys.length === Object.keys(b).length &&
+    keys.every((key) => Object.hasOwn(b, key) && configEqual(a[key], b[key]))
+  );
+}
 function reconcileConfig(incoming, base) {
   if (!cfg || !incoming || !base) return false;
   let changed = false;
@@ -153,10 +170,7 @@ function reconcileConfig(incoming, base) {
       return;
     }
     for (const key of Object.keys(old || {})) {
-      if (
-        !Object.hasOwn(next, key) &&
-        JSON.stringify(target[key]) === JSON.stringify(old[key])
-      ) {
+      if (!Object.hasOwn(next, key) && configEqual(target[key], old[key])) {
         delete target[key];
         changed = true;
       }
@@ -165,6 +179,34 @@ function reconcileConfig(incoming, base) {
       const a = target[key],
         b = old?.[key],
         n = next[key];
+      if (
+        key === "inserts" &&
+        Array.isArray(a) &&
+        Array.isArray(b) &&
+        Array.isArray(n)
+      ) {
+        const identities = (chain) =>
+          chain.map((fx) => [fx.instance, fx.id, fx.path]);
+        if (
+          !configEqual(identities(n), identities(b)) &&
+          configEqual(identities(a), identities(b))
+        ) {
+          target[key] = n.map((fx) => {
+            const index = a.findIndex(
+              (local) =>
+                local.instance === fx.instance &&
+                local.id === fx.id &&
+                local.path === fx.path,
+            );
+            if (index < 0) return structuredClone(fx);
+            walk(a[index], b[index], fx);
+            return a[index];
+          });
+          changed = true;
+          continue;
+        }
+      }
+
       if (
         n &&
         a &&
@@ -176,10 +218,7 @@ function reconcileConfig(incoming, base) {
         (!Array.isArray(n) || (a.length === n.length && b.length === n.length))
       )
         walk(a, b, n);
-      else if (
-        JSON.stringify(a) === JSON.stringify(b) &&
-        JSON.stringify(a) !== JSON.stringify(n)
-      ) {
+      else if (configEqual(a, b) && !configEqual(a, n)) {
         target[key] = structuredClone(n);
         changed = true;
       }
@@ -434,10 +473,14 @@ function fxName(fx) {
 function insertRack(type, index) {
   const target = targetOf(type, index),
     rack = el("div", "insert-rack");
-  for (let slot = 0; slot < 4; slot++) {
+  for (let slot = 0; slot < (limits.inserts || 8); slot++) {
     const fx = target.inserts[slot],
       row = el("div", "insert-row" + (fx?.bypass ? " bypassed" : ""));
     const button = el("button", "insert-slot" + (!fx ? " empty" : ""));
+    row.dataset.fxType = type;
+    row.dataset.fxIndex = index;
+    row.dataset.fxSlot = slot;
+    row.dataset.fxInstance = fx?.instance || "";
     button.disabled = !fx && slot > target.inserts.length;
     button.append(
       el("span", "slot-number", String(slot + 1).padStart(2, "0")),
@@ -467,6 +510,58 @@ function insertRack(type, index) {
     }
     rack.append(row);
   }
+  let gesture = null,
+    suppressUntil = 0;
+  rack.addEventListener("pointerdown", (event) => {
+    if (
+      event.pointerType !== "touch" ||
+      !document.body.classList.contains("touch-mode")
+    )
+      return;
+    suppressUntil = 0;
+    gesture = {
+      id: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      top: rack.scrollTop,
+      left: $("mixer-stage").scrollLeft,
+      axis: null,
+    };
+  });
+  rack.addEventListener(
+    "pointermove",
+    (event) => {
+      if (!gesture || event.pointerId !== gesture.id) return;
+      const dx = event.clientX - gesture.x,
+        dy = event.clientY - gesture.y;
+      if (!gesture.axis && Math.max(Math.abs(dx), Math.abs(dy)) < 8) return;
+      if (!gesture.axis) {
+        gesture.axis = Math.abs(dy) > Math.abs(dx) ? "y" : "x";
+        rack.setPointerCapture(event.pointerId);
+      }
+      event.preventDefault();
+      if (gesture.axis === "y") rack.scrollTop = gesture.top - dy;
+      else $("mixer-stage").scrollLeft = gesture.left - dx;
+    },
+    { passive: false },
+  );
+  const finish = (event) => {
+    if (gesture?.id !== event.pointerId) return;
+    if (gesture.axis) suppressUntil = performance.now() + 300;
+    gesture = null;
+  };
+  rack.addEventListener("pointerup", finish);
+  rack.addEventListener("pointercancel", finish);
+  rack.addEventListener(
+    "click",
+    (event) => {
+      if (event.detail > 0 && performance.now() < suppressUntil) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
+    },
+    true,
+  );
   return rack;
 }
 function bridgeCell(type, index) {
